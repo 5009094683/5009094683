@@ -6,13 +6,15 @@ import {
   type properties,
   reservations,
   storedFiles,
+  users,
   type DbOrTx,
   type OnlineCheckinStatus,
 } from '@pms/db';
 import { writeAudit } from './audit';
+import { can } from './auth/permissions';
 import { reservationForGuestToken } from './booking-engine';
 import type { Actor } from './context';
-import { decryptJson, encryptJson, encryptSecret } from './crypto';
+import { decryptJson, encryptJson, encryptSecret, randomToken } from './crypto';
 import { addDays, diffDays, todayIn, type DateString } from './dates';
 import { invalidState, notFound, validationError } from './errors';
 import { emit } from './outbox';
@@ -37,6 +39,12 @@ export const ID_TYPES = [
 export type IdType = (typeof ID_TYPES)[number];
 
 export interface CheckinGuest {
+  /**
+   * What tells this guest from the others of the booking once saved. The form
+   * sends it back, so a number left empty keeps the one saved for this guest,
+   * whatever order the guests are now in.
+   */
+  key?: string;
   name: string;
   /** Two-letter country code. */
   nationality?: string | null;
@@ -78,6 +86,8 @@ export interface GuestCheckin {
   /** Whether the form can be filled in or changed now, and if not, why. */
   open: boolean;
   reason: string | null;
+  /** The day the form opens, while it is still too early for it. */
+  opensOn: DateString | null;
   bookingCode: string;
   propertyName: string;
   propertyCountry: string;
@@ -148,10 +158,13 @@ export async function getGuestCheckin(
   const reason = verified
     ? 'The property has checked your details. Speak to the front desk to change them.'
     : whyClosed(reservation, property);
+  const opensOn = addDays(reservation.checkIn, -OPENS_DAYS_BEFORE);
   return {
     status: row?.status ?? 'not_started',
     open: reason === null,
     reason,
+    opensOn:
+      reservation.status === 'confirmed' && todayIn(property.timezone) < opensOn ? opensOn : null,
     bookingCode: reservation.code,
     propertyName: property.name,
     propertyCountry: property.country,
@@ -196,6 +209,7 @@ function normaliseGuest(guest: CheckinGuest, index: number, propertyCountry: str
     throw validationError(`${name} is visiting from abroad and must give a passport`);
   }
   return {
+    key: guest.key && /^[\w-]{6,40}$/.test(guest.key) ? guest.key : randomToken(9),
     name: name.slice(0, 160),
     nationality,
     dateOfBirth: guest.dateOfBirth ?? null,
@@ -247,12 +261,23 @@ export async function submitGuestCheckin(
     // The guest only ever sees the end of a saved number, so a correction cannot send it back.
     // A number left empty keeps the one saved for that guest, as long as the document is the same kind.
     const saved = existing?.dataEnc ? decryptJson<StoredCheckin>(existing.dataEnc).guests : [];
+    // A form that sends the guests' keys back says exactly who is who, so guests can be
+    // removed or reordered. One that sends none is taken in the order it was saved in.
+    const keys = form.guests.flatMap((guest) => (guest.key ? [guest.key] : []));
+    if (new Set(keys).size !== keys.length) throw validationError('The same guest appears twice');
     const cleaned = form.guests.map((guest, i) => {
-      const before = saved[i];
+      const before =
+        keys.length > 0
+          ? guest.key
+            ? saved.find((s) => s.key === guest.key)
+            : undefined
+          : saved[i];
       const sameDocument = before && (!guest.idType || guest.idType === before.idType);
       return normaliseGuest(
         {
           ...guest,
+          // A key that is not one of this booking's is not kept: a new guest gets a new one.
+          key: before?.key,
           idType: guest.idType ?? (sameDocument ? before.idType : null),
           idNumber: guest.idNumber?.trim() || (sameDocument ? before.idNumber : null),
           visaNumber: guest.visaNumber?.trim() || before?.visaNumber || null,
@@ -337,6 +362,13 @@ export async function addCheckinDocument(
   const { reservation, property } = await reservationForGuestToken(db, token, now);
   const reason = whyClosed(reservation, property);
   if (reason) throw invalidState(reason);
+  const [checkin] = await db
+    .select({ status: onlineCheckins.status })
+    .from(onlineCheckins)
+    .where(eq(onlineCheckins.reservationId, reservation.id));
+  if (checkin?.status === 'verified') {
+    throw invalidState('The property has already checked your details');
+  }
   if ((await documentsOf(db, reservation.id)).length >= MAX_DOCUMENTS) {
     throw validationError(`At most ${MAX_DOCUMENTS} documents can be added to a booking`);
   }
@@ -394,6 +426,13 @@ export interface StaffCheckin {
   signatureName: string | null;
   submittedAt: Date | null;
   verifiedAt: Date | null;
+  /** Who compared the details with the documents shown. */
+  verifiedByName: string | null;
+  /**
+   * True when the reader may not see guests' details: then only the names are
+   * given, and the documents are not listed.
+   */
+  restricted: boolean;
   /** Identity numbers are included only when `reveal` was asked for and allowed. */
   guests: (Omit<CheckinGuest, 'idNumber' | 'visaNumber'> & {
     idNumber: string | null;
@@ -424,10 +463,14 @@ export async function getStaffCheckin(
   options: { reveal?: boolean } = {},
 ): Promise<StaffCheckin> {
   const reservation = await staffReservation(db, actor.orgId, reservationId);
-  const [row] = await db
-    .select()
+  // Dates of birth, addresses and the like are guest details: for those who may see guests.
+  const restricted = !can(actor.grants, 'guests.read', reservation.propertyId);
+  const [found] = await db
+    .select({ row: onlineCheckins, verifiedByName: users.name })
     .from(onlineCheckins)
+    .leftJoin(users, eq(users.id, onlineCheckins.verifiedBy))
     .where(eq(onlineCheckins.reservationId, reservationId));
+  const row = found?.row;
   const stored = row?.dataEnc ? decryptJson<StoredCheckin>(row.dataEnc) : { guests: [] };
   if (options.reveal && stored.guests.length > 0) {
     await writeAudit(db, actor, {
@@ -444,13 +487,19 @@ export async function getStaffCheckin(
     signatureName: row?.signatureName ?? null,
     submittedAt: row?.submittedAt ?? null,
     verifiedAt: row?.verifiedAt ?? null,
-    guests: stored.guests.map(({ idNumber, visaNumber, ...rest }) => ({
-      ...rest,
-      idNumber: options.reveal ? (idNumber ?? null) : null,
-      visaNumber: options.reveal ? (visaNumber ?? null) : null,
-      idNumberEnding: ending(idNumber),
-    })),
-    documents: await documentsOf(db, reservationId),
+    verifiedByName: found?.verifiedByName ?? null,
+    restricted,
+    guests: stored.guests.map(({ idNumber, visaNumber, ...rest }) =>
+      restricted
+        ? { name: rest.name, idNumber: null, visaNumber: null, idNumberEnding: null }
+        : {
+            ...rest,
+            idNumber: options.reveal ? (idNumber ?? null) : null,
+            visaNumber: options.reveal ? (visaNumber ?? null) : null,
+            idNumberEnding: ending(idNumber),
+          },
+    ),
+    documents: restricted ? [] : await documentsOf(db, reservationId),
   };
 }
 

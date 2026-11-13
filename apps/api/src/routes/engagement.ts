@@ -23,6 +23,7 @@ import {
   createPaymentLink,
   createPromo,
   deleteAutomationRule,
+  deletePromo,
   deleteTemplate,
   displayMoney,
   forbidden,
@@ -41,6 +42,7 @@ import {
   propertyScope,
   readAttachment,
   readCheckinDocument,
+  reservationTemplates,
   retryMessage,
   saveAutomationRule,
   saveTemplate,
@@ -342,6 +344,22 @@ export async function engagementRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  r.get(
+    '/reservations/:id/templates',
+    {
+      schema: {
+        tags: ['inbox'],
+        summary:
+          'The templates that can be sent about a reservation, filled in for its guest, with the ways each could go',
+        params: idParams,
+      },
+    },
+    async (req) => {
+      const { actor } = await authorizeReservation(app.db, req, req.params.id, 'inbox.read');
+      return reservationTemplates(app.db, actor.orgId, req.params.id);
+    },
+  );
+
   r.post(
     '/reservations/:id/send-template',
     {
@@ -567,6 +585,27 @@ export async function engagementRoutes(app: FastifyInstance): Promise<void> {
           ? session
           : authorizeScoped(req, 'rates.write', req.body.propertyId);
       return updatePromo(app.db, actor, req.params.id, dates(req.body));
+    },
+  );
+
+  r.delete(
+    '/promos/:id',
+    {
+      schema: {
+        tags: ['promotional codes'],
+        summary: 'Remove a code that no booking was made with',
+        params: idParams,
+      },
+    },
+    async (req, reply) => {
+      const session = authorize(req, 'rates.write');
+      const existing = (await listPromos(app.db, session.orgId)).find(
+        (p) => p.id === req.params.id,
+      );
+      if (!existing) throw notFound('Promotional code', req.params.id);
+      const actor = authorizeScoped(req, 'rates.write', existing.propertyId);
+      await deletePromo(app.db, actor, req.params.id);
+      return reply.status(204).send();
     },
   );
 

@@ -44,9 +44,12 @@ import { MemoryMailer } from './mailer';
 import { ATTACHMENT_KEEP_DAYS, fetchWhatsAppMedia, readAttachment } from './message-attachments';
 import {
   conversationTemplates,
+  deleteAutomationRule,
+  deleteTemplate,
   listAutomationRules,
   listTemplates,
   renderTemplate,
+  reservationTemplates,
   runAutomations,
   saveAutomationRule,
   saveTemplate,
@@ -649,6 +652,84 @@ describe('templates and automatic messages', () => {
         body: 'Hello {{guest_nmae}}',
       }),
     ).rejects.toThrow(/Unknown placeholder: \{\{guest_nmae\}\}/);
+    // A placeholder with a brace missing would reach the guest exactly as typed.
+    for (const body of ['Hello {{guest_name},', 'Hello {guest_name}}', 'Hello {{ }} there']) {
+      await expect(
+        saveTemplate(t.db, org.admin, { key: 'welcome', name: 'Welcome', body }),
+      ).rejects.toThrow(/stray \{\{ or \}\}/);
+    }
+    await expect(
+      saveTemplate(t.db, org.admin, {
+        key: 'welcome',
+        name: 'Welcome',
+        subject: 'Hello {{guest_name}',
+        body: 'Fine {{ guest_name }}, and a single { brace } is nobody\u2019s business.',
+      }),
+    ).rejects.toThrow(/stray/);
+  });
+
+  it('keeps a template that an automatic message needs, switched on or not', async () => {
+    const template = await saveTemplate(t.db, org.admin, {
+      key: 'late_checkout',
+      name: 'Late check-out',
+      body: 'Dear {{guest_first_name}}, you may stay until 2 pm.',
+    });
+    const rule = await saveAutomationRule(t.db, org.admin, {
+      name: 'Offer a late check-out',
+      trigger: 'pre_arrival',
+      offsetDays: 1,
+      templateKey: 'late_checkout',
+      channels: ['email'],
+      active: false,
+    });
+    // Without its template the rule could never be saved again, not even to rename it.
+    await expect(deleteTemplate(t.db, org.admin, template.id)).rejects.toThrow(
+      /"Offer a late check-out" uses this template/,
+    );
+    await deleteAutomationRule(t.db, org.admin, rule.id);
+    await deleteTemplate(t.db, org.admin, template.id);
+    expect((await listTemplates(t.db, org.orgId)).map((x) => x.key)).not.toContain('late_checkout');
+  });
+
+  it('shows the templates for a reservation as they would be sent, with the ways each could go', async () => {
+    const reservation = await reserve(30, 33, {
+      email: 'tanvi@example.com',
+      phone: null,
+      firstName: 'Tanvi',
+    });
+    const { templates, values } = await reservationTemplates(t.db, org.orgId, reservation.id);
+    expect(values).toMatchObject({ guest_first_name: 'Tanvi', booking_code: reservation.code });
+    const confirmation = templates.find((x) => x.key === 'booking_confirmation')!;
+    expect(confirmation.subject).toBe(
+      `Your booking at ${hotel.property.name} is confirmed (${reservation.code})`,
+    );
+    expect(confirmation.body).toContain('Stay: 3 nights, 1 x Standard Room, 2 adults');
+    expect(confirmation.body).not.toContain('{{');
+    expect(confirmation.bodyText).toContain('{{booking_code}}');
+    // The test hotel has no address on file, and the answer says so rather than leaving a hole unnoticed.
+    expect(confirmation.unfilled).toEqual(['property_address']);
+    // What is sent is exactly what was shown.
+    const sent = await sendTemplate(t.db, org.admin, reservation.id, {
+      templateKey: 'booking_confirmation',
+      channels: ['email'],
+    });
+    expect(sent.sent!.message).toMatchObject({
+      body: confirmation.body,
+      subject: confirmation.subject,
+    });
+    // A booking made by phone has no booking site to write through, and this guest has no number.
+    expect(confirmation.ways).toEqual([
+      { channel: 'email', problem: null },
+      { channel: 'whatsapp', problem: 'The guest has no phone number' },
+    ]);
+    // A payment request has nothing to ask for until a link is made.
+    expect(templates.find((x) => x.key === 'payment_request')!.unfilled).toEqual(
+      expect.arrayContaining(['amount', 'pay_link']),
+    );
+    const rival = await createTestOrg(t.db, 'Rival');
+    await expect(reservationTemplates(t.db, rival.orgId, reservation.id)).rejects.toMatchObject({
+      code: 'not_found',
+    });
   });
 
   it('confirms a website booking by email once, and a cancellation once, but not an expired hold', async () => {
@@ -921,12 +1002,15 @@ describe('online check-in', () => {
       status: 'not_started',
       open: false,
       reason: 'Online check-in opens 7 days before arrival',
+      // The page can say when to come back.
+      opensOn: day(13),
     });
 
     const reservation = await reserve(2, 4);
     const token = await tokenOf(reservation.id);
     expect(await getGuestCheckin(t.db, token)).toMatchObject({
       open: true,
+      opensOn: null,
       expectedGuests: 2,
       terms: 'No smoking in the rooms.',
       propertyCountry: 'IN',
@@ -1007,9 +1091,90 @@ describe('online check-in', () => {
     await verifyOnlineCheckin(t.db, org.admin, reservation.id);
     await expect(submitGuestCheckin(t.db, token, form)).rejects.toThrow(/already checked/);
     expect(await getGuestCheckin(t.db, token)).toMatchObject({ status: 'verified', open: false });
+    // Nor can a document be added behind the front desk's back.
+    await expect(
+      addCheckinDocument(t.db, new MemoryFileStore(), token, {
+        fileName: 'late.jpg',
+        data: Buffer.from('ffd8ffe000104a464946', 'hex'),
+      }),
+    ).rejects.toThrow(/already checked/);
+    // Staff see who checked the details.
+    const [checker] = await t.db.select().from(users).where(eq(users.id, org.adminUserId));
+    expect(await getStaffCheckin(t.db, org.admin, reservation.id)).toMatchObject({
+      status: 'verified',
+      verifiedByName: checker!.name,
+      restricted: false,
+    });
     await expect(verifyOnlineCheckin(t.db, org.admin, reservation.id)).rejects.toThrow(
       /no online check-in waiting/,
     );
+  });
+
+  it('knows each guest again when the list is changed, so a saved number stays with its owner', async () => {
+    const reservation = await reserve(3, 5);
+    const token = await tokenOf(reservation.id);
+    const first = await submitGuestCheckin(t.db, token, {
+      ...form,
+      guests: [
+        { name: 'Asha Rao', nationality: 'IN', idType: 'aadhaar', idNumber: '1111 2222 3333' },
+        { name: 'Ravi Rao', nationality: 'IN', idType: 'voter_id', idNumber: 'RVR7654321' },
+        { name: 'Mira Rao', nationality: 'IN', idType: 'aadhaar', idNumber: '4444 5555 6666' },
+      ],
+    });
+    const [asha, ravi, mira] = first.guests;
+    expect(new Set([asha!.key, ravi!.key, mira!.key]).size).toBe(3);
+
+    // Ravi is not coming after all; Mira moves up; a friend is added. No number is typed again.
+    const second = await submitGuestCheckin(t.db, token, {
+      ...form,
+      guests: [
+        { key: asha!.key, name: 'Asha Rao', nationality: 'IN', idType: 'aadhaar' },
+        { key: mira!.key, name: 'Mira Rao', nationality: 'IN', idType: 'aadhaar' },
+        { name: 'Zoya Khan', nationality: 'IN' },
+      ],
+    });
+    expect(second.guests.map((g) => [g.name, g.idNumberEnding])).toEqual([
+      ['Asha Rao', '\u2022\u2022\u2022\u20223333'],
+      ['Mira Rao', '\u2022\u2022\u2022\u20226666'],
+      ['Zoya Khan', null],
+    ]);
+    expect(second.guests[1]!.key).toBe(mira!.key);
+    expect(second.guests[2]!.key).not.toBe(ravi!.key);
+
+    // A key from somewhere else earns nothing, and the same guest cannot be sent twice.
+    await expect(
+      submitGuestCheckin(t.db, token, {
+        ...form,
+        guests: [
+          { key: 'someone-elses-key', name: 'Asha Rao', nationality: 'IN', idType: 'aadhaar' },
+        ],
+      }),
+    ).rejects.toThrow(/identity document/);
+    await expect(
+      submitGuestCheckin(t.db, token, {
+        ...form,
+        guests: [
+          { key: asha!.key, name: 'Asha Rao', nationality: 'IN', idType: 'aadhaar' },
+          { key: asha!.key, name: 'Asha Rao', nationality: 'IN', idType: 'aadhaar' },
+        ],
+      }),
+    ).rejects.toThrow(/appears twice/);
+  });
+
+  it('shows someone who may not see guest details only that the form is in, and by whom', async () => {
+    const reservation = await reserve(2, 3);
+    await submitGuestCheckin(t.db, await tokenOf(reservation.id), form);
+    const housekeeper = await createTestUser(t.db, org.orgId, {
+      role: 'housekeeping',
+      propertyId: hotel.property.id,
+    });
+    const seen = await getStaffCheckin(t.db, housekeeper.actor, reservation.id);
+    expect(seen).toMatchObject({ status: 'submitted', restricted: true, documents: [] });
+    expect(seen.guests).toEqual([
+      { name: 'Asha Rao', idNumber: null, visaNumber: null, idNumberEnding: null },
+      { name: 'Ravi Rao', idNumber: null, visaNumber: null, idNumberEnding: null },
+    ]);
+    expect(JSON.stringify(seen)).not.toContain('1990-04-12');
   });
 
   it('keeps identity documents encrypted, takes only photos and PDFs, and removes them when their time is up', async () => {

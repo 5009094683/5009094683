@@ -252,6 +252,12 @@ export function CheckinDrawer({
               ))}
           </div>
           {reveal.error && <Notice tone="danger">{reveal.error}</Notice>}
+          {checkin.restricted && people.length > 0 && (
+            <p className="text-[13px] text-ink-soft">
+              You see the names only. The rest of what guests entered is for those who look after
+              guests&apos; details.
+            </p>
+          )}
           {people.length === 0 ? (
             <p className="text-[13px] text-ink-faint">The guest has not filled in any details.</p>
           ) : (
@@ -270,16 +276,18 @@ export function CheckinDrawer({
           )}
         </section>
 
-        <section className="flex flex-col gap-2">
-          <h3 className="text-xs font-semibold tracking-wide text-ink-faint uppercase">
-            Identity documents
-          </h3>
-          <Documents
-            reservationId={reservation.id}
-            files={checkin.documents}
-            canOpen={canSeeIdentity && !refused}
-          />
-        </section>
+        {!checkin.restricted && (
+          <section className="flex flex-col gap-2">
+            <h3 className="text-xs font-semibold tracking-wide text-ink-faint uppercase">
+              Identity documents
+            </h3>
+            <Documents
+              reservationId={reservation.id}
+              files={checkin.documents}
+              canOpen={canSeeIdentity && !refused}
+            />
+          </section>
+        )}
       </div>
     </Drawer>
   );

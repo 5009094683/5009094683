@@ -36,14 +36,7 @@ import { guestBookingUrl, guestToken, readGuestToken } from './guest-links';
 import { getAvailability } from './inventory';
 import { formatMoney } from './money';
 import type { PaymentGateway } from './payments/gateway';
-import {
-  applyPromo,
-  findPromo,
-  promoLabel,
-  promoProblem,
-  recordPromoUse,
-  type PromoRow,
-} from './promos';
+import { applyPromo, findPromo, promoLabel, promoProblem, type PromoRow } from './promos';
 import { quoteStay } from './rates';
 import {
   cancelReservation,
@@ -786,8 +779,8 @@ async function confirmBooking(db: DbOrTx, actor: Actor, reservationId: string): 
       .where(eq(reservations.id, reservationId))
       .for('update');
     if (!before || before.status !== 'tentative') return;
+    // Confirming also counts the promotional code the booking was made with.
     await confirmReservation(tx, actor, reservationId);
-    if (before.promoCodeId) await recordPromoUse(tx, before.promoCodeId);
   });
 }
 
@@ -981,10 +974,7 @@ async function settleOrder(
       } else if (reservation!.status === 'cancelled') {
         // The hold ran out before the payment arrived. Take the rooms again if they are still free.
         try {
-          await transact(tx, async (inner) => {
-            await reinstateReservation(inner, actor, reservation!.id);
-            if (reservation!.promoCodeId) await recordPromoUse(inner, reservation!.promoCodeId);
-          });
+          await reinstateReservation(tx, actor, reservation!.id);
         } catch (err) {
           if (!isDomainError(err)) throw err;
           unplaced = true;
@@ -1151,7 +1141,12 @@ export interface GuestBooking {
   currency: string;
   /** Charges with tax: what is on the bill so far plus the nights still to come. */
   total: number;
+  /** The tax in `total`. */
+  tax: number;
+  /** What has been paid, less what has been returned. */
   paid: number;
+  /** What has been returned to the guest so far. */
+  refunded: number;
   balance: number;
   promoCode: string | null;
   discount: number;
@@ -1192,16 +1187,27 @@ export async function reservationForGuestToken(
 
 interface StayMoney {
   total: number;
+  /** The tax in `total`. */
+  tax: number;
+  /** Payments less refunds. */
   paid: number;
+  refunded: number;
   balance: number;
 }
 
 /** What a stay costs with tax (billed so far plus nights to come), and what has been paid towards it. */
 export async function stayMoney(db: DbOrTx, reservation: ReservationRow): Promise<StayMoney> {
-  const { rows } = await db.execute<{ charges: string | null; paid: string | null }>(sql`
+  const { rows } = await db.execute<{
+    charges: string | null;
+    tax: string | null;
+    paid: string | null;
+    refunded: string | null;
+  }>(sql`
     SELECT
       sum(l.amount + l.tax_amount) FILTER (WHERE l.kind NOT IN ('payment', 'refund'))::text AS charges,
-      (-sum(l.amount) FILTER (WHERE l.kind IN ('payment', 'refund')))::text AS paid
+      sum(l.tax_amount) FILTER (WHERE l.kind NOT IN ('payment', 'refund'))::text AS tax,
+      (-sum(l.amount) FILTER (WHERE l.kind IN ('payment', 'refund')))::text AS paid,
+      sum(l.amount) FILTER (WHERE l.kind = 'refund')::text AS refunded
     FROM folio_lines l JOIN folios f ON f.id = l.folio_id
     WHERE f.reservation_id = ${reservation.id} AND l.voided_at IS NULL
   `);
@@ -1218,16 +1224,25 @@ export async function stayMoney(db: DbOrTx, reservation: ReservationRow): Promis
   `);
   const rule = upcoming.rows.length ? await taxRuleFor(db, reservation.propertyId, 'room') : null;
   // A booking the channel collects for is not the property's to charge again.
-  const toCome =
-    reservation.paymentCollect === 'channel'
-      ? 0
-      : upcoming.rows.reduce((sum, row) => {
-          const amount = Number(row.amount);
-          return sum + amount + computeTax(rule, amount).taxAmount;
-        }, 0);
+  let toCome = 0;
+  let taxToCome = 0;
+  if (reservation.paymentCollect !== 'channel') {
+    for (const row of upcoming.rows) {
+      const amount = Number(row.amount);
+      const tax = computeTax(rule, amount).taxAmount;
+      toCome += amount + tax;
+      taxToCome += tax;
+    }
+  }
   const total = Number(rows[0]?.charges ?? 0) + toCome;
   const paid = Number(rows[0]?.paid ?? 0);
-  return { total, paid, balance: total - paid };
+  return {
+    total,
+    tax: Number(rows[0]?.tax ?? 0) + taxToCome,
+    paid,
+    refunded: Number(rows[0]?.refunded ?? 0),
+    balance: total - paid,
+  };
 }
 
 interface CancellationQuote {
@@ -1374,7 +1389,9 @@ export async function getGuestBooking(
     })),
     currency: reservation.currency,
     total: money.total,
+    tax: money.tax,
     paid: money.paid,
+    refunded: money.refunded,
     balance: money.balance,
     promoCode: reservation.promoCode,
     discount: reservation.discountAmount,

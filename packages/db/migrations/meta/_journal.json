@@ -85,6 +85,13 @@
       "when": 1794597643470,
       "tag": "0011_audit_redaction",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794603669020,
+      "tag": "0012_promo_use_index",
+      "breakpoints": true
     }
   ]
 }

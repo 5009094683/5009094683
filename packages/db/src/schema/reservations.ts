@@ -177,6 +177,9 @@ export const reservations = pgTable(
     index('reservations_hold_idx')
       .on(t.holdExpiresAt)
       .where(sql`status = 'tentative'`),
+    index('reservations_promo_idx')
+      .on(t.promoCodeId)
+      .where(sql`promo_code_id IS NOT NULL`),
     check('reservations_dates_check', sql`check_out > check_in`),
     check('reservations_status_check', sql.raw(`status IN (${sqlList(RESERVATION_STATUSES)})`)),
     check('reservations_source_check', sql.raw(`source IN (${sqlList(RESERVATION_SOURCES)})`)),

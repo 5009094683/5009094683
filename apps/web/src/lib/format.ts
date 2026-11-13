@@ -1,3 +1,5 @@
+import { CHANNEL_NAMES, SOURCE_LABELS } from '@pms/domain/shared';
+
 const fractionDigitsCache = new Map<string, number>();
 
 function fractionDigits(currency: string): number {
@@ -130,30 +132,8 @@ export function plural(count: number, one: string, many: string = `${one}s`): st
   return `${count} ${count === 1 ? one : many}`;
 }
 
-export const CHANNEL_NAMES: Record<string, string> = {
-  BDC: 'Booking.com',
-  ABB: 'Airbnb',
-  EXP: 'Expedia',
-  AGO: 'Agoda',
-  MMT: 'MakeMyTrip',
-  GOI: 'Goibibo',
-  CTP: 'Trip.com',
-  VRB: 'Vrbo',
-  GHA: 'Google',
-  YTR: 'Yatra',
-};
-
-export const SOURCE_LABELS: Record<string, string> = {
-  direct: 'Direct',
-  walk_in: 'Walk-in',
-  phone: 'Phone',
-  website: 'Website',
-  ota: 'Channel',
-  corporate: 'Corporate',
-  travel_agent: 'Travel agent',
-  owner: 'Owner',
-  group: 'Group',
-};
+// One list of names for booking sites and sources, shared with what the server writes.
+export { CHANNEL_NAMES, SOURCE_LABELS };
 
 /** What to call where a reservation came from: the channel when there is one, else the source. */
 export function sourceLabel(source: string, channelCode: string | null): string {

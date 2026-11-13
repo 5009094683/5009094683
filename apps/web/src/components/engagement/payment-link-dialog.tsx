@@ -6,7 +6,6 @@ import { displayMoney } from '@pms/domain/shared';
 import { AMOUNT_ERROR, AmountField } from '@/components/folio/amount-field';
 import { parseAmount } from '@/components/folio/labels';
 import { renderTemplate } from '@/components/messaging/render';
-import type { TemplatesAnswer } from '@/components/messaging/types';
 import { CopyField } from '@/components/settings/fields';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
@@ -21,8 +20,7 @@ import { useGuestLinks, useStayMoney } from './data';
 import { useFirstProblem } from './first-problem';
 import { IntoView } from './into-view';
 import { MessagePreview } from './message-preview';
-import { reservationValues, versionFor } from './message-values';
-import type { NewPaymentLink } from './types';
+import type { NewPaymentLink, ReservationTemplates } from './types';
 
 /** The template the server sends a payment link with. */
 const TEMPLATE_KEY = 'payment_request';
@@ -119,21 +117,17 @@ export function PaymentLinkDialog({
   const firstProblem = useFirstProblem();
 
   const canSeeWording = auth.can('inbox.read', reservation.propertyId);
-  const templates = useSWR<TemplatesAnswer>(send && canSeeWording ? '/messaging/templates' : null);
-  const wording = templates.data
-    ? versionFor(
-        templates.data.templates,
-        TEMPLATE_KEY,
-        reservation.propertyId,
-        reservation.guest?.language,
-      )
-    : undefined;
+  // The wording the server would send, with what it puts in each blank for this booking.
+  const templates = useSWR<ReservationTemplates>(
+    send && canSeeWording ? `/reservations/${reservation.id}/templates` : null,
+  );
+  const wording = templates.data?.templates.find((template) => template.key === TEMPLATE_KEY);
 
   const minor = parseAmount(amount, currency);
   const owed = money.data ? Math.max(0, money.data.balance) : null;
   const defaultDescription = `${property?.name ?? 'The property'}, booking ${reservation.code}`;
   const values = {
-    ...reservationValues(reservation, property, links.data, money.data),
+    ...templates.data?.values,
     amount: minor ? displayMoney(minor, currency) : '(the amount)',
     pay_link: '(the payment link)',
   };
@@ -295,8 +289,10 @@ export function PaymentLinkDialog({
                 ) : wording ? (
                   <MessagePreview
                     label="The message the guest is sent"
-                    subject={wording.subject ? renderTemplate(wording.subject, values) : undefined}
-                    body={renderTemplate(wording.body, values)}
+                    subject={
+                      wording.subjectText ? renderTemplate(wording.subjectText, values) : undefined
+                    }
+                    body={renderTemplate(wording.bodyText, values)}
                   />
                 ) : (
                   <Notice tone="warning">

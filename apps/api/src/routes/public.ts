@@ -217,6 +217,11 @@ export async function publicRoutes(app: FastifyInstance): Promise<void> {
   // Online check-in
 
   const checkinGuest = z.object({
+    key: z
+      .string()
+      .max(40)
+      .optional()
+      .describe('As given for a guest already saved; leave out for a guest who is new'),
     name: z.string().trim().min(1).max(160),
     nationality: z.string().trim().length(2).nullable().optional(),
     dateOfBirth: dateString.nullable().optional(),

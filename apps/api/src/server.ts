@@ -31,6 +31,8 @@ const app = await buildApp({
           method: request.method,
           url: request.url
             .replace(/(\/public\/bookings\/)[^/?]+/, '$1[guest-link]')
+            // The last part of a calendar feed's address is what makes it private.
+            .replace(/(\/ical\/[^/?]+\/)[^/?]+/, '$1[feed-key]')
             .replace(/([?&](?:secret|token|hub\.verify_token)=)[^&]+/g, '$1[hidden]'),
           remoteAddress: request.ip,
         };

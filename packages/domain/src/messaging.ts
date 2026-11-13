@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import {
   automationRules,
   automationSends,
@@ -349,6 +349,12 @@ function validateTemplate(input: {
   for (const text of [input.body, input.subject ?? '']) {
     for (const match of text.matchAll(/\{\{\s*([a-z_]+)\s*\}\}/gi))
       used.add(match[1]!.toLowerCase());
+    // What is left of a placeholder that was mistyped would reach the guest as typed.
+    if (/\{\{|\}\}/.test(text.replace(/\{\{\s*[a-z_]+\s*\}\}/gi, ''))) {
+      throw validationError(
+        'There is a stray {{ or }} in the text. A placeholder is a name between two pairs of braces, like {{guest_name}}.',
+      );
+    }
   }
   const unknown = [...used, ...(input.whatsappParams ?? [])].filter(
     (name) => !(name in TEMPLATE_VARIABLES),
@@ -454,16 +460,13 @@ export async function deleteTemplate(db: DbOrTx, actor: Actor, templateId: strin
       .from(messageTemplates)
       .where(and(eq(messageTemplates.id, templateId), eq(messageTemplates.orgId, actor.orgId)));
     if (!row) throw notFound('Template', templateId);
+    // A rule that is switched off counts too: it could never be saved again without its template.
     const [inUse] = await tx
-      .select({ name: automationRules.name })
+      .select({ name: automationRules.name, active: automationRules.active })
       .from(automationRules)
-      .where(
-        and(
-          eq(automationRules.orgId, actor.orgId),
-          eq(automationRules.templateKey, row.key),
-          eq(automationRules.active, true),
-        ),
-      );
+      .where(and(eq(automationRules.orgId, actor.orgId), eq(automationRules.templateKey, row.key)))
+      .orderBy(desc(automationRules.active))
+      .limit(1);
     const [{ others } = { others: 0 }] = await tx
       .select({ others: sql<number>`count(*)::int` })
       .from(messageTemplates)
@@ -477,7 +480,7 @@ export async function deleteTemplate(db: DbOrTx, actor: Actor, templateId: strin
       );
     if (inUse && others === 0) {
       throw conflict(
-        `The automatic message "${inUse.name}" uses this template. Switch it off or point it at another template first.`,
+        `The automatic message "${inUse.name}" uses this template. Point it at another template, or remove it, first.`,
       );
     }
     await tx.delete(messageTemplates).where(eq(messageTemplates.id, templateId));
@@ -554,7 +557,7 @@ export interface TemplateSend {
   channel: ConversationChannel;
 }
 
-interface Reach {
+export interface Reach {
   channel: ConversationChannel;
   /** Why this channel cannot be used; null when it can. */
   problem: string | null;
@@ -671,6 +674,91 @@ export async function sendTemplate(
     });
     return { sent: { conversation, message, channel: usable.channel }, problems: [] };
   });
+}
+
+/** A template as it would be sent about one reservation, with the ways it could go. */
+export interface ReservationTemplate {
+  id: string;
+  key: string;
+  name: string;
+  language: string;
+  /** The property whose own wording this is; null for the organisation's. */
+  propertyId: string | null;
+  /** There are other wordings of it: another language, or the organisation's beside the property's. */
+  severalVersions: boolean;
+  /** Filled in. Used when it goes by email. */
+  subject: string | null;
+  body: string;
+  /** The wording as written, placeholders and all, for a preview that fills in more than is known yet. */
+  subjectText: string | null;
+  bodyText: string;
+  /** Placeholders the wording uses that there is nothing to put in for. */
+  unfilled: string[];
+  /** The name WhatsApp approved it under, and what goes in that wording's blanks, in order. */
+  whatsappTemplate: string | null;
+  whatsappValues: string[];
+  /** Each way it could be sent, with why not for those that cannot be used now. */
+  ways: Reach[];
+}
+
+/**
+ * The templates that can be sent about a reservation: for each, the wording
+ * the system picks for its guest, filled in with the booking's own details,
+ * so that what staff read before sending is what the guest gets.
+ */
+export async function reservationTemplates(
+  db: DbOrTx,
+  orgId: string,
+  reservationId: string,
+): Promise<{
+  templates: ReservationTemplate[];
+  /** What each placeholder stands for with this booking. */
+  values: Record<string, string>;
+}> {
+  const [reservation] = await db
+    .select()
+    .from(reservations)
+    .where(and(eq(reservations.id, reservationId), eq(reservations.orgId, orgId)));
+  if (!reservation) throw notFound('Reservation', reservationId);
+  const [guest] = reservation.guestId
+    ? await db.select().from(guests).where(eq(guests.id, reservation.guestId))
+    : [];
+  await ensureMessagingDefaults(db, orgId);
+  const usable = (
+    await db
+      .select()
+      .from(messageTemplates)
+      .where(and(eq(messageTemplates.orgId, orgId), eq(messageTemplates.active, true)))
+  ).filter((t) => !t.propertyId || t.propertyId === reservation.propertyId);
+  const variables = await templateVariables(db, reservation);
+  const channels: ConversationChannel[] = reservation.connectionId
+    ? ['email', 'whatsapp', 'ota']
+    : ['email', 'whatsapp'];
+  const out: ReservationTemplate[] = [];
+  for (const key of new Set(usable.map((t) => t.key))) {
+    const versions = usable.filter((t) => t.key === key);
+    const template = pickTemplate(versions, reservation.propertyId, guest?.language ?? null);
+    if (!template) continue;
+    out.push({
+      id: template.id,
+      key,
+      name: template.name,
+      language: template.language,
+      propertyId: template.propertyId,
+      severalVersions: versions.length > 1,
+      subject: template.subject ? renderTemplate(template.subject, variables) : null,
+      body: renderTemplate(template.body, variables),
+      subjectText: template.subject,
+      bodyText: template.body,
+      unfilled: unfilledVariables(`${template.subject ?? ''}\n${template.body}`, variables),
+      whatsappTemplate: template.whatsappTemplate,
+      whatsappValues: template.whatsappTemplate
+        ? template.whatsappParams.map((name) => variables[name] ?? '')
+        : [],
+      ways: await reachability(db, reservation, guest, template, channels),
+    });
+  }
+  return { templates: out.sort((a, b) => a.name.localeCompare(b.name)), values: variables };
 }
 
 // ---------------------------------------------------------------------------

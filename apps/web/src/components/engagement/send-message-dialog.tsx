@@ -1,24 +1,20 @@
 'use client';
 
 import { useId, useState, type FormEvent } from 'react';
-import { placeholdersIn, renderTemplate } from '@/components/messaging/render';
-import type { MessageChannel, MessageTemplate } from '@/components/messaging/types';
+import type { MessageChannel } from '@/components/messaging/types';
 import { languageName } from '@/components/messaging/wording';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Segmented } from '@/components/ui/field';
-import { Notice, Spinner } from '@/components/ui/misc';
+import { Notice } from '@/components/ui/misc';
 import { useToast } from '@/components/ui/toast';
 import { api } from '@/lib/api';
-import { useAuth } from '@/lib/auth';
 import { sourceLabel } from '@/lib/format';
 import { useAction, useProperties } from '@/lib/hooks';
 import type { Reservation } from '@/lib/types';
-import { useGuestLinks, useStayMoney } from './data';
 import { IntoView } from './into-view';
 import { MessagePreview } from './message-preview';
-import { reservationValues } from './message-values';
-import type { SendResult } from './types';
+import type { ReservationTemplate, SendResult } from './types';
 
 const CHANNEL_LABELS: Record<MessageChannel, string> = {
   email: 'Email',
@@ -38,21 +34,10 @@ const SENT_WORDS: Record<MessageChannel, string> = {
   ota: "Through the booking site's message box.",
 };
 
-const MONEY_NAMES = ['total', 'paid', 'balance'];
-const LINK_NAMES = ['booking_link', 'checkin_link'];
-
-/** Where the message would go. The server has the last word on whether it can. */
+/** Where the message would go by a way that can be used now. */
 function destination(channel: MessageChannel, reservation: Reservation): string {
-  if (channel === 'email') {
-    return reservation.guest?.email
-      ? `To ${reservation.guest.email}`
-      : 'There is no email address on file for this guest.';
-  }
-  if (channel === 'whatsapp') {
-    return reservation.guest?.phone
-      ? `To ${reservation.guest.phone}`
-      : 'There is no phone number on file for this guest.';
-  }
+  if (channel === 'email') return `To ${reservation.guest?.email ?? 'the guest'}`;
+  if (channel === 'whatsapp') return `To ${reservation.guest?.phone ?? 'the guest'}`;
   return `Through the message box of ${sourceLabel(reservation.source, reservation.channelCode)}`;
 }
 
@@ -63,44 +48,27 @@ function destination(channel: MessageChannel, reservation: Reservation): string 
 export function SendMessageDialog({
   reservation,
   template,
-  severalVersions,
   onClose,
 }: {
   reservation: Reservation;
-  /** The version the server will pick for this guest and property. */
-  template: MessageTemplate;
-  /** The template has other languages or property versions, so it helps to say which this is. */
-  severalVersions: boolean;
+  /** The wording the server picks for this guest and property, already filled in. */
+  template: ReservationTemplate;
   onClose: () => void;
 }) {
-  const auth = useAuth();
   const toast = useToast();
   const formId = useId();
-  const guest = reservation.guest;
-  const { properties, isLoading: propertiesLoading } = useProperties();
+  const { properties } = useProperties();
   const property = properties.find((p) => p.id === reservation.propertyId);
-  const used = [...placeholdersIn(template.subject, template.body), ...template.whatsappParams];
-  const links = useGuestLinks(
-    reservation.id,
-    used.some((name) => LINK_NAMES.includes(name) || MONEY_NAMES.includes(name)) &&
-      auth.can('reservations.read', reservation.propertyId),
-  );
-  const money = useStayMoney(
-    links.data,
-    used.some((name) => MONEY_NAMES.includes(name)),
-  );
-  const filling = propertiesLoading || links.isLoading || money.isLoading;
 
-  const channels: MessageChannel[] =
-    reservation.source === 'ota' ? ['email', 'whatsapp', 'ota'] : ['email', 'whatsapp'];
+  const channels = template.ways.map((way) => way.channel);
   const [channel, setChannel] = useState<MessageChannel>(
-    guest?.email ? 'email' : guest?.phone ? 'whatsapp' : 'email',
+    template.ways.find((way) => !way.problem)?.channel ?? channels[0] ?? 'email',
   );
   const [refusal, setRefusal] = useState<string[] | null>(null);
 
-  const values = reservationValues(reservation, property, links.data, money.data);
-  const subject = template.subject ? renderTemplate(template.subject, values) : '';
-  const body = renderTemplate(template.body, values);
+  const problem = template.ways.find((way) => way.channel === channel)?.problem ?? null;
+  const subject = template.subject ?? '';
+  const body = template.body;
   const approved = channel === 'whatsapp' ? template.whatsappTemplate : null;
 
   const send = useAction(async () => {
@@ -138,7 +106,7 @@ export function SendMessageDialog({
             form={formId}
             variant="primary"
             loading={send.busy}
-            disabled={filling}
+            disabled={problem !== null}
           >
             {SEND_LABELS[channel]}
           </Button>
@@ -176,16 +144,18 @@ export function SendMessageDialog({
               options={channels.map((value) => ({ value, label: CHANNEL_LABELS[value] }))}
             />
           </div>
-          <p className="text-[13px] break-words text-ink-soft">
-            {destination(channel, reservation)}
-          </p>
+          {problem ? (
+            <p role="status" className="text-[13px] break-words text-danger-700">
+              It cannot go this way: {problem.replace(/\.$/, '')}.
+            </p>
+          ) : (
+            <p className="text-[13px] break-words text-ink-soft">
+              {destination(channel, reservation)}
+            </p>
+          )}
         </div>
 
-        {filling ? (
-          <p className="flex items-center gap-2 text-sm text-ink-faint">
-            <Spinner /> Filling in the details of this booking…
-          </p>
-        ) : (
+        {
           <>
             <MessagePreview
               label="The message as the guest will read it"
@@ -204,13 +174,13 @@ export function SendMessageDialog({
                 <p>
                   On WhatsApp the guest does not receive the text above but the wording WhatsApp
                   approved as <span className="font-mono break-all text-ink">{approved}</span>
-                  {template.whatsappParams.length > 0 ? ', with these values in its blanks:' : '.'}
+                  {template.whatsappValues.length > 0 ? ', with these values in its blanks:' : '.'}
                 </p>
-                {template.whatsappParams.length > 0 && (
+                {template.whatsappValues.length > 0 && (
                   <ol className="mt-1 list-decimal pl-5 text-ink">
-                    {template.whatsappParams.map((name, index) => (
+                    {template.whatsappValues.map((value, index) => (
                       <li key={index} className="break-words">
-                        {values[name] || <span className="text-ink-faint">nothing</span>}
+                        {value || <span className="text-ink-faint">nothing</span>}
                       </li>
                     ))}
                   </ol>
@@ -223,7 +193,7 @@ export function SendMessageDialog({
                 within 24 hours of the guest&apos;s last message.
               </p>
             )}
-            {severalVersions && (
+            {template.severalVersions && (
               <p className="text-[13px] text-ink-faint">
                 This is the {languageName(template.language)} version
                 {template.propertyId ? ` written for ${property?.name ?? 'this property'}` : ''}:
@@ -231,7 +201,7 @@ export function SendMessageDialog({
               </p>
             )}
           </>
-        )}
+        }
       </form>
     </Dialog>
   );

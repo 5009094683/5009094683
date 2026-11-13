@@ -1,10 +1,11 @@
 'use client';
 
-import { Copy, Pencil, Plus, TicketPercent } from 'lucide-react';
+import { Copy, Pencil, Plus, TicketPercent, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import useSWR from 'swr';
 import { todayIn } from '@pms/domain/shared';
 import { copyText } from '@/components/engagement/clipboard';
+import { ConfirmDialog } from '@/components/settings/confirm-dialog';
 import { NoAccess } from '@/components/settings/no-access';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/field';
@@ -27,7 +28,7 @@ import {
 } from './promo-words';
 import type { Promo } from './types';
 
-type Open = { kind: 'new' } | { kind: 'edit'; promo: Promo };
+type Open = { kind: 'new' } | { kind: 'edit'; promo: Promo } | { kind: 'remove'; promo: Promo };
 
 interface RowProps {
   promo: Promo;
@@ -36,6 +37,7 @@ interface RowProps {
   busy: boolean;
   onCopy: () => void;
   onEdit: () => void;
+  onRemove: () => void;
   onSwitch: (active: boolean) => void;
 }
 
@@ -72,7 +74,7 @@ function Lines({ lines }: { lines: string[] }) {
   );
 }
 
-function Controls({ promo, canEdit, busy, onEdit, onSwitch }: RowProps) {
+function Controls({ promo, canEdit, busy, onEdit, onRemove, onSwitch }: RowProps) {
   if (!canEdit) return null;
   return (
     <span className="inline-flex items-center gap-2">
@@ -91,6 +93,18 @@ function Controls({ promo, canEdit, busy, onEdit, onSwitch }: RowProps) {
       >
         Edit
       </Button>
+      {/* A code a booking was made with is kept for the record; the server says so if asked. */}
+      {promo.usedCount === 0 && (
+        <Button
+          size="icon"
+          variant="ghost"
+          aria-label={`Remove the code ${promo.code}`}
+          onClick={onRemove}
+          className="size-7"
+        >
+          <Trash2 className="size-3.5" />
+        </Button>
+      )}
     </span>
   );
 }
@@ -216,6 +230,7 @@ export function PromosView() {
     busy: busyId === promo.id,
     onCopy: () => void copy(promo),
     onEdit: () => setOpen({ kind: 'edit', promo }),
+    onRemove: () => setOpen({ kind: 'remove', promo }),
     onSwitch: (active) => void switchCode(promo, active),
   });
 
@@ -300,7 +315,7 @@ export function PromosView() {
         </div>
       )}
 
-      {open && (
+      {open && open.kind !== 'remove' && (
         <PromoDialog
           promo={open.kind === 'edit' ? open.promo : undefined}
           codes={promos.map((promo) => promo.code.toUpperCase())}
@@ -308,6 +323,24 @@ export function PromosView() {
           onClose={() => setOpen(null)}
           onSaved={() => void mutate()}
         />
+      )}
+      {open?.kind === 'remove' && (
+        <ConfirmDialog
+          title={`Remove the code ${open.promo.code}?`}
+          confirmLabel="Remove code"
+          onClose={() => setOpen(null)}
+          onConfirm={async () => {
+            await api(`/promos/${open.promo.id}`, { method: 'DELETE' });
+            await mutate();
+            setOpen(null);
+            toast.success(`Code ${open.promo.code} removed`);
+          }}
+        >
+          <p>
+            The website will no longer accept it. No booking was made with this code, so nothing
+            else changes.
+          </p>
+        </ConfirmDialog>
       )}
     </div>
   );

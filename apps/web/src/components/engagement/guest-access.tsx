@@ -3,12 +3,11 @@
 import { Copy, Link2Off } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
-import type { AuditPage } from '@/components/settings/audit-table';
 import { LinkDialog } from '@/components/settings/link-dialog';
 import { Button } from '@/components/ui/button';
 import { Badge, Notice, Spinner } from '@/components/ui/misc';
 import { useToast } from '@/components/ui/toast';
-import { ApiError, api, errorMessage, query } from '@/lib/api';
+import { ApiError, api, errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useLive } from '@/lib/live';
 import type { Reservation } from '@/lib/types';
@@ -47,17 +46,6 @@ export function GuestAccessSection({
   const checkin = useSWR<Checkin>(
     canRead ? `/reservations/${reservation.id}/online-checkin` : null,
   );
-  // The answer does not say who checked the details; the audit trail does, for those who may read it.
-  const audit = useSWR<AuditPage>(
-    checkin.data?.status === 'verified' && auth.canOrgWide('audit.read')
-      ? `/audit${query({
-          entityType: 'reservation',
-          entityId: reservation.id,
-          actionPrefix: 'reservation.online_checkin_verified',
-          limit: 1,
-        })}`
-      : null,
-  );
   const [open, setOpen] = useState<Open | null>(null);
 
   // The guest sending in the details is announced as a change to the reservation.
@@ -86,7 +74,7 @@ export function GuestAccessSection({
 
   const status = checkin.data?.status;
   const times = checkin.data
-    ? checkinTimes(checkin.data, audit.data?.entries[0]?.actorLabel)
+    ? checkinTimes(checkin.data, checkin.data.verifiedByName ?? undefined)
     : null;
   const hasDetails =
     checkin.data !== undefined &&
@@ -190,7 +178,7 @@ export function GuestAccessSection({
         <CheckinDrawer
           reservation={reservation}
           checkin={checkin.data}
-          checkedBy={audit.data?.entries[0]?.actorLabel}
+          checkedBy={checkin.data.verifiedByName ?? undefined}
           onClose={() => setOpen(null)}
           onVerified={() => void checkin.mutate()}
         />

@@ -24,10 +24,16 @@ import { reservationBalance } from './folios';
 import { guestToken, readGuestToken } from './guest-links';
 import { getAvailability } from './inventory';
 import { MockGateway } from './payments/mock';
-import { applyPromo, createPromo, promoProblem, type PromoRow } from './promos';
+import { applyPromo, createPromo, deletePromo, promoProblem, type PromoRow } from './promos';
 import { createRatePlan, updateProperty, updateRatePlan } from './properties';
 import { setRates } from './rates';
-import { createReservation, expireHolds, loadReservation } from './reservations';
+import {
+  cancelReservation,
+  createReservation,
+  expireHolds,
+  loadReservation,
+  reinstateReservation,
+} from './reservations';
 import { createTestHotel, createTestOrg, type TestHotel, type TestOrg } from './testing';
 
 let t: TestDatabase;
@@ -553,6 +559,37 @@ describe('booking and paying', () => {
     });
     expect(spent.promo).toMatchObject({ applied: false });
     expect(spent.promo!.reason).toMatch(/used as many times/);
+
+    // A code a booking was made with is kept for the record, even once that booking is cancelled.
+    await expect(deletePromo(t.db, org.admin, promo.id)).rejects.toThrow(
+      new RegExp(`used for booking ${booked.code}.*Switch it off instead`),
+    );
+    // Cancelling gives the use back, so the next guest can have it; reinstating takes it again.
+    await cancelReservation(t.db, org.admin, reservation!.id, { reason: 'Guest changed plans' });
+    expect(await used()).toBe(0);
+    const again = await searchStay(t.db, org.orgId, {
+      propertyCode: hotel.property.code,
+      checkIn: day(14),
+      checkOut: day(16),
+      adults: 2,
+      promoCode: 'MONSOON10',
+    });
+    expect(again.promo).toMatchObject({ applied: true });
+    await reinstateReservation(t.db, org.admin, reservation!.id);
+    expect(await used()).toBe(1);
+
+    // One that was never used can simply go.
+    const unused = await createPromo(t.db, org.admin, {
+      code: 'NEVER',
+      kind: 'percent',
+      value: 500,
+    });
+    await deletePromo(t.db, org.admin, unused.id);
+    expect(await t.db.select().from(promoCodes).where(eq(promoCodes.id, unused.id))).toEqual([]);
+    const rival = await createTestOrg(t.db, 'Rival');
+    await expect(deletePromo(t.db, rival.admin, promo.id)).rejects.toMatchObject({
+      code: 'not_found',
+    });
   });
 
   it('refuses what the website must not sell', async () => {
@@ -635,10 +672,20 @@ describe('cancelling online', () => {
     await pay(booked.code);
     const before = await getGuestBooking(t.db, booked.token);
     expect(before.cancellation).toMatchObject({ allowed: true, charge: 0, refund: 945_000 });
+    // The page can show how much of the price is tax, and that nothing has been returned yet.
+    expect(before).toMatchObject({ total: 945_000, tax: 45_000, paid: 945_000, refunded: 0 });
 
     const result = await cancelGuestBooking(t.db, gateway, booked.token);
     expect(result).toMatchObject({ charge: 0, refunded: 945_000, refundPending: 0 });
     expect(result.booking).toMatchObject({ status: 'cancelled', paid: 0, balance: 0 });
+    // Opened again later, the booking still says what was returned.
+    expect(await getGuestBooking(t.db, booked.token)).toMatchObject({
+      status: 'cancelled',
+      total: 0,
+      tax: 0,
+      paid: 0,
+      refunded: 945_000,
+    });
     expect(await available(hotel, 10, 12)).toEqual([3, 3]);
     await expect(cancelGuestBooking(t.db, gateway, booked.token)).rejects.toThrow(
       /already cancelled/,
@@ -664,7 +711,9 @@ describe('cancelling online', () => {
     expect(result.booking).toMatchObject({
       status: 'cancelled',
       total: 531_000,
+      tax: 81_000,
       paid: 531_000,
+      refunded: 414_000,
       balance: 0,
     });
   });

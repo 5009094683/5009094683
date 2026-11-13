@@ -68,7 +68,8 @@ const CODE_PATTERN = /^[A-Z0-9][A-Z0-9_-]{1,29}$/;
 const CURRENCY_PATTERN = /^[A-Za-z]{3}$/;
 const MAX_VALUE = 1_000_000_000;
 const MAX_USES = 1_000_000;
-const USE_COUNTED = 'A confirmed booking counts as a use, also when it is cancelled later.';
+const USE_COUNTED =
+  'A confirmed booking counts as a use. If it is cancelled, the use is given back.';
 
 const pad = (value: number) => String(value).padStart(2, '0');
 

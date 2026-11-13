@@ -287,13 +287,45 @@ export function promoLabel(promo: Pick<PromoRow, 'kind' | 'value' | 'currency'>)
 }
 
 /**
- * Counts one use. Called when a booking made with the code is confirmed. A
+ * Sets a code's count of uses to the bookings that hold it now: those that
+ * are confirmed, took place, or did not show. A hold that was never paid for
+ * and a cancelled booking do not count, so cancelling gives the use back. A
  * booking already paid for is honoured even if that takes the count past the
  * limit: the limit is enforced when the price is quoted.
  */
-export async function recordPromoUse(tx: DbOrTx, promoId: string): Promise<void> {
-  await tx
-    .update(promoCodes)
-    .set({ usedCount: sql`${promoCodes.usedCount} + 1` })
-    .where(eq(promoCodes.id, promoId));
+export async function recountPromoUses(tx: DbOrTx, promoId: string): Promise<void> {
+  await tx.execute(sql`
+    UPDATE promo_codes p SET used_count = (
+      SELECT count(*) FROM reservations r
+      WHERE r.promo_code_id = p.id AND r.status NOT IN ('tentative', 'cancelled'))
+    WHERE p.id = ${promoId}
+  `);
+}
+
+/** Removes a code that no booking was ever made with. One that was used is kept for the record. */
+export async function deletePromo(db: DbOrTx, actor: Actor, promoId: string): Promise<void> {
+  await transact(db, async (tx) => {
+    const [promo] = await tx
+      .select()
+      .from(promoCodes)
+      .where(and(eq(promoCodes.id, promoId), eq(promoCodes.orgId, actor.orgId)))
+      .for('update');
+    if (!promo) throw notFound('Promotional code', promoId);
+    const { rows } = await tx.execute<{ code: string }>(
+      sql`SELECT code FROM reservations WHERE promo_code_id = ${promoId} LIMIT 1`,
+    );
+    if (rows.length > 0) {
+      throw conflict(
+        `${promo.code} was used for booking ${rows[0]!.code}, so it is kept for the record. Switch it off instead.`,
+      );
+    }
+    await tx.delete(promoCodes).where(eq(promoCodes.id, promoId));
+    await writeAudit(tx, actor, {
+      action: 'promo.deleted',
+      entityType: 'promo_code',
+      entityId: promoId,
+      propertyId: promo.propertyId,
+      summary: `Removed promotional code ${promo.code}`,
+    });
+  });
 }

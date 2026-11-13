@@ -44,6 +44,7 @@ import {
   type RatePlanRow,
   type RoomTypeRow,
 } from './properties';
+import { recountPromoUses } from './promos';
 import { assertNoViolations, getRateCalendar, nightlyCharge, restrictionViolations } from './rates';
 import { transact } from './sqlx';
 
@@ -379,6 +380,8 @@ export async function syncReservationSummary(
     })
     .where(eq(reservations.id, reservationId))
     .returning();
+  // A booking that is cancelled gives its use of a promotional code back; one reinstated takes it again.
+  if (updated!.promoCodeId) await recountPromoUses(tx, updated!.promoCodeId);
   return updated!;
 }
 

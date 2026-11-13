@@ -652,6 +652,22 @@ describe('the inbox', () => {
     expect(bad.statusCode).toBe(400);
     expect(bad.json().error.message).toMatch(/Unknown placeholder/);
 
+    // The templates for one reservation come filled in, for those who may read its inbox.
+    const [aBooking] = await ctx.t.db
+      .select()
+      .from(reservations)
+      .where(eq(reservations.propertyId, hotel.property.id))
+      .limit(1);
+    const forStay = await frontDesk.get(`/reservations/${aBooking!.id}/templates`);
+    expect(forStay.statusCode).toBe(200);
+    expect(forStay.json().values.booking_code).toBe(aBooking!.code);
+    const offer = forStay.json().templates.find((x: { key: string }) => x.key === 'late_checkout');
+    expect(offer.body).toBe(
+      `Dear ${aBooking!.guestName.split(' ')[0]}, stay until 2 pm for a small charge.`,
+    );
+    expect(offer.ways.map((w: { channel: string }) => w.channel)).toContain('email');
+    expect((await housekeeper.get(`/reservations/${aBooking!.id}/templates`)).statusCode).toBe(403);
+
     // A manager of one property may change its own templates, not the organisation's.
     const gm = await ctx.login(
       (
@@ -739,6 +755,13 @@ describe('the inbox', () => {
     );
     expect(search.statusCode, search.body).toBe(200);
     expect(search.json().promo).toMatchObject({ code: 'CHAIN', label: '₹500 off', applied: true });
+
+    // A code nobody booked with can be removed, by whoever may change it.
+    expect((await revenue.delete(`/promos/${chain.json().id}`)).statusCode).toBe(403);
+    expect((await frontDesk.delete(`/promos/${mine.json().id}`)).statusCode).toBe(403);
+    expect((await revenue.delete(`/promos/${mine.json().id}`)).statusCode).toBe(204);
+    expect((await revenue.delete(`/promos/${mine.json().id}`)).statusCode).toBe(404);
+    expect((await admin.delete(`/promos/${chain.json().id}`)).statusCode).toBe(204);
   });
 });
 
@@ -798,8 +821,17 @@ describe('online check-in', () => {
 
     const path = `/reservations/${booked.reservationId}/online-checkin`;
     const masked = (await reader.get(path)).json();
-    expect(masked).toMatchObject({ status: 'submitted', arrivalTime: '16:00' });
+    expect(masked).toMatchObject({ status: 'submitted', arrivalTime: '16:00', restricted: false });
     expect(masked.guests[0]).toMatchObject({ idNumber: null, idNumberEnding: '••••0000' });
+    // Housekeeping learns that the form is in and who is coming, and nothing more about them.
+    const outline = (await housekeeper.get(path)).json();
+    expect(outline).toMatchObject({ status: 'submitted', restricted: true, documents: [] });
+    expect(Object.keys(outline.guests[0]).sort()).toEqual([
+      'idNumber',
+      'idNumberEnding',
+      'name',
+      'visaNumber',
+    ]);
     // Seeing the number or the document takes the permission for identity data, and is recorded.
     expect((await reader.get(`${path}?reveal=true`)).statusCode).toBe(403);
     expect((await reader.get(`${path}/documents/${upload.json().id}`)).statusCode).toBe(403);
@@ -827,6 +859,7 @@ describe('online check-in', () => {
 
     expect((await housekeeper.post(`${path}/verify`)).statusCode).toBe(403);
     expect((await frontDesk.post(`${path}/verify`)).statusCode).toBe(204);
+    expect((await reader.get(path)).json().verifiedByName).toBeTruthy();
     expect((await guest.post(base, form)).statusCode).toBe(409);
     expect((await guest.delete(`${base}/documents/${upload.json().id}`)).statusCode).toBe(409);
 
