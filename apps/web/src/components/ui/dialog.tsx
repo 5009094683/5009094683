@@ -2,7 +2,7 @@
 
 import * as RadixDialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 
 export interface DialogProps {
@@ -16,6 +16,46 @@ export interface DialogProps {
 }
 
 const WIDTHS = { sm: 'max-w-md', md: 'max-w-xl', lg: 'max-w-3xl' };
+
+/** The control to hand the keyboard back to: the one in use when the dialog opened. */
+function openerOf(active: Element | null): Element | null {
+  // A menu closes as its item is chosen, so the item is gone by the time the dialog closes;
+  // the button that opened the menu is still there.
+  const menu = active?.closest('[role="menu"]');
+  const trigger = menu?.getAttribute('aria-labelledby');
+  return trigger ? document.getElementById(trigger) : active;
+}
+
+/**
+ * Remembers what had the keyboard when a dialog opened and gives it back when the dialog
+ * closes. These dialogs are opened by a flag, not by a trigger of their own, so without this
+ * closing one leaves the keyboard on nothing and the next Tab starts from the top of the page.
+ */
+function useReturnFocus(open: boolean): (event: Event) => void {
+  const [seen, setSeen] = useState<{ open: boolean; opener: Element | null }>({
+    open: false,
+    opener: null,
+  });
+  if (seen.open !== open) {
+    // Read as the dialog opens: once it is on screen it has taken the keyboard itself.
+    setSeen({
+      open,
+      opener: open && typeof document !== 'undefined' ? openerOf(document.activeElement) : null,
+    });
+  }
+  return (event) => {
+    const { opener } = seen;
+    if (
+      opener instanceof HTMLElement &&
+      opener !== document.body &&
+      opener.isConnected &&
+      !opener.matches(':disabled')
+    ) {
+      event.preventDefault();
+      opener.focus();
+    }
+  };
+}
 
 function Header({ title, description }: { title: ReactNode; description?: ReactNode }) {
   return (
@@ -50,11 +90,13 @@ export function Dialog({
   footer,
   size = 'md',
 }: DialogProps) {
+  const returnFocus = useReturnFocus(open);
   return (
     <RadixDialog.Root open={open} onOpenChange={(next) => !next && onClose()}>
       <RadixDialog.Portal>
         <RadixDialog.Overlay className="fixed inset-0 z-40 animate-fade-in bg-ink/40" />
         <RadixDialog.Content
+          onCloseAutoFocus={returnFocus}
           className={cn(
             'fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col',
             'animate-pop-in rounded-xl bg-surface shadow-pop',
@@ -84,11 +126,13 @@ export function Drawer({
   footer,
   width = 'max-w-lg',
 }: Omit<DialogProps, 'size'> & { width?: string }) {
+  const returnFocus = useReturnFocus(open);
   return (
     <RadixDialog.Root open={open} onOpenChange={(next) => !next && onClose()}>
       <RadixDialog.Portal>
         <RadixDialog.Overlay className="fixed inset-0 z-40 animate-fade-in bg-ink/25" />
         <RadixDialog.Content
+          onCloseAutoFocus={returnFocus}
           className={cn(
             'fixed top-0 right-0 z-50 flex h-dvh w-full animate-slide-in flex-col bg-surface shadow-pop',
             width,
