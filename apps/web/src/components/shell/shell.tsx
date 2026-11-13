@@ -7,6 +7,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
 import { Assistant } from '@/components/assistant/assistant';
 import { InboxUnread } from '@/components/inbox/unread-badge';
+import { NoAccess } from '@/components/settings/no-access';
 import {
   Badge,
   Menu,
@@ -245,6 +246,25 @@ export function Shell({ children }: { children: ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const pathname = usePathname();
   useEffect(() => setMenuOpen(false), [pathname]);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenuOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [menuOpen]);
+
+  // A page reached by its address, by someone whose role does not open it, says so itself.
+  // Without this each screen would have to: a villa owner on the calendar was told to add
+  // their first property. Everyone may reach their own password and security page.
+  const section = NAV.find(
+    (item) => pathname === item.href || pathname.startsWith(`${item.href}/`),
+  );
+  const shut =
+    section !== undefined &&
+    pathname !== '/settings/security' &&
+    !section.permissions.some((permission) => auth.can(permission));
 
   return (
     <div className="flex h-dvh overflow-hidden">
@@ -303,7 +323,9 @@ export function Shell({ children }: { children: ReactNode }) {
           {auth.can('property.read') && <AlertsBell />}
           <UserMenu />
         </header>
-        <main className="scrollbar-thin min-h-0 flex-1 overflow-auto">{children}</main>
+        <main className="scrollbar-thin min-h-0 flex-1 overflow-auto">
+          {shut ? <NoAccess /> : children}
+        </main>
       </div>
     </div>
   );
