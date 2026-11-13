@@ -17,11 +17,13 @@ const PRESSED: Record<SettableState, string> = {
 /** One room on the housekeeping board: its state, what is happening in it today and its tasks. */
 export function UnitCard({
   unit,
+  timezone,
   actions,
   selected,
   onSelect,
 }: {
   unit: BoardUnit;
+  timezone: string;
   actions: BoardActions | null;
   selected: boolean;
   onSelect: (selected: boolean) => void;
@@ -86,7 +88,7 @@ export function UnitCard({
       {(unit.tasks.length > 0 || actions) && (
         <ul className="divide-y divide-line border-t border-line">
           {unit.tasks.map((task) => (
-            <TaskRow key={task.id} unit={unit} task={task} actions={actions} />
+            <TaskRow key={task.id} unit={unit} task={task} timezone={timezone} actions={actions} />
           ))}
           {actions && (
             <li>

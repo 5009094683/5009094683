@@ -3,6 +3,7 @@
 import { Plus, Wrench } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import useSWR from 'swr';
+import { useReturnFocus } from '@/components/housekeeping/focus';
 import { Button } from '@/components/ui/button';
 import { Segmented, Select } from '@/components/ui/field';
 import { EmptyState, ErrorState, PageHeader, PageLoading } from '@/components/ui/misc';
@@ -34,11 +35,21 @@ const EMPTY: Record<StatusFilter, { title: string; description: string }> = {
 export function MaintenanceView() {
   const auth = useAuth();
   const allowed = auth.can('housekeeping.read');
-  const { properties, isLoading: propertiesLoading } = useProperties();
+  const {
+    properties,
+    isLoading: propertiesLoading,
+    error: propertiesError,
+    mutate: reloadProperties,
+  } = useProperties();
   const [propertyId, setPropertyId] = useState(ALL);
   const [status, setStatus] = useState<StatusFilter>('open');
   const [reporting, setReporting] = useState(false);
   const [opened, setOpened] = useState<Issue | null>(null);
+  const rememberOpener = useReturnFocus(reporting || opened !== null);
+  const report = () => {
+    rememberOpener();
+    setReporting(true);
+  };
 
   const byId = useMemo(() => new Map(properties.map((p) => [p.id, p])), [properties]);
   const visible = properties.filter((p) => p.active && auth.can('housekeeping.read', p.id));
@@ -50,6 +61,8 @@ export function MaintenanceView() {
     allowed
       ? `/maintenance${query({ propertyIds: filter === ALL ? undefined : filter, status })}`
       : null,
+    // Issues kept from another filter would stay on screen, unexplained, if this request failed.
+    { keepPreviousData: false },
   );
   useLive(/^task\./, () => void mutate());
 
@@ -58,6 +71,8 @@ export function MaintenanceView() {
   const issues = data?.issues ?? [];
   // The drawer keeps showing its issue even when a change takes it off the list behind it.
   const current = opened ? (issues.find((i) => i.id === opened.id) ?? opened) : null;
+  // Without the properties an issue cannot say where it is, so that failure counts as well.
+  const failure = error && !data ? error : properties.length === 0 ? propertiesError : undefined;
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col p-4 sm:p-6">
@@ -69,7 +84,7 @@ export function MaintenanceView() {
             <Button
               variant="primary"
               icon={<Plus className="size-4" aria-hidden />}
-              onClick={() => setReporting(true)}
+              onClick={report}
             >
               Report an issue
             </Button>
@@ -96,8 +111,14 @@ export function MaintenanceView() {
         <Segmented label="Status" value={status} onChange={setStatus} options={STATUS_OPTIONS} />
       </div>
 
-      {error && !data ? (
-        <ErrorState error={error} onRetry={() => void mutate()} />
+      {failure ? (
+        <ErrorState
+          error={failure}
+          onRetry={() => {
+            void reloadProperties();
+            void mutate();
+          }}
+        />
       ) : isLoading || propertiesLoading || !data ? (
         <PageLoading label="Loading issues" />
       ) : issues.length === 0 ? (
@@ -107,11 +128,18 @@ export function MaintenanceView() {
           description={EMPTY[status].description}
           action={
             writable.length > 0 &&
-            status !== 'done' && <Button onClick={() => setReporting(true)}>Report an issue</Button>
+            status !== 'done' && <Button onClick={report}>Report an issue</Button>
           }
         />
       ) : (
-        <IssueList issues={issues} properties={byId} onOpen={setOpened} />
+        <IssueList
+          issues={issues}
+          properties={byId}
+          onOpen={(issue) => {
+            rememberOpener();
+            setOpened(issue);
+          }}
+        />
       )}
 
       {reporting && (

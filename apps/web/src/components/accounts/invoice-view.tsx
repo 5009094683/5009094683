@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import useSWR from 'swr';
+import { useReturnFocus } from '@/components/housekeeping/focus';
 import { Button } from '@/components/ui/button';
 import { Card, ErrorState, Notice, PageLoading } from '@/components/ui/misc';
 import { query } from '@/lib/api';
@@ -15,9 +16,13 @@ import { CreditNoteDialog } from './credit-note-dialog';
 import { InvoiceDocument } from './invoice-document';
 import { money } from './money';
 import { NoAccess } from './no-access';
+import { usePrintTitle } from './print-title';
 import type { Invoice } from './types';
 
 const LIST = '/accounts/invoices';
+
+/** What was loaded for another invoice must never stand in for this one, not even for a moment. */
+const ONE_DOCUMENT = { keepPreviousData: false };
 
 /** Credit notes issued against an invoice, with what is left of it to credit. */
 function CreditNotes({ invoice, notes }: { invoice: Invoice; notes: Invoice[] }) {
@@ -62,13 +67,14 @@ export function InvoiceView({ invoiceId }: { invoiceId: string }) {
   const router = useRouter();
   const allowed = auth.can('folio.read');
   const [crediting, setCrediting] = useState(false);
+  const rememberOpener = useReturnFocus(crediting);
 
   const {
     data: invoice,
     error,
     isLoading,
     mutate,
-  } = useSWR<Invoice>(allowed ? `/invoices/${invoiceId}` : null);
+  } = useSWR<Invoice>(allowed ? `/invoices/${invoiceId}` : null, ONE_DOCUMENT);
   // There is no way to ask for the credit notes of one invoice, so the property's are read
   // from the invoice's date on and matched here.
   const related = useSWR<{ invoices: Invoice[] }>(
@@ -80,8 +86,14 @@ export function InvoiceView({ invoiceId }: { invoiceId: string }) {
           limit: 1000,
         })}`
       : null,
+    ONE_DOCUMENT,
   );
   useLive(/^folio\./, () => void related.mutate());
+  usePrintTitle(
+    invoice
+      ? `${invoice.type === 'credit_note' ? 'Credit note' : 'Tax invoice'} ${invoice.number}`
+      : null,
+  );
 
   if (!allowed) return <NoAccess />;
   if (error && !invoice) {
@@ -125,7 +137,10 @@ export function InvoiceView({ invoiceId }: { invoiceId: string }) {
           {canCredit && (
             <Button
               icon={<FileMinus className="size-4" aria-hidden />}
-              onClick={() => setCrediting(true)}
+              onClick={() => {
+                rememberOpener();
+                setCrediting(true);
+              }}
               disabled={!creditReady}
             >
               Issue credit note
@@ -151,6 +166,21 @@ export function InvoiceView({ invoiceId }: { invoiceId: string }) {
             {invoice.reference.invoice ?? 'issued earlier'}
           </Link>
           .
+        </Notice>
+      )}
+
+      {/* Without this the invoice would look as if nothing had been credited against it. */}
+      {related.error && !related.data && (
+        <Notice tone="warning" className="mx-auto mb-4 w-full max-w-[210mm] print:hidden">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+            <p>
+              The credit notes against this invoice could not be loaded.
+              {canCredit && ' A new one cannot be issued until they are.'}
+            </p>
+            <Button loading={related.isValidating} onClick={() => void related.mutate()}>
+              Try again
+            </Button>
+          </div>
         </Notice>
       )}
 

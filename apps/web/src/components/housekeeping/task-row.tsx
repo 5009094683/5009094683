@@ -25,11 +25,11 @@ export interface BoardActions {
 /** Sized for a thumb on a phone, compact where there is a mouse. */
 export const TOUCH = 'h-11 sm:h-9';
 
-function StatusBadge({ task }: { task: BoardTask }) {
+function StatusBadge({ task, timezone }: { task: BoardTask; timezone: string }) {
   if (task.status === 'in_progress') {
     return (
       <Badge tone="info">
-        In progress{task.startedAt ? ` since ${formatTime(task.startedAt)}` : ''}
+        In progress{task.startedAt ? ` since ${formatTime(task.startedAt, timezone)}` : ''}
       </Badge>
     );
   }
@@ -37,7 +37,7 @@ function StatusBadge({ task }: { task: BoardTask }) {
     return (
       <Badge tone="success">
         <Check className="size-3" aria-hidden />
-        Done{task.completedAt ? ` ${formatTime(task.completedAt)}` : ''}
+        Done{task.completedAt ? ` ${formatTime(task.completedAt, timezone)}` : ''}
       </Badge>
     );
   }
@@ -57,10 +57,13 @@ function Person({ task }: { task: BoardTask }) {
 export function TaskRow({
   unit,
   task,
+  timezone,
   actions,
 }: {
   unit: BoardUnit;
   task: BoardTask;
+  /** Of the property: the times on a task are given by its clock. */
+  timezone: string;
   actions: BoardActions | null;
 }) {
   const open = isOpen(task);
@@ -78,7 +81,7 @@ export function TaskRow({
           {task.priority !== 'normal' && (
             <Badge tone={PRIORITY_TONES[task.priority]}>{PRIORITY_LABELS[task.priority]}</Badge>
           )}
-          <StatusBadge task={task} />
+          <StatusBadge task={task} timezone={timezone} />
         </div>
         {actions && (
           <button

@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react';
-import { diffDays, isValidDate } from '@pms/domain/shared';
+import { BLOCK_KIND_LABELS, diffDays, isValidDate } from '@pms/domain/shared';
 import type { Badge } from '@/components/ui/misc';
 import { ApiError } from '@/lib/api';
 import { formatDay } from '@/lib/format';
@@ -49,6 +49,15 @@ export function placeText(issue: Issue): string {
   return issue.unitName ?? 'Common area';
 }
 
+/**
+ * Where the issue is with its property: `Sea Breeze Candolim · 204`. A villa let as a whole
+ * has one room with the villa's own name, which is then said once.
+ */
+export function whereText(issue: Issue, propertyName: string | undefined): string {
+  const place = placeText(issue);
+  return propertyName && propertyName !== place ? `${propertyName} · ${place}` : place;
+}
+
 export function offSaleText(offSale: OffSale): string {
   return `Off sale from ${formatDay(offSale.from)}, back on sale ${formatDay(offSale.to)}`;
 }
@@ -79,8 +88,20 @@ interface Conflict {
 }
 
 /**
- * The error to show when saving failed. A refusal because a stay is in the way
- * is put in plain words, with the stay named.
+ * What a block that is in the way is called: the reason it was given. For a block without
+ * one the server names its kind, which is said as the calendar says it; a plain block has
+ * nothing more to say than that it is one.
+ */
+function blockName(label: string | null | undefined): string | null {
+  if (!label || label === 'block') return null;
+  return Object.hasOwn(BLOCK_KIND_LABELS, label)
+    ? BLOCK_KIND_LABELS[label as keyof typeof BLOCK_KIND_LABELS]
+    : label;
+}
+
+/**
+ * The error to show when saving failed. A refusal because a stay or a block is in the way
+ * is put in plain words, with what is in the way named.
  */
 export function saveError(err: unknown): Error {
   if (!(err instanceof ApiError) || err.code !== 'unit_occupied') {
@@ -90,9 +111,13 @@ export function saveError(err: unknown): Error {
   if (!conflict?.from || !conflict.to) return err;
   const dates = `${formatDay(conflict.from)} to ${formatDay(conflict.to)}`;
   const room = conflict.unitName ?? 'The room';
+  if (conflict.kind === 'block') {
+    const name = blockName(conflict.label);
+    return new Error(
+      `${room} is already blocked from ${dates}${name ? ` (${name})` : ''}. Nothing was saved. Choose other dates.`,
+    );
+  }
   return new Error(
-    conflict.kind === 'block'
-      ? `${room} is already blocked from ${dates}${conflict.label ? ` (${conflict.label})` : ''}. Nothing was saved.`
-      : `${room} has a stay that cannot be moved: reservation ${conflict.label ?? ''}, ${dates}. Nothing was saved. Move or cancel that stay first, or choose other dates.`,
+    `${room} has a stay that cannot be moved: reservation ${conflict.label ?? ''}, ${dates}. Nothing was saved. Move or cancel that stay first, or choose other dates.`,
   );
 }

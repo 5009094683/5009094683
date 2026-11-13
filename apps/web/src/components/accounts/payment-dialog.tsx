@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { FormError } from '@/components/housekeeping/form-error';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Field, Input, Select } from '@/components/ui/field';
-import { Notice } from '@/components/ui/misc';
 import { useToast } from '@/components/ui/toast';
 import { api } from '@/lib/api';
 import { useAction } from '@/lib/hooks';
@@ -112,7 +112,7 @@ export function PaymentDialog({
         }}
         className="flex flex-col gap-3"
       >
-        {save.error && <Notice tone="danger">{save.error}</Notice>}
+        <FormError message={save.error} />
         {accounts.length > 1 && (
           <Field label="Account" hint="Each property keeps its own account for the company.">
             {(props) => (

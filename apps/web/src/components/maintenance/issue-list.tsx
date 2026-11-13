@@ -11,6 +11,7 @@ import {
   STATUS_TONES,
   offSaleText,
   placeText,
+  whereText,
 } from './labels';
 import type { Issue } from './types';
 
@@ -28,6 +29,12 @@ function OffSaleNote({ issue }: { issue: Issue }) {
       {offSaleText(issue.offSale)}
     </span>
   );
+}
+
+/** The property under the room. Left out for a villa let as a whole, whose one room has its name. */
+function PropertyLine({ issue, name }: { issue: Issue; name: string | undefined }) {
+  if (!name || name === placeText(issue)) return null;
+  return <p className="text-[13px] text-ink-faint">{name}</p>;
 }
 
 function IssueCards({ issues, properties, onOpen }: ListProps) {
@@ -48,7 +55,7 @@ function IssueCards({ issues, properties, onOpen }: ListProps) {
                 </Badge>
               </span>
               <span className="text-[13px] text-ink-soft">
-                {properties.get(issue.propertyId)?.name} · {placeText(issue)}
+                {whereText(issue, properties.get(issue.propertyId)?.name)}
               </span>
               <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[13px] text-ink-soft">
                 <Badge tone={STATUS_TONES[issue.status]}>{STATUS_LABELS[issue.status]}</Badge>
@@ -117,9 +124,7 @@ function IssueTable({ issues, properties, onOpen }: ListProps) {
                 </td>
                 <td className="px-4 py-3">
                   <p className="text-ink">{placeText(issue)}</p>
-                  <p className="text-[13px] text-ink-faint">
-                    {properties.get(issue.propertyId)?.name}
-                  </p>
+                  <PropertyLine issue={issue} name={properties.get(issue.propertyId)?.name} />
                 </td>
                 <td className="px-4 py-3">
                   <Badge tone={PRIORITY_TONES[issue.priority]}>

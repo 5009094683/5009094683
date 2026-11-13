@@ -3,12 +3,12 @@
 import { useState } from 'react';
 import useSWR from 'swr';
 import { addDays, todayIn } from '@pms/domain/shared';
+import { FormError } from '@/components/housekeeping/form-error';
 import { PersonOptions, staffFor } from '@/components/housekeeping/staff';
 import type { StaffMember } from '@/components/housekeeping/types';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Checkbox, Field, Input, Select, Textarea } from '@/components/ui/field';
-import { Notice } from '@/components/ui/misc';
 import { useToast } from '@/components/ui/toast';
 import { api } from '@/lib/api';
 import { useAction, usePropertyDetail } from '@/lib/hooks';
@@ -49,12 +49,16 @@ export function ReportDialog({
   const [offSale, setOffSale] = useState(false);
   const [dates, setDates] = useState(() => firstDates(property));
 
+  // After the property is changed, the rooms and people of the one chosen before must not be
+  // offered while those of the new one are on their way, or if they never arrive.
   const detail = usePropertyDetail(propertyId || null);
+  const rooms = detail.data?.property.id === propertyId ? detail.data.roomTypes : undefined;
   const { data: staffData } = useSWR<{ staff: StaffMember[] }>(
     propertyId ? `/properties/${propertyId}/staff` : null,
+    { keepPreviousData: false },
   );
   const staff = staffFor(staffData?.staff ?? [], 'maintenance');
-  const roomTypes = (detail.data?.roomTypes ?? [])
+  const roomTypes = (rooms ?? [])
     .map((type) => ({ ...type, units: type.units.filter((u) => u.active) }))
     .filter((type) => type.active && type.units.length > 0);
   const unit = roomTypes.flatMap((type) => type.units).find((u) => u.id === unitId);
@@ -114,7 +118,7 @@ export function ReportDialog({
         }}
         className="flex flex-col gap-3"
       >
-        {save.error && <Notice tone="danger">{save.error}</Notice>}
+        <FormError message={save.error} />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {properties.length > 1 && (
             <Field label="Property">
@@ -133,12 +137,20 @@ export function ReportDialog({
               )}
             </Field>
           )}
-          <Field label="Room" className={properties.length > 1 ? undefined : 'sm:col-span-2'}>
+          <Field
+            label="Room"
+            className={properties.length > 1 ? undefined : 'sm:col-span-2'}
+            error={
+              !rooms && detail.error
+                ? 'The rooms could not be loaded. Close this and try again.'
+                : undefined
+            }
+          >
             {(props) => (
               <Select
                 {...props}
                 value={unitId}
-                disabled={detail.isLoading}
+                disabled={!rooms}
                 onChange={(event) => {
                   setUnitId(event.target.value);
                   if (!event.target.value) setOffSale(false);

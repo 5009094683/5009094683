@@ -4,7 +4,7 @@ import type { Permission } from '@pms/domain/shared';
 import { Select } from '@/components/ui/field';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
-import { useCurrentProperty } from '@/lib/hooks';
+import { useCurrentProperty, useProperties } from '@/lib/hooks';
 import type { Property } from '@/lib/types';
 
 /**
@@ -17,12 +17,24 @@ export function usePropertyFor(permission: Permission): {
   properties: Property[];
   select: (id: string) => void;
   isLoading: boolean;
+  /** Set when the properties could not be loaded, which is not the same as there being none. */
+  error: unknown;
+  retry: () => void;
 } {
   const auth = useAuth();
   const current = useCurrentProperty();
+  // The request `useCurrentProperty` makes, read once more only to learn whether it failed.
+  const all = useProperties();
   const properties = current.properties.filter((p) => p.active && auth.can(permission, p.id));
   const property = properties.find((p) => p.id === current.property?.id) ?? properties[0];
-  return { property, properties, select: current.select, isLoading: current.isLoading };
+  return {
+    property,
+    properties,
+    select: current.select,
+    isLoading: current.isLoading,
+    error: current.properties.length === 0 ? all.error : undefined,
+    retry: () => void all.mutate(),
+  };
 }
 
 export function PropertyPicker({

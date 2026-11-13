@@ -2,6 +2,7 @@
 
 import { Plus, X } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { FormError } from '@/components/housekeeping/form-error';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Field, Input } from '@/components/ui/field';
@@ -9,7 +10,6 @@ import { useToast } from '@/components/ui/toast';
 import { api } from '@/lib/api';
 import { useAction } from '@/lib/hooks';
 import type { Property } from '@/lib/types';
-import { FormError } from './form-error';
 import { amountText, parseAmount, parsePercent, percentText } from './money';
 import { CATEGORY_LABELS, ruleInWords, serviceCodeLabel, sortedSlabs } from './tax-words';
 import type { TaxCategory, TaxComponent, TaxRule, TaxSlab } from './types';

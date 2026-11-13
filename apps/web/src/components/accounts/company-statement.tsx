@@ -4,6 +4,7 @@ import { ArrowLeft, Banknote, Pencil } from 'lucide-react';
 import Link from 'next/link';
 import { useState, type ReactNode } from 'react';
 import useSWR from 'swr';
+import { useReturnFocus } from '@/components/housekeeping/focus';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/field';
 import { Badge, Card, EmptyState, ErrorState, Notice, PageLoading } from '@/components/ui/misc';
@@ -222,9 +223,16 @@ export function CompanyStatement({ companyId }: { companyId: string }) {
   /** The account a payment is being taken into; an empty string leaves the choice to the dialog. */
   const [paying, setPaying] = useState<string | null>(null);
   const [shown, setShown] = useState('');
+  const rememberOpener = useReturnFocus(editing || paying !== null);
+  const pay = (folioId: string) => {
+    rememberOpener();
+    setPaying(folioId);
+  };
 
   const { data, error, isLoading, mutate } = useSWR<Statement>(
     allowed ? `/companies/${companyId}/statement` : null,
+    // Another company's statement must never stand in for this one, not even for a moment.
+    { keepPreviousData: false },
   );
   useLive(/^folio\./, () => void mutate());
 
@@ -295,7 +303,10 @@ export function CompanyStatement({ companyId }: { companyId: string }) {
           {canManage && (
             <Button
               icon={<Pencil className="size-4" aria-hidden />}
-              onClick={() => setEditing(true)}
+              onClick={() => {
+                rememberOpener();
+                setEditing(true);
+              }}
             >
               Edit
             </Button>
@@ -304,7 +315,7 @@ export function CompanyStatement({ companyId }: { companyId: string }) {
             <Button
               variant="primary"
               icon={<Banknote className="size-4" aria-hidden />}
-              onClick={() => setPaying('')}
+              onClick={() => pay('')}
             >
               Record payment
             </Button>
@@ -362,7 +373,7 @@ export function CompanyStatement({ companyId }: { companyId: string }) {
                       <Button
                         size="sm"
                         aria-label={`Record payment for ${account.propertyName}`}
-                        onClick={() => setPaying(account.folioId)}
+                        onClick={() => pay(account.folioId)}
                       >
                         Record payment
                       </Button>

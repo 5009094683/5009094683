@@ -14,9 +14,32 @@ export function hourText(hour: number): string {
   return `${String(hour).padStart(2, '0')}:00`;
 }
 
-/** Who ran it: `Automatic` for the nightly run, else the person's name when it is known. */
+/**
+ * `14 Nov, 00:05` by the clock at the property. The hotel day and the hour of the automatic
+ * run are given in property time, so the time a run happened is too.
+ */
+export function ranAt(value: string, timezone: string): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: timezone,
+  }).format(new Date(value));
+}
+
+const API_KEY = 'api-key:';
+
+/**
+ * Who ran it: `Automatic` for the nightly run, else the person's name when it is known and
+ * their email address when it is not. Another system that ran it with an API key is named
+ * after its key.
+ */
 export function ranBy(audit: NightAudit, names: Map<string, string>): string {
   if (audit.runByLabel.startsWith('system:')) return 'Automatic';
+  if (audit.runByLabel.startsWith(API_KEY)) {
+    return `${audit.runByLabel.slice(API_KEY.length)} (API key)`;
+  }
   return (audit.runBy && names.get(audit.runBy)) || audit.runByLabel;
 }
 

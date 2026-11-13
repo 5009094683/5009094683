@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { FormError } from '@/components/housekeeping/form-error';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Checkbox, Field, Input, Segmented, Textarea } from '@/components/ui/field';
@@ -9,7 +10,6 @@ import { useToast } from '@/components/ui/toast';
 import { api } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import { useAction } from '@/lib/hooks';
-import { FormError } from './form-error';
 import { amountText, money, parseAmount } from './money';
 import type { Invoice, InvoiceLine } from './types';
 

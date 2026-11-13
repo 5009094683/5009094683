@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import useSWR from 'swr';
+import { useReturnFocus } from '@/components/housekeeping/focus';
 import { Button } from '@/components/ui/button';
 import { Checkbox, Input, Select } from '@/components/ui/field';
 import { Badge, Card, EmptyState, ErrorState, PageHeader, PageLoading } from '@/components/ui/misc';
@@ -160,12 +161,19 @@ export function CompaniesView() {
   const [kind, setKind] = useState<CompanyKind | ''>('');
   const [inactive, setInactive] = useState(false);
   const [editing, setEditing] = useState<Company | 'new' | null>(null);
+  const rememberOpener = useReturnFocus(editing !== null);
+  const edit = (company: Company | 'new') => {
+    rememberOpener();
+    setEditing(company);
+  };
   const term = useDebounced(search.trim(), 300);
 
   const { data, error, isLoading, mutate } = useSWR<{ companies: Company[] }>(
     allowed
       ? `/companies${query({ search: term, kind, includeInactive: inactive ? 'true' : '' })}`
       : null,
+    // Companies kept from another search would stay on screen, unexplained, if this request failed.
+    { keepPreviousData: false },
   );
   // What a company owes changes when a folio is billed to it or it pays.
   useLive(/^folio\./, () => void mutate());
@@ -178,7 +186,7 @@ export function CompaniesView() {
     <Button
       variant="primary"
       icon={<Plus className="size-4" aria-hidden />}
-      onClick={() => setEditing('new')}
+      onClick={() => edit('new')}
     >
       Add company
     </Button>
@@ -245,7 +253,7 @@ export function CompaniesView() {
           <CompanyTable
             companies={companies}
             currency={currency}
-            onEdit={canManage ? setEditing : undefined}
+            onEdit={canManage ? edit : undefined}
           />
           {auth.scope('folio.read') !== 'all' && (
             <p className="mt-2 text-[13px] text-ink-faint">

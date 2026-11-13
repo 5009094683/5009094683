@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { FormError } from '@/components/housekeeping/form-error';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Checkbox, Field, Input, Select, Textarea } from '@/components/ui/field';
@@ -8,7 +9,6 @@ import { useToast } from '@/components/ui/toast';
 import { api } from '@/lib/api';
 import { useAction } from '@/lib/hooks';
 import { useAccountsCurrency } from './currency';
-import { FormError } from './form-error';
 import { amountText, parseAmount, parsePercent, percentText } from './money';
 import type { Company, CompanyKind } from './types';
 
@@ -64,9 +64,12 @@ export function CompanyDialog({
   const [problems, setProblems] = useState<Problems>({});
   const form = useRef<HTMLFormElement>(null);
 
-  // The form is longer than the dialog: go to the first field that needs a look.
+  // The form is longer than the dialog: go to the first field that needs a look,
+  // far enough to show what is wrong with it, which is written under the field.
   useEffect(() => {
-    form.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+    const wrong = form.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
+    wrong?.focus();
+    wrong?.parentElement?.scrollIntoView({ block: 'nearest' });
   }, [problems]);
 
   const agent = kind === 'travel_agent';

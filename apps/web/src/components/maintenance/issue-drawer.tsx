@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from 'react';
 import useSWR from 'swr';
 import { addDays, todayIn } from '@pms/domain/shared';
+import { FormError } from '@/components/housekeeping/form-error';
 import { PersonOptions, staffFor } from '@/components/housekeeping/staff';
 import type { StaffMember } from '@/components/housekeeping/types';
 import { Button } from '@/components/ui/button';
@@ -27,6 +28,7 @@ import {
   offSaleText,
   placeText,
   saveError,
+  whereText,
 } from './labels';
 import { OffSaleExplanation, OffSaleFields } from './off-sale-fields';
 import type { Issue, IssueStatus, OffSale, Priority } from './types';
@@ -42,10 +44,6 @@ function Heading({ children }: { children: ReactNode }) {
   return (
     <h3 className="text-xs font-semibold tracking-wide text-ink-faint uppercase">{children}</h3>
   );
-}
-
-function where(issue: Issue, property: Property | undefined): string {
-  return [property?.name, placeText(issue)].filter(Boolean).join(' · ');
 }
 
 function About({ issue }: { issue: Issue }) {
@@ -77,7 +75,7 @@ function ViewDrawer({ issue, property, onClose }: DrawerProps) {
       open
       onClose={onClose}
       title={issue.title}
-      description={where(issue, property)}
+      description={whereText(issue, property?.name)}
       footer={<Button onClick={onClose}>Close</Button>}
     >
       <div className="flex flex-col gap-5">
@@ -175,7 +173,7 @@ function EditDrawer({ issue, property, onClose, onSaved }: DrawerProps) {
       open
       onClose={onClose}
       title={issue.title}
-      description={where(issue, property)}
+      description={whereText(issue, property?.name)}
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
@@ -193,7 +191,7 @@ function EditDrawer({ issue, property, onClose, onSaved }: DrawerProps) {
         }}
         className="flex flex-col gap-5"
       >
-        {save.error && <Notice tone="danger">{save.error}</Notice>}
+        <FormError message={save.error} />
         <About issue={issue} />
 
         <div className="flex flex-col gap-3">

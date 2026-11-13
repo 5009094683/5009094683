@@ -4,10 +4,10 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Field, Select, Textarea } from '@/components/ui/field';
-import { Notice } from '@/components/ui/misc';
 import { useToast } from '@/components/ui/toast';
 import { api } from '@/lib/api';
 import { useAction } from '@/lib/hooks';
+import { FormError } from './form-error';
 import { PRIORITIES, PRIORITY_LABELS, TASK_KINDS, TASK_KIND_LABELS } from './labels';
 import { PersonOptions } from './staff';
 import type { Board, BoardTask, BoardUnit, Priority, StaffMember, TaskKind } from './types';
@@ -105,7 +105,7 @@ export function AddTaskDialog({
         }}
         className="flex flex-col gap-3"
       >
-        {save.error && <Notice tone="danger">{save.error}</Notice>}
+        <FormError message={save.error} />
         <Field label="Room">
           {(props) => (
             <Select
@@ -245,7 +245,7 @@ export function EditTaskDialog({
         }}
         className="flex flex-col gap-3"
       >
-        {save.error && <Notice tone="danger">{save.error}</Notice>}
+        <FormError message={save.error} />
         <div className="grid grid-cols-2 gap-3">
           <Field label="Priority">
             {(props) => (

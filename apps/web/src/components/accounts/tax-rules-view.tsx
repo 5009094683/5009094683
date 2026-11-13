@@ -3,6 +3,7 @@
 import { Percent } from 'lucide-react';
 import { useState } from 'react';
 import useSWR from 'swr';
+import { useReturnFocus } from '@/components/housekeeping/focus';
 import { PropertyPicker, usePropertyFor } from '@/components/housekeeping/property-picker';
 import { Button } from '@/components/ui/button';
 import {
@@ -24,6 +25,7 @@ function Rules({ property }: { property: Property }) {
   const auth = useAuth();
   const canEdit = auth.can('accounting.manage', property.id);
   const [editing, setEditing] = useState<TaxCategory | null>(null);
+  const rememberOpener = useReturnFocus(editing !== null);
   const { data, error, isLoading, mutate } = useSWR<{ rules: TaxRule[] }>(
     `/properties/${property.id}/tax-rules`,
   );
@@ -58,7 +60,10 @@ function Rules({ property }: { property: Property }) {
                     <Button
                       size="sm"
                       aria-label={`${rule ? 'Edit' : 'Set up'} tax on ${CATEGORY_LABELS[category].toLowerCase()}`}
-                      onClick={() => setEditing(category)}
+                      onClick={() => {
+                        rememberOpener();
+                        setEditing(category);
+                      }}
                     >
                       {rule ? 'Edit' : 'Set up'}
                     </Button>
@@ -96,7 +101,7 @@ function Rules({ property }: { property: Property }) {
 /** How each kind of charge is taxed at a property. */
 export function TaxRulesView() {
   const auth = useAuth();
-  const { property, properties, select, isLoading } = usePropertyFor('folio.read');
+  const { property, properties, select, isLoading, error, retry } = usePropertyFor('folio.read');
 
   if (!auth.can('folio.read')) return <NoAccess />;
 
@@ -119,6 +124,8 @@ export function TaxRulesView() {
         <PageLoading />
       ) : property ? (
         <Rules key={property.id} property={property} />
+      ) : error ? (
+        <ErrorState error={error} onRetry={retry} />
       ) : (
         <EmptyState
           icon={<Percent className="size-5" />}

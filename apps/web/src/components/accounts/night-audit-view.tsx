@@ -4,6 +4,7 @@ import { timeIn } from '@pms/domain/shared';
 import { Moon } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import useSWR from 'swr';
+import { useReturnFocus } from '@/components/housekeeping/focus';
 import { PropertyPicker, usePropertyFor } from '@/components/housekeeping/property-picker';
 import type { StaffMember } from '@/components/housekeeping/types';
 import { Button } from '@/components/ui/button';
@@ -21,7 +22,7 @@ import { formatDateTime, formatWeekday, plural } from '@/lib/format';
 import { useLive } from '@/lib/live';
 import type { Property } from '@/lib/types';
 import { RunAuditDialog } from './night-audit-dialog';
-import { dayText, hourText, ranBy } from './night-audit-figures';
+import { dayText, hourText, ranAt, ranBy } from './night-audit-figures';
 import { AuditHistory } from './night-audit-history';
 import { NoAccess } from './no-access';
 import type { AuditStatus, NightAudit } from './types';
@@ -79,6 +80,7 @@ function AuditScreen({ property }: { property: Property }) {
   const auth = useAuth();
   const canRun = auth.can('nightaudit.run', property.id);
   const [confirming, setConfirming] = useState<AuditStatus | null>(null);
+  const rememberOpener = useReturnFocus(confirming !== null);
 
   const { data, error, isLoading, mutate } = useSWR<AuditState>(
     `/properties/${property.id}/night-audit`,
@@ -100,6 +102,10 @@ function AuditScreen({ property }: { property: Property }) {
   const names = new Map((staff.data?.staff ?? []).map((person) => [person.id, person.name]));
   if (auth.me) names.set(auth.me.user.id, auth.me.user.name);
   const ahead = status.businessDate > status.today;
+  // Worth saying only to someone whose own clock would show these runs at another time.
+  const elsewhere = audits.some(
+    (audit) => formatDateTime(audit.completedAt) !== ranAt(audit.completedAt, property.timezone),
+  );
 
   return (
     <div className="flex flex-col gap-5">
@@ -132,8 +138,9 @@ function AuditScreen({ property }: { property: Property }) {
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
           <p className="text-[13px] text-ink-soft">
             {status.last
-              ? `Last run: ${formatWeekday(status.last.businessDate)} was closed ${formatDateTime(
+              ? `Last run: ${formatWeekday(status.last.businessDate)} was closed ${ranAt(
                   status.last.completedAt,
+                  property.timezone,
                 )}, ${
                   ranBy(status.last, names) === 'Automatic'
                     ? 'by itself'
@@ -146,7 +153,10 @@ function AuditScreen({ property }: { property: Property }) {
               variant="primary"
               icon={<Moon className="size-4" aria-hidden />}
               disabled={ahead}
-              onClick={() => setConfirming(status)}
+              onClick={() => {
+                rememberOpener();
+                setConfirming(status);
+              }}
             >
               Run night audit now
             </Button>
@@ -160,6 +170,12 @@ function AuditScreen({ property }: { property: Property }) {
           {audits.length >= 30 && (
             <span className="font-normal text-ink-faint"> · the last 30 runs</span>
           )}
+          {elsewhere && (
+            <span className="font-normal text-ink-faint">
+              {' '}
+              · times are by the clock at the property
+            </span>
+          )}
         </h2>
         {audits.length === 0 ? (
           <Card>
@@ -170,7 +186,12 @@ function AuditScreen({ property }: { property: Property }) {
             />
           </Card>
         ) : (
-          <AuditHistory audits={audits} currency={property.currency} names={names} />
+          <AuditHistory
+            audits={audits}
+            currency={property.currency}
+            timezone={property.timezone}
+            names={names}
+          />
         )}
       </section>
 
@@ -189,7 +210,7 @@ function AuditScreen({ property }: { property: Property }) {
 /** The night audit of one property: where the hotel day stands, running it by hand, and past runs. */
 export function NightAuditView() {
   const auth = useAuth();
-  const { property, properties, select, isLoading } = usePropertyFor('folio.read');
+  const { property, properties, select, isLoading, error, retry } = usePropertyFor('folio.read');
 
   if (!auth.can('folio.read')) return <NoAccess />;
 
@@ -208,6 +229,8 @@ export function NightAuditView() {
         <PageLoading />
       ) : property ? (
         <AuditScreen key={property.id} property={property} />
+      ) : error ? (
+        <ErrorState error={error} onRetry={retry} />
       ) : (
         <EmptyState
           icon={<Moon className="size-5" />}

@@ -96,9 +96,14 @@ export function finishedText(task: BoardTask, unit: BoardUnit): string {
   return `${unit.unitName} is now clean.`;
 }
 
-const clock = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' });
-
-/** `10:42`, in the viewer's own time zone. */
-export function formatTime(value: string): string {
-  return clock.format(new Date(value));
+/**
+ * `10:42` by the clock at the property. The board is headed with the day at the property,
+ * so a manager looking from elsewhere reads the times against that day too.
+ */
+export function formatTime(value: string, timezone: string): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: timezone,
+  }).format(new Date(value));
 }

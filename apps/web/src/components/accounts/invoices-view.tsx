@@ -90,6 +90,9 @@ function InvoiceList() {
           type: type === 'all' ? '' : type,
           limit: LIMIT,
         })}`,
+    // Invoices kept from another filter would stay on screen, and go into the CSV, if this
+    // request failed or the dates could not be asked for.
+    { keepPreviousData: false },
   );
   const invoices = data?.invoices ?? [];
 

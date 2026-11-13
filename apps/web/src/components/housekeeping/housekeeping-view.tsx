@@ -3,9 +3,10 @@
 import { BedDouble, ListPlus, Plus, UserRound } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import useSWR from 'swr';
+import { CleaningForecast } from '@/components/insights/cleaning-forecast';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/field';
-import { EmptyState, ErrorState, PageHeader, PageLoading } from '@/components/ui/misc';
+import { EmptyState, ErrorState, Notice, PageHeader, PageLoading } from '@/components/ui/misc';
 import { useToast } from '@/components/ui/toast';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -23,14 +24,9 @@ import {
   type BoardFilters,
   type Grouping,
 } from './board';
-import {
-  SETTABLE_STATES,
-  STATES,
-  STATE_DOTS,
-  STATE_LABELS,
-  TASK_KIND_LABELS,
-  finishedText,
-} from './labels';
+import { BulkBar, CountsStrip, GroupingToggle } from './board-controls';
+import { useReturnFocus } from './focus';
+import { STATES, STATE_LABELS, TASK_KIND_LABELS, finishedText } from './labels';
 import { NoAccess } from './no-access';
 import { PropertyPicker, usePropertyFor } from './property-picker';
 import { staffFor } from './staff';
@@ -47,134 +43,10 @@ interface BoardView {
   mine: boolean;
 }
 
-function CountsStrip({
-  board,
-  state,
-  onState,
-}: {
-  board: Board;
-  state: BoardFilters['state'];
-  onState: (state: BoardFilters['state']) => void;
-}) {
-  return (
-    <div className="mb-3 grid grid-cols-4 gap-2 lg:grid-cols-5">
-      {STATES.map((s) => {
-        const pressed = state === s;
-        return (
-          <button
-            key={s}
-            type="button"
-            aria-pressed={pressed}
-            aria-label={`${STATE_LABELS[s]}: ${plural(board.counts[s], 'room')}. Show only these.`}
-            onClick={() => onState(pressed ? null : s)}
-            className={cn(
-              'flex min-h-16 flex-col justify-center rounded-xl border px-2.5 py-2 text-left shadow-card transition-colors sm:px-3.5',
-              pressed
-                ? 'border-brand-600 bg-brand-50 ring-1 ring-brand-600'
-                : 'border-line bg-surface hover:border-line-strong',
-            )}
-          >
-            <span className="tabular text-2xl leading-none font-semibold text-ink">
-              {board.counts[s]}
-            </span>
-            <span className="mt-1.5 flex items-start gap-1.5 text-xs leading-tight text-ink-soft">
-              <span className={cn('mt-[3px] size-2 shrink-0 rounded-full', STATE_DOTS[s])} />
-              {STATE_LABELS[s]}
-            </span>
-          </button>
-        );
-      })}
-      <div className="col-span-4 flex items-center gap-x-4 gap-y-1 rounded-xl border border-line bg-surface px-3.5 py-2.5 shadow-card lg:col-span-1 lg:flex-col lg:items-start lg:justify-center lg:gap-0.5">
-        <p className="text-xs font-medium text-ink-faint">Tasks</p>
-        <p className="text-sm text-ink">
-          <span className="tabular font-semibold">{board.counts.tasksOpen}</span> to do
-          <span className="mx-1.5 text-ink-faint">·</span>
-          <span className="tabular font-semibold">{board.counts.tasksDone}</span> done
-        </p>
-      </div>
-    </div>
-  );
-}
+/** The rooms the board is narrowed to. Remembered for each property: floors differ between them. */
+type Narrowing = Pick<BoardFilters, 'state' | 'floor'>;
 
-function GroupingToggle({
-  value,
-  onChange,
-}: {
-  value: Grouping;
-  onChange: (value: Grouping) => void;
-}) {
-  const options: { value: Grouping; label: string }[] = [
-    { value: 'floor', label: 'By floor' },
-    { value: 'type', label: 'By room type' },
-  ];
-  return (
-    <div
-      role="radiogroup"
-      aria-label="Group rooms"
-      className="inline-flex rounded-md border border-line-strong bg-sunken p-0.5"
-    >
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          role="radio"
-          aria-checked={value === option.value}
-          onClick={() => onChange(option.value)}
-          className={cn(
-            'h-[38px] rounded-[5px] px-3 text-[13px] font-medium transition-colors sm:h-[30px]',
-            value === option.value
-              ? 'bg-surface text-ink shadow-sm'
-              : 'text-ink-soft hover:text-ink',
-          )}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function BulkBar({
-  count,
-  saving,
-  onMark,
-  onClear,
-}: {
-  count: number;
-  saving: string | undefined;
-  onMark: (state: SettableState) => void;
-  onClear: () => void;
-}) {
-  return (
-    <div
-      role="region"
-      aria-label="Selected rooms"
-      className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-line bg-surface px-4 py-3 shadow-pop sm:-mx-6 sm:px-6"
-    >
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <p className="text-sm font-medium text-ink" aria-live="polite">
-          {plural(count, 'room')} selected. Mark as:
-        </p>
-        <div className="flex flex-1 flex-wrap items-center gap-2">
-          {SETTABLE_STATES.map((state) => (
-            <Button
-              key={state}
-              className={TOUCH}
-              loading={saving === state}
-              disabled={saving !== undefined}
-              onClick={() => onMark(state)}
-            >
-              {STATE_LABELS[state]}
-            </Button>
-          ))}
-          <Button variant="ghost" className={cn(TOUCH, 'ml-auto')} onClick={onClear}>
-            Clear
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
+const EVERY_ROOM: Narrowing = { state: null, floor: null };
 
 function BoardScreen({
   property,
@@ -192,6 +64,7 @@ function BoardScreen({
     data: board,
     error,
     isLoading,
+    isValidating,
     mutate,
   } = useSWR<Board>(`/properties/${property.id}/housekeeping`);
   const { data: staffData } = useSWR<{ staff: StaffMember[] }>(
@@ -207,12 +80,15 @@ function BoardScreen({
     grouping: 'floor',
     mine: false,
   });
-  const [state, setState] = useState<BoardFilters['state']>(null);
-  const [floor, setFloor] = useState<string | null>(null);
+  const [narrowing, setNarrowing] = useStoredState<Narrowing>(
+    `pms.housekeeping.rooms.${property.id}`,
+    EVERY_ROOM,
+  );
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [busy, setBusy] = useState<ReadonlyMap<string, string>>(new Map());
   const [adding, setAdding] = useState<{ unitId?: string } | null>(null);
   const [editing, setEditing] = useState<{ unitId: string; taskId: string } | null>(null);
+  const rememberOpener = useReturnFocus(adding !== null || editing !== null);
 
   const header = (
     <PageHeader
@@ -295,21 +171,29 @@ function BoardScreen({
               body: { assignedTo: personId },
             });
           }),
-        editTask: (unit, task) => setEditing({ unitId: unit.unitId, taskId: task.id }),
-        addTask: (unit) => setAdding({ unitId: unit.unitId }),
+        editTask: (unit, task) => {
+          rememberOpener();
+          setEditing({ unitId: unit.unitId, taskId: task.id });
+        },
+        addTask: (unit) => {
+          rememberOpener();
+          setAdding({ unitId: unit.unitId });
+        },
       }
     : null;
 
   const floors = floorsOf(board.units);
   const hasFloors = floors.some((f) => f !== NO_FLOOR);
   const grouping: Grouping = hasFloors ? view.grouping : 'type';
+  // What was remembered may no longer fit: a floor can lose its last room, and with it its choice.
+  const state = STATES.find((s) => s === narrowing.state) ?? null;
+  const floor = floors.length > 1 ? (floors.find((f) => f === narrowing.floor) ?? null) : null;
   // Only people who can be given tasks have the "My tasks" switch, so only they can be held to it.
   const filters: BoardFilters = { state, floor, mine: canWrite && view.mine };
   const visible = filterUnits(board.units, filters, auth.me.user.id);
   const groups = groupUnits(visible, grouping);
   const showAll = () => {
-    setState(null);
-    setFloor(null);
+    setNarrowing(EVERY_ROOM);
     setView({ ...view, mine: false });
   };
   // Only rooms on screen count as selected, so a filter never hides a room that is about to change.
@@ -356,6 +240,20 @@ function BoardScreen({
     <div className="mx-auto flex max-w-7xl flex-col p-4 sm:p-6">
       {header}
 
+      {/* A board that has stopped updating looks just like one that is up to date. */}
+      {error && (
+        <Notice tone="warning" className="mb-3">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+            <p>The board could not be updated, so it may be out of date.</p>
+            <Button className={TOUCH} loading={isValidating} onClick={() => void mutate()}>
+              Try again
+            </Button>
+          </div>
+        </Notice>
+      )}
+
+      <CleaningForecast property={property} hotelDay={board.date} />
+
       {board.units.length === 0 ? (
         <EmptyState
           icon={<BedDouble className="size-5" />}
@@ -364,7 +262,11 @@ function BoardScreen({
         />
       ) : (
         <>
-          <CountsStrip board={board} state={state} onState={setState} />
+          <CountsStrip
+            board={board}
+            state={state}
+            onState={(next) => setNarrowing({ state: next, floor })}
+          />
 
           <div className="mb-3 flex flex-wrap items-center gap-2">
             {floors.length > 1 && (
@@ -372,7 +274,10 @@ function BoardScreen({
                 aria-label="Floor"
                 value={floor ?? ALL_FLOORS}
                 onChange={(event) =>
-                  setFloor(event.target.value === ALL_FLOORS ? null : event.target.value)
+                  setNarrowing({
+                    state,
+                    floor: event.target.value === ALL_FLOORS ? null : event.target.value,
+                  })
                 }
                 className={cn(TOUCH, 'w-auto')}
               >
@@ -421,7 +326,10 @@ function BoardScreen({
                   variant="primary"
                   className={TOUCH}
                   icon={<Plus className="size-4" aria-hidden />}
-                  onClick={() => setAdding({})}
+                  onClick={() => {
+                    rememberOpener();
+                    setAdding({});
+                  }}
                 >
                   Add task
                 </Button>
@@ -434,6 +342,22 @@ function BoardScreen({
               Marking a clean as done makes the room clean. Marking an inspection as done makes it
               inspected.
             </p>
+          )}
+
+          {/* The filters are remembered, so the board says when they are hiding rooms. */}
+          {visible.length > 0 && visible.length < board.units.length && (
+            <div className="mb-3 flex items-center justify-between gap-2 rounded-lg bg-sunken pl-3.5 text-[13px] text-ink-soft">
+              <p aria-live="polite">
+                Showing {visible.length} of {plural(board.units.length, 'room')}.
+              </p>
+              <button
+                type="button"
+                onClick={showAll}
+                className="h-11 shrink-0 rounded-md px-3.5 font-medium text-brand-700 hover:underline sm:h-9"
+              >
+                Show all rooms
+              </button>
+            </div>
           )}
 
           {groups.length === 0 ? (
@@ -480,6 +404,7 @@ function BoardScreen({
                         <UnitCard
                           key={unit.unitId}
                           unit={unit}
+                          timezone={property.timezone}
                           actions={actions}
                           selected={selected.has(unit.unitId)}
                           onSelect={(on) => select([unit.unitId], on)}
@@ -529,21 +454,27 @@ function BoardScreen({
 /** The housekeeping board: every room's cleaning state and the day's tasks, built for a phone. */
 export function HousekeepingView() {
   const auth = useAuth();
-  const { property, properties, select, isLoading } = usePropertyFor('housekeeping.read');
+  const { property, properties, select, isLoading, error, retry } =
+    usePropertyFor('housekeeping.read');
   if (!auth.can('housekeeping.read')) return <NoAccess />;
   if (isLoading) return <PageLoading />;
   if (!property) {
     return (
-      <div className="mx-auto max-w-5xl p-4 sm:p-6">
-        <EmptyState
-          icon={<BedDouble className="size-5" />}
-          title="No property to show"
-          description="Ask an organisation admin to give you housekeeping access to a property."
-        />
+      <div className="mx-auto flex max-w-7xl flex-col p-4 sm:p-6">
+        <PageHeader title="Housekeeping" />
+        {error ? (
+          <ErrorState error={error} onRetry={retry} />
+        ) : (
+          <EmptyState
+            icon={<BedDouble className="size-5" />}
+            title="No property to show"
+            description="Ask an organisation admin to give you housekeeping access to a property."
+          />
+        )}
       </div>
     );
   }
-  // Keyed so that filters and the selection start afresh at another property.
+  // Keyed so that the selection starts afresh at another property, with that property's own filters.
   return (
     <BoardScreen key={property.id} property={property} properties={properties} onSelect={select} />
   );

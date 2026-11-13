@@ -2,6 +2,7 @@
 
 import { addDays } from '@pms/domain/shared';
 import { useState } from 'react';
+import { FormError } from '@/components/housekeeping/form-error';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Notice } from '@/components/ui/misc';
@@ -99,7 +100,7 @@ export function RunAuditDialog({
         }}
         className="flex flex-col gap-3 text-sm text-ink-soft"
       >
-        {run.error && <Notice tone="danger">{run.error}</Notice>}
+        <FormError message={run.error} />
         <p>
           This closes the hotel day {dayText(day)} and starts {dayText(next)}.
         </p>
@@ -108,21 +109,24 @@ export function RunAuditDialog({
             Every room with a guest checked in is charged for the night of {formatWeekday(day)}.
           </li>
           <li>
+            Guests who were due to leave and are still checked in are listed. They are not charged
+            for the night until their stay is extended.
+          </li>
+          <li>
             {property.settings.autoNoShow
               ? 'Bookings that were due and did not arrive are marked no-show.'
               : 'Bookings that were due and did not arrive are listed, and left as they are.'}
-          </li>
-          <li>
-            Guests who were due to leave and are still checked in are listed. They are not charged
-            for the night until their stay is extended.
           </li>
           <li>The cleaning list for {formatWeekday(next)} is written.</li>
           <li>The figures for {formatWeekday(day)} are saved for reports.</li>
         </ul>
         {early && (
           <Notice tone="warning" title={`${formatWeekday(day)} is not over yet`}>
-            Close it now only when the day&apos;s work is done. Anything posted after this is dated{' '}
-            {formatWeekday(next)}, and the night audit cannot run again until then.
+            Close it now only when the day&apos;s work is done.
+            {property.settings.autoNoShow &&
+              ' Guests due today who have not checked in yet are marked no-show.'}{' '}
+            Anything posted after this is dated {formatWeekday(next)}, and the night audit cannot
+            run again until then.
           </Notice>
         )}
         <p className="font-medium text-ink">This cannot be undone.</p>
