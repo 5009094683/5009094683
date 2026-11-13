@@ -16,9 +16,14 @@ import type { Database, DbHandle } from '@pms/db';
 import { createMailer, type Mailer } from '@pms/domain';
 import { registerAuth } from './plugins/auth';
 import { registerErrorHandling } from './plugins/errors';
+import { registerLive } from './plugins/live';
 import { auditRoutes } from './routes/audit';
 import { authRoutes } from './routes/auth';
+import { calendarRoutes } from './routes/calendar';
+import { guestRoutes } from './routes/guests';
 import { orgRoutes } from './routes/org';
+import { propertyRoutes } from './routes/properties';
+import { reservationRoutes } from './routes/reservations';
 import { ssoRoutes } from './routes/sso';
 import { userRoutes } from './routes/users';
 
@@ -105,12 +110,18 @@ export async function buildApp(deps: AppDeps): Promise<App> {
     }
   });
 
+  await registerLive(app);
+
   const typed = app.withTypeProvider<ZodTypeProvider>();
   await typed.register(authRoutes);
   await typed.register(userRoutes);
   await typed.register(ssoRoutes);
   await typed.register(orgRoutes);
   await typed.register(auditRoutes);
+  await typed.register(propertyRoutes);
+  await typed.register(reservationRoutes);
+  await typed.register(calendarRoutes);
+  await typed.register(guestRoutes);
 
   return app;
 }

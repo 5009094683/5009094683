@@ -229,6 +229,7 @@ export interface ReservationFilter {
   arrivingOn?: DateString;
   departingOn?: DateString;
   channelCode?: string;
+  guestId?: string;
   needsReview?: boolean;
   overbooked?: boolean;
   /** Confirmation code, guest name, email, phone or channel reference. */
@@ -258,6 +259,7 @@ export async function listReservations(
   if (filter.arrivingOn) conditions.push(eq(reservations.checkIn, filter.arrivingOn));
   if (filter.departingOn) conditions.push(eq(reservations.checkOut, filter.departingOn));
   if (filter.channelCode) conditions.push(eq(reservations.channelCode, filter.channelCode));
+  if (filter.guestId) conditions.push(eq(reservations.guestId, filter.guestId));
   if (filter.needsReview !== undefined)
     conditions.push(eq(reservations.needsReview, filter.needsReview));
   if (filter.overbooked !== undefined)
@@ -659,15 +661,13 @@ export async function createReservation(
               externalRoomRef: p.input.externalRoomRef ?? null,
             })
             .returning();
-          await tx
-            .insert(reservationNights)
-            .values(
-              p.nights.map((n) => ({
-                reservationRoomId: room!.id,
-                date: n.date,
-                amount: n.amount,
-              })),
-            );
+          await tx.insert(reservationNights).values(
+            p.nights.map((n) => ({
+              reservationRoomId: room!.id,
+              date: n.date,
+              amount: n.amount,
+            })),
+          );
           const unitId = await placeRoom(tx, {
             propertyId: property.id,
             roomId: room!.id,
@@ -935,15 +935,13 @@ export async function updateReservationRoom(
           })
           .where(eq(reservationRooms.id, roomId));
         await tx.delete(reservationNights).where(eq(reservationNights.reservationRoomId, roomId));
-        await tx
-          .insert(reservationNights)
-          .values(
-            priced.nights.map((n) => ({
-              reservationRoomId: roomId,
-              date: n.date,
-              amount: n.amount,
-            })),
-          );
+        await tx.insert(reservationNights).values(
+          priced.nights.map((n) => ({
+            reservationRoomId: roomId,
+            date: n.date,
+            amount: n.amount,
+          })),
+        );
 
         // Decide the unit: an explicit request wins; otherwise keep the current
         // unit if it still fits; otherwise choose again or leave it open.
@@ -1071,15 +1069,13 @@ export async function addReservationRoom(
             externalRoomRef: input.externalRoomRef ?? null,
           })
           .returning();
-        await tx
-          .insert(reservationNights)
-          .values(
-            priced.nights.map((n) => ({
-              reservationRoomId: room!.id,
-              date: n.date,
-              amount: n.amount,
-            })),
-          );
+        await tx.insert(reservationNights).values(
+          priced.nights.map((n) => ({
+            reservationRoomId: room!.id,
+            date: n.date,
+            amount: n.amount,
+          })),
+        );
         const unitId = await placeRoom(tx, {
           propertyId: property.id,
           roomId: room!.id,

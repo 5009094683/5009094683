@@ -128,6 +128,11 @@ export function can(grants: Grant[], permission: Permission, propertyId?: string
   });
 }
 
+/** True only when a grant that is not limited to one property carries the permission. */
+export function canAcrossOrganisation(grants: Grant[], permission: Permission): boolean {
+  return grants.some((g) => g.propertyId === null && roleHas(g.role, permission));
+}
+
 /** Property ids the grants allow `permission` on, or 'all'. */
 export function propertyScope(grants: Grant[], permission: Permission): 'all' | string[] {
   const ids = new Set<string>();
