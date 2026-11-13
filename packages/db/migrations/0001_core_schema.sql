@@ -329,6 +329,7 @@ CREATE TABLE "reservation_rooms" (
 	"room_type_id" uuid NOT NULL,
 	"rate_plan_id" uuid,
 	"unit_id" uuid,
+	"position" integer DEFAULT 0 NOT NULL,
 	"check_in" date NOT NULL,
 	"check_out" date NOT NULL,
 	"adults" integer DEFAULT 1 NOT NULL,

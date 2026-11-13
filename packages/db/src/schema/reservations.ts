@@ -194,6 +194,8 @@ export const reservationRooms = pgTable(
       .references(() => roomTypes.id, { onDelete: 'restrict' }),
     ratePlanId: uuid('rate_plan_id').references(() => ratePlans.id, { onDelete: 'set null' }),
     unitId: uuid('unit_id').references(() => units.id, { onDelete: 'set null' }),
+    /** Order of the room within its reservation, as entered or as the channel listed it. */
+    position: integer('position').notNull().default(0),
     checkIn: date('check_in', { mode: 'string' }).notNull(),
     checkOut: date('check_out', { mode: 'string' }).notNull(),
     adults: integer('adults').notNull().default(1),

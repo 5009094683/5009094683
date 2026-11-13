@@ -1,6 +1,16 @@
 import { organizations, roleAssignments, users, type Database, type Role } from '@pms/db';
 import type { Actor, Grant } from './context';
 import { hashPassword } from './auth/passwords';
+import {
+  createProperty,
+  createRatePlan,
+  createRoomType,
+  createUnit,
+  type PropertyRow,
+  type RatePlanRow,
+  type RoomTypeRow,
+  type UnitRow,
+} from './properties';
 
 export { startMockOidcProvider, type MockOidcProvider } from './testing/mock-oidc';
 
@@ -64,5 +74,147 @@ export async function createTestUser(
     id: user!.id,
     email,
     actor: { type: 'user', orgId, userId: user!.id, label: email, grants },
+  };
+}
+
+export interface TestRoomType {
+  roomType: RoomTypeRow;
+  units: UnitRow[];
+  ratePlan: RatePlanRow;
+}
+
+export interface TestHotel {
+  property: PropertyRow;
+  standard: TestRoomType;
+  deluxe: TestRoomType;
+}
+
+let propertySeq = 0;
+
+/** A hotel with two room types sold by count: `standardRooms` standard rooms and `deluxeRooms` deluxe rooms. */
+export async function createTestHotel(
+  db: Database,
+  org: TestOrg,
+  options: { standardRooms?: number; deluxeRooms?: number; name?: string } = {},
+): Promise<TestHotel> {
+  const seq = ++propertySeq;
+  const property = await createProperty(db, org.admin, {
+    code: `HTL${seq}`,
+    name: options.name ?? `Test Hotel ${seq}`,
+    kind: 'hotel',
+    timezone: 'Asia/Kolkata',
+    currency: 'INR',
+  });
+  const build = async (
+    code: string,
+    name: string,
+    count: number,
+    rate: number,
+  ): Promise<TestRoomType> => {
+    const roomType = await createRoomType(db, org.admin, property.id, {
+      code,
+      name,
+      maxAdults: 3,
+      maxChildren: 2,
+      maxOccupancy: 4,
+    });
+    const units: UnitRow[] = [];
+    for (let i = 1; i <= count; i++) {
+      units.push(
+        await createUnit(db, org.admin, property.id, {
+          roomTypeId: roomType.id,
+          name: `${code}-${100 + i}`,
+        }),
+      );
+    }
+    const ratePlan = await createRatePlan(db, org.admin, property.id, {
+      roomTypeId: roomType.id,
+      code: `${code}-BAR`,
+      name: `${name} flexible`,
+      baseRate: rate,
+      extraAdultRate: 100_000,
+      extraChildRate: 50_000,
+    });
+    return { roomType, units, ratePlan };
+  };
+  return {
+    property,
+    standard: await build('STD', 'Standard Room', options.standardRooms ?? 3, 450_000),
+    deluxe: await build('DLX', 'Deluxe Room', options.deluxeRooms ?? 2, 700_000),
+  };
+}
+
+export interface TestVilla {
+  property: PropertyRow;
+  /** The villa sold as a whole. */
+  whole: TestRoomType;
+  /** Its bedrooms sold individually, linked to the villa. Absent when `bedrooms` is 0. */
+  bedrooms?: TestRoomType;
+}
+
+/**
+ * A villa property. With `bedrooms` > 0 the villa is also sold by the room:
+ * each bedroom is a unit linked to the villa unit.
+ */
+export async function createTestVilla(
+  db: Database,
+  org: TestOrg,
+  options: { bedrooms?: number; name?: string } = {},
+): Promise<TestVilla> {
+  const seq = ++propertySeq;
+  const property = await createProperty(db, org.admin, {
+    code: `VIL${seq}`,
+    name: options.name ?? `Test Villa ${seq}`,
+    kind: 'villa',
+    timezone: 'Asia/Kolkata',
+    currency: 'INR',
+  });
+  const wholeType = await createRoomType(db, org.admin, property.id, {
+    code: 'VILLA',
+    name: 'Entire Villa',
+    baseOccupancy: 6,
+    maxAdults: 8,
+    maxChildren: 4,
+    maxOccupancy: 10,
+  });
+  const villaUnit = await createUnit(db, org.admin, property.id, {
+    roomTypeId: wholeType.id,
+    name: 'Villa',
+  });
+  const wholePlan = await createRatePlan(db, org.admin, property.id, {
+    roomTypeId: wholeType.id,
+    code: 'VILLA-BAR',
+    name: 'Villa flexible',
+    baseRate: 2_500_000,
+  });
+  const whole: TestRoomType = { roomType: wholeType, units: [villaUnit], ratePlan: wholePlan };
+
+  const count = options.bedrooms ?? 0;
+  if (count === 0) return { property, whole };
+
+  const bedroomType = await createRoomType(db, org.admin, property.id, {
+    code: 'BED',
+    name: 'Bedroom',
+  });
+  const bedroomUnits: UnitRow[] = [];
+  for (let i = 1; i <= count; i++) {
+    bedroomUnits.push(
+      await createUnit(db, org.admin, property.id, {
+        roomTypeId: bedroomType.id,
+        name: `Bedroom ${i}`,
+        parentUnitId: villaUnit.id,
+      }),
+    );
+  }
+  const bedroomPlan = await createRatePlan(db, org.admin, property.id, {
+    roomTypeId: bedroomType.id,
+    code: 'BED-BAR',
+    name: 'Bedroom flexible',
+    baseRate: 900_000,
+  });
+  return {
+    property,
+    whole,
+    bedrooms: { roomType: bedroomType, units: bedroomUnits, ratePlan: bedroomPlan },
   };
 }

@@ -1,6 +1,6 @@
 {
-  "id": "ea616d00-832d-450f-bdc4-9e4b4bf50215",
-  "prevId": "d4b9764a-ac9f-435b-a430-17a8c6dd881d",
+  "id": "8f271b73-30a6-4ee1-82e7-bf5a672ec091",
+  "prevId": "03602f74-beea-47e5-b78f-cf39d5649960",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2965,6 +2965,13 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
         },
         "check_in": {
           "name": "check_in",

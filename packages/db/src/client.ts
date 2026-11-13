@@ -25,6 +25,10 @@ export function createDb(options: CreateDbOptions): DbHandle {
     connectionString: options.url,
     max: options.max ?? 10,
     application_name: options.applicationName ?? 'pms',
+    // Just-in-time compilation adds around a second to planning the larger
+    // statements here and never pays for itself on short transactional
+    // queries. Sent as a startup option so it costs no extra round trip.
+    options: '-c jit=off',
   });
   // An idle client dropped by the server must not take the process down.
   pool.on('error', (err) => {
