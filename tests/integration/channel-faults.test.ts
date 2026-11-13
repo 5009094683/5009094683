@@ -231,7 +231,11 @@ describe('when the channel manager is down', () => {
     await waitFor('every site to catch up', () =>
       shownEverywhere(stack, live, std(hotel), day(10)).every((v) => v === 2),
     );
-    connection = await connectionOf(stack, live.connectionId);
+    // The sites show the new values a moment before the PMS has finished noting the push.
+    connection = await waitFor('the work list to empty', async () => {
+      const c = await connectionOf(stack, live.connectionId);
+      return c.pendingChanges === 0 ? c : null;
+    });
     expect(connection).toMatchObject({
       status: 'active',
       consecutiveFailures: 0,
@@ -352,7 +356,10 @@ describe('rate limits', () => {
       const requests = ariRequests(stack, logStart);
       expect(requests.some((r) => r.status === 429)).toBe(true);
       // Being asked to slow down is not a failure of the connection.
-      const connection = await connectionOf(stack, live.connectionId);
+      const connection = await waitFor('the work list to empty', async () => {
+        const c = await connectionOf(stack, live.connectionId);
+        return c.pendingChanges === 0 ? c : null;
+      });
       expect(connection).toMatchObject({
         status: 'active',
         consecutiveFailures: 0,

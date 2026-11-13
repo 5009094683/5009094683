@@ -161,6 +161,9 @@ importers:
         specifier: ^3.7.0
         version: 3.7.0
     devDependencies:
+      '@pms/channels':
+        specifier: workspace:*
+        version: link:../../packages/channels
       '@pms/domain':
         specifier: workspace:*
         version: link:../../packages/domain

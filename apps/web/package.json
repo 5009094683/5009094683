@@ -24,6 +24,7 @@
     "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {
+    "@pms/channels": "workspace:*",
     "@pms/domain": "workspace:*",
     "@tailwindcss/postcss": "^4.3.5",
     "@types/qrcode": "^1.5.6",

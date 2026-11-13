@@ -18,15 +18,18 @@ import {
   connectionLog,
   createConnection,
   ensureChannexWebhook,
+  exportCalendar,
   getConnectionSummary,
   getMappings,
   handleChannexWebhook,
   listChannexProperties,
   listConnections,
+  listIcalFeeds,
   listRevisions,
   provisionChannex,
   reprocessRevision,
   requestFullSync,
+  saveIcalFeeds,
   saveMappings,
   updateConnection,
   verifyChannexWebhook,
@@ -35,6 +38,7 @@ import {
 } from '@pms/channels';
 import {
   DomainError,
+  can,
   enqueueJob,
   forbidden,
   notFound,
@@ -127,7 +131,12 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
     },
     async (req) => {
       authorize(req, 'channels.read');
-      return { channex: channexConfig(app.env), worker: await workerStatus(app.db) };
+      return {
+        channex: channexConfig(app.env),
+        worker: await workerStatus(app.db),
+        // Where the stand-in for the booking sites can be opened, when it is in use.
+        simulatorUrl: app.env.usingChannelSimulator ? app.env.OTA_SIM_URL : null,
+      };
     },
   );
 
@@ -425,6 +434,77 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
     async (req) => {
       const actor = await authorizeConnection(app.db, req, req.params.id, 'channels.manage');
       return { url: await channexChannelScreenUrl(app.db, actor, req.params.id, req.body ?? {}) };
+    },
+  );
+}
+
+const icalFeedInput = z.object({
+  id: uuid.optional(),
+  unitId: uuid,
+  importUrl: z.string().trim().max(1000).nullable().optional(),
+  label: z.string().trim().min(1).max(60),
+  channelCode: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9]{2,6}$/)
+    .nullable()
+    .optional(),
+  treatAs: z.enum(['auto', 'reservations', 'blocks']).optional(),
+});
+
+/** Calendar feeds: reading a channel's calendar for a unit, and offering ours to it. */
+export async function icalRoutes(app: FastifyInstance): Promise<void> {
+  const r = app.withTypeProvider<ZodTypeProvider>();
+
+  r.get(
+    '/channels/connections/:id/ical/feeds',
+    {
+      schema: {
+        tags: ['channels'],
+        summary: 'Calendars read for and offered to channels, per unit',
+        params: idParams,
+      },
+    },
+    async (req) => {
+      const actor = await authorizeConnection(app.db, req, req.params.id, 'channels.read');
+      const connection = await getConnectionSummary(app.db, actor.orgId, req.params.id);
+      const feeds = await listIcalFeeds(app.db, actor.orgId, req.params.id, app.env);
+      // The addresses are capabilities: only people who manage this property's channels see them.
+      if (can(actor.grants, 'channels.manage', connection.propertyId)) return { feeds };
+      return { feeds: feeds.map((f) => ({ ...f, exportUrl: null, importUrl: null })) };
+    },
+  );
+
+  r.put(
+    '/channels/connections/:id/ical/feeds',
+    {
+      schema: {
+        tags: ['channels'],
+        summary: 'Replace the calendars of a connection',
+        params: idParams,
+        body: z.object({ feeds: z.array(icalFeedInput).max(200) }),
+      },
+    },
+    async (req) => {
+      const actor = await authorizeConnection(app.db, req, req.params.id, 'channels.manage');
+      return { feeds: await saveIcalFeeds(app.db, actor, req.params.id, req.body.feeds, app.env) };
+    },
+  );
+
+  // The address given to a channel. Whoever holds it can read which nights are taken, nothing else.
+  app.get(
+    '/ical/:feedId/:file',
+    {
+      config: { rateLimit: { max: 120, timeWindow: '1 minute' } },
+      schema: { tags: ['ical'], summary: 'Availability calendar for one listing (iCalendar)' },
+    },
+    async (req, reply) => {
+      const { feedId, file } = req.params as { feedId: string; file: string };
+      const calendar = await exportCalendar(app.db, feedId, file.replace(/\.ics$/i, ''));
+      if (!calendar) return reply.status(404).type('text/plain').send('Not found');
+      void reply.header('etag', calendar.etag).header('cache-control', 'private, max-age=60');
+      if (req.headers['if-none-match'] === calendar.etag) return reply.status(304).send();
+      return reply.type('text/calendar; charset=utf-8').send(calendar.body);
     },
   );
 }

@@ -13,3 +13,7 @@ export * from './channex/adapter';
 export * from './channex/mapping';
 export * from './channex/webhook';
 export * from './channex/setup';
+export * from './net';
+export * from './ical/calendar';
+export * from './ical/adapter';
+export * from './ical/feeds';

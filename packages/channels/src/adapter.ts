@@ -51,6 +51,13 @@ export interface ChannelAdapter {
   listBookings?(from: DateString): Promise<BookingEvent[]>;
 
   /**
+   * Sources that could not be read on the last pull although others could (one
+   * calendar of several). Each is raised as its own alert and cleared when it
+   * reads again.
+   */
+  problems?(): { key: string; message: string }[];
+
+  /**
    * What the channel currently holds, for comparing against the PMS. Rates
    * come back in minor units of `currency`, the property's currency.
    */
@@ -138,6 +145,12 @@ export interface BookingEvent {
   rooms: BookingEventRoom[];
   /** Set when the source could only partly describe the booking (calendar feeds, parsed email). */
   needsReview?: string;
+  /**
+   * Set when this is not a guest booking but dates the channel shows as
+   * closed (a calendar entry marked "not available"). It is recorded as a
+   * date block on the unit rather than as a reservation.
+   */
+  block?: { reason: string };
   /** The message as received, stored untouched for diagnosis. */
   raw: Record<string, unknown>;
 }
@@ -219,7 +232,9 @@ export interface AdapterContext {
    * The adapter's own notes between runs (feed snapshots, mailbox positions).
    * An adapter changes this object in place while pulling; the engine saves it
    * once the pulled bookings are stored, so a crash in between only means the
-   * same bookings are read again, which is harmless.
+   * same bookings are read again, which is harmless. If the pull throws, the
+   * notes are saved as they stand, so before throwing an adapter must not have
+   * noted anything as seen that it did not return.
    */
   state: Record<string, unknown>;
   env: Env;

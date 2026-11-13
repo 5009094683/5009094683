@@ -153,13 +153,11 @@ export async function controlApi(
       ...(body as unknown as Parameters<SimState['createBooking']>[0]),
       channel: body.channel,
     });
-    return reply
-      .status(201)
-      .send({
-        id: booking.id,
-        code: booking.otaReservationCode,
-        revisionId: booking.revisionIds[0],
-      });
+    return reply.status(201).send({
+      id: booking.id,
+      code: booking.otaReservationCode,
+      revisionId: booking.revisionIds[0],
+    });
   });
 
   app.post('/bookings/:id/modify', async (req) => {

@@ -49,7 +49,8 @@ const schema = z.object({
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).default(12),
 
   CHANNEX_API_KEY: optionalString,
-  CHANNEX_BASE_URL: z.string().default('https://staging.channex.io/api/v1'),
+  /** Production is https://app.channex.io/api/v1, the sandbox https://staging.channex.io/api/v1. */
+  CHANNEX_BASE_URL: optionalString,
   /** Shared secret Channex sends back on webhook calls (set as a webhook header). */
   CHANNEX_WEBHOOK_SECRET: optionalString,
   /** Secret of the Channex signing key, when webhooks are HMAC-signed. */
@@ -109,8 +110,17 @@ const schema = z.object({
 
 type Parsed = z.infer<typeof schema>;
 
-export type Env = Omit<Parsed, 'APP_ENCRYPTION_KEY' | 'AI_PROVIDER' | 'PAYMENT_PROVIDER'> & {
+/** The API key the bundled OTA simulator accepts. Never valid anywhere else. */
+export const SIMULATOR_API_KEY = 'sim-api-key';
+
+export type Env = Omit<
+  Parsed,
+  'APP_ENCRYPTION_KEY' | 'AI_PROVIDER' | 'PAYMENT_PROVIDER' | 'CHANNEX_BASE_URL'
+> & {
   APP_ENCRYPTION_KEY: string;
+  CHANNEX_BASE_URL: string;
+  /** True when channel sync talks to the bundled simulator instead of a real channel manager. */
+  usingChannelSimulator: boolean;
   AI_PROVIDER: 'anthropic' | 'openai' | 'none';
   PAYMENT_PROVIDER: 'razorpay' | 'stripe' | 'mock';
   isProduction: boolean;
@@ -187,8 +197,19 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     );
   }
 
+  // Outside production, with no channel manager key, the bundled simulator stands in so
+  // a fresh checkout syncs end to end. Production never falls back: no key means no sync.
+  const simulatorUrl = `${parsed.OTA_SIM_URL.replace(/\/+$/, '')}/api/v1`;
+  const useSimulator = !isProduction && !parsed.CHANNEX_API_KEY && !parsed.CHANNEX_BASE_URL;
+  const channexBaseUrl = useSimulator
+    ? simulatorUrl
+    : (parsed.CHANNEX_BASE_URL ?? 'https://staging.channex.io/api/v1');
+
   return {
     ...parsed,
+    CHANNEX_API_KEY: useSimulator ? SIMULATOR_API_KEY : parsed.CHANNEX_API_KEY,
+    CHANNEX_BASE_URL: channexBaseUrl,
+    usingChannelSimulator: channexBaseUrl.startsWith(simulatorUrl),
     APP_ENCRYPTION_KEY: encryptionKey,
     AI_PROVIDER: aiProvider,
     PAYMENT_PROVIDER: paymentProvider,

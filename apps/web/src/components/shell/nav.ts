@@ -1,4 +1,12 @@
-import { CalendarDays, ClipboardList, Settings, Tags, Users, type LucideIcon } from 'lucide-react';
+import {
+  CalendarDays,
+  ClipboardList,
+  Network,
+  Settings,
+  Tags,
+  Users,
+  type LucideIcon,
+} from 'lucide-react';
 import type { Permission } from '@pms/domain/shared';
 
 export interface NavItem {
@@ -19,6 +27,7 @@ export const NAV: NavItem[] = [
   },
   { href: '/rates', label: 'Rates', icon: Tags, permissions: ['rates.read'] },
   { href: '/guests', label: 'Guests', icon: Users, permissions: ['guests.read'] },
+  { href: '/channels', label: 'Channels', icon: Network, permissions: ['channels.read'] },
   {
     href: '/settings',
     label: 'Settings',

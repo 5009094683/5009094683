@@ -60,7 +60,7 @@ function environmentOf(baseUrl: string, env: Env): ChannexStatus['environment'] 
     return 'production';
   }
   if (baseUrl.includes('staging.channex.io')) return 'staging';
-  if (baseUrl.startsWith(env.OTA_SIM_URL)) return 'simulator';
+  if (env.usingChannelSimulator) return 'simulator';
   return 'other';
 }
 
@@ -397,7 +397,8 @@ export interface WebhookRegistration {
  * existing webhook rather than adding another.
  */
 export async function ensureChannexWebhook(env: Env): Promise<WebhookRegistration> {
-  if (!env.CHANNEX_WEBHOOK_SECRET) {
+  // The bundled simulator needs no secret; anything real does.
+  if (!env.CHANNEX_WEBHOOK_SECRET && !env.usingChannelSimulator) {
     throw new DomainError(
       'not_configured',
       'Set CHANNEX_WEBHOOK_SECRET (a long random value) first: the channel manager sends it back with every webhook call so the PMS can tell the call is genuine.',
@@ -418,10 +419,9 @@ export async function ensureChannexWebhook(env: Env): Promise<WebhookRegistratio
     property_id: null,
     is_active: true,
     send_data: true,
-    headers: { 'x-channex-webhook-secret': env.CHANNEX_WEBHOOK_SECRET } as unknown as Record<
-      string,
-      never
-    >,
+    headers: (env.CHANNEX_WEBHOOK_SECRET
+      ? { 'x-channex-webhook-secret': env.CHANNEX_WEBHOOK_SECRET }
+      : {}) as unknown as Record<string, never>,
   };
   return upstream(async () => {
     const existing = (await client.listWebhooks()).find((w) => w.callback_url === callbackUrl);

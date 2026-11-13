@@ -1,5 +1,6 @@
 import { hasAdapter, registerAdapter } from './adapter';
 import { channexAdapter } from './channex/adapter';
+import { icalAdapter } from './ical/adapter';
 
 /**
  * Makes the built-in routes available to the engine. Called at start-up by
@@ -8,4 +9,5 @@ import { channexAdapter } from './channex/adapter';
  */
 export function registerDefaultAdapters(): void {
   if (!hasAdapter('channex')) registerAdapter('channex', channexAdapter);
+  if (!hasAdapter('ical')) registerAdapter('ical', icalAdapter);
 }

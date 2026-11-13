@@ -169,9 +169,11 @@ export async function goLive(stack: Stack, propertyId: string): Promise<Connecte
     ratePlans: { ratePlanId: string; externalId: string }[];
   }>(await admin.get(`/channels/connections/${connection.id}/mappings`));
   ok(await admin.patch(`/channels/connections/${connection.id}`, { status: 'active' }));
-  await waitFor('the first full sync', async () => {
+  // Going live sends everything once, and the worker makes its first check for waiting
+  // bookings. Waiting for both means that afterwards only the test causes anything.
+  await waitFor('the first full sync and the first check for bookings', async () => {
     const c = await connectionOf(stack, connection.id);
-    return c.lastFullSyncAt !== null && c.pendingChanges === 0;
+    return c.lastFullSyncAt !== null && c.pendingChanges === 0 && c.lastPullAt !== null;
   });
   return {
     propertyId,

@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance } from 'fastify';
+import { SIMULATOR_API_KEY } from '@pms/config';
 import { channexApi } from './channex-api';
 import { controlApi } from './control-api';
 import { SimState } from './state';
@@ -26,7 +27,7 @@ export interface Sim {
   close(): Promise<void>;
 }
 
-export const DEFAULT_SIM_API_KEY = 'sim-api-key';
+export const DEFAULT_SIM_API_KEY = SIMULATOR_API_KEY;
 
 /**
  * A stand-in for the channel manager and the booking sites behind it.

@@ -92,14 +92,12 @@ export async function channexApi(
       state.faults.failNext--;
       const status = state.faults.failStatus;
       if (status === 429) void reply.header('retry-after', '2');
-      return reply
-        .status(status)
-        .send({
-          errors: {
-            code: status === 429 ? 'http_too_many_requests' : 'internal_error',
-            title: 'Simulated failure',
-          },
-        });
+      return reply.status(status).send({
+        errors: {
+          code: status === 429 ? 'http_too_many_requests' : 'internal_error',
+          title: 'Simulated failure',
+        },
+      });
     }
     const key = req.headers['user-api-key'];
     if (typeof key !== 'string' || !options.apiKeys.includes(key))
@@ -307,11 +305,9 @@ export async function channexApi(
     return async (req: FastifyRequest, reply: FastifyReply) => {
       const values = (req.body as { values?: unknown })?.values;
       if (!Array.isArray(values)) {
-        return reply
-          .status(400)
-          .send({
-            errors: { code: 'bad_request', title: 'Bad Request', details: ['values is required'] },
-          });
+        return reply.status(400).send({
+          errors: { code: 'bad_request', title: 'Bad Request', details: ['values is required'] },
+        });
       }
       const changes = values as Record<string, unknown>[];
       // The per-property limit is checked for each property named in the body.
@@ -355,11 +351,9 @@ export async function channexApi(
     const range = dateFilter(query);
     const propertyId = query['filter[property_id]'];
     if (!range || !propertyId) {
-      return reply
-        .status(400)
-        .send({
-          errors: { code: 'bad_request', title: 'Bad Request', details: ['date is required'] },
-        });
+      return reply.status(400).send({
+        errors: { code: 'bad_request', title: 'Bad Request', details: ['date is required'] },
+      });
     }
     const data: Record<string, Record<string, number>> = {};
     for (const roomType of state.roomTypes.values()) {
@@ -380,15 +374,13 @@ export async function channexApi(
     const propertyId = query['filter[property_id]'];
     const kinds = (query['filter[restrictions]'] ?? '').split(',').filter(Boolean);
     if (!range || !propertyId || kinds.length === 0) {
-      return reply
-        .status(400)
-        .send({
-          errors: {
-            code: 'bad_request',
-            title: 'Bad Request',
-            details: ['restrictions is required'],
-          },
-        });
+      return reply.status(400).send({
+        errors: {
+          code: 'bad_request',
+          title: 'Bad Request',
+          details: ['restrictions is required'],
+        },
+      });
     }
     const data: Record<string, Record<string, Record<string, unknown>>> = {};
     for (const plan of state.ratePlans.values()) {

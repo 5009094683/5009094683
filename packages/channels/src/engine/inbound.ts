@@ -4,11 +4,13 @@ import {
   channelConnections,
   channelRateMappings,
   channelRoomMappings,
+  inventoryBlocks,
   properties,
   ratePlans,
   reservationNights,
   reservationRooms,
   reservations,
+  roomTypes,
   type Database,
   type DbOrTx,
   type RevisionStatus,
@@ -18,6 +20,7 @@ import {
   addReservationRoom,
   cancelReservation,
   channelActor,
+  createBlock,
   createReservation,
   eachDate,
   emit,
@@ -27,9 +30,11 @@ import {
   notFound,
   raiseAlert,
   reinstateReservation,
+  releaseBlock,
   resolveAlert,
   todayIn,
   transact,
+  updateBlock,
   updateReservation,
   updateReservationRoom,
   validationError,
@@ -206,6 +211,13 @@ async function resolveRooms(
     .where(eq(channelRateMappings.connectionId, connection.id));
   const roomByExternal = new Map(roomMappings.map((m) => [m.externalRoomTypeId, m.roomTypeId]));
   const rateByExternal = new Map(rateMappings.map((m) => [m.externalRatePlanId, m]));
+  // A property that sells one thing (a villa) leaves no doubt about what was booked.
+  const sellable = await tx
+    .select({ id: roomTypes.id })
+    .from(roomTypes)
+    .where(and(eq(roomTypes.propertyId, connection.propertyId), eq(roomTypes.active, true)))
+    .limit(2);
+  const onlyRoomType = sellable.length === 1 ? sellable[0]!.id : undefined;
 
   const sameCurrency =
     !event.currency || event.currency.toUpperCase() === property.currency.toUpperCase();
@@ -236,9 +248,9 @@ async function resolveRooms(
       roomTypeId = room.internal.roomTypeId;
       unitId = room.internal.unitId;
     } else {
-      const mapped = room.externalRoomTypeId
-        ? roomByExternal.get(room.externalRoomTypeId)
-        : undefined;
+      const mapped =
+        (room.externalRoomTypeId ? roomByExternal.get(room.externalRoomTypeId) : undefined) ??
+        onlyRoomType;
       if (!mapped) {
         result.unmapped.push(room.externalRoomTypeId ?? '(no room id)');
         continue;
@@ -591,6 +603,76 @@ interface Settled {
   note?: string;
 }
 
+/**
+ * Dates a channel's calendar shows as closed, with no guest behind them. They
+ * become a block on the unit. Where the PMS already has those dates taken
+ * (often its own reservation, read back from the channel) nothing is added:
+ * the dates are unavailable either way, and nothing of the PMS's is disturbed.
+ */
+async function applyBlockEvent(
+  tx: Transaction,
+  actor: Actor,
+  connection: ConnectionRow,
+  event: BookingEvent,
+): Promise<Settled> {
+  const [existing] = await tx
+    .select()
+    .from(inventoryBlocks)
+    .where(
+      and(
+        eq(inventoryBlocks.connectionId, connection.id),
+        eq(inventoryBlocks.externalRef, event.bookingId),
+        sql`${inventoryBlocks.releasedAt} IS NULL`,
+      ),
+    );
+  if (event.status === 'cancelled') {
+    if (existing) await releaseBlock(tx, actor, existing.id);
+    return { status: 'applied', reservationId: null };
+  }
+  const room = event.rooms[0];
+  const unitId = room?.internal?.unitId;
+  if (!room || !unitId) throw validationError('A closure needs the unit it applies to');
+  if (!isValidDate(room.checkIn) || !isValidDate(room.checkOut) || room.checkOut <= room.checkIn) {
+    throw validationError(`The closure has unusable dates (${room.checkIn} to ${room.checkOut})`);
+  }
+  try {
+    if (existing) {
+      if (existing.startDate !== room.checkIn || existing.endDate !== room.checkOut) {
+        await updateBlock(tx, actor, existing.id, {
+          startDate: room.checkIn,
+          endDate: room.checkOut,
+        });
+      }
+    } else {
+      await createBlock(tx, actor, {
+        propertyId: connection.propertyId,
+        unitId,
+        kind: 'block',
+        startDate: room.checkIn,
+        endDate: room.checkOut,
+        reason: event.block?.reason ?? null,
+        source: 'ical',
+        connectionId: connection.id,
+        externalRef: event.bookingId,
+      });
+    }
+  } catch (err) {
+    if (
+      !isDomainError(err, 'unit_occupied') &&
+      !isDomainError(err, 'no_availability') &&
+      !isDomainError(err, 'conflict')
+    ) {
+      throw err;
+    }
+    return {
+      status: 'applied',
+      reservationId: null,
+      note: 'The dates are already taken in the PMS; no block was added',
+    };
+  }
+  return { status: 'applied', reservationId: null };
+}
+
 async function applyEvent(
   tx: Transaction,
   connection: ConnectionRow,
@@ -627,6 +709,8 @@ async function applyEvent(
       note: 'A newer revision was already applied',
     };
   }
+
+  if (event.block) return applyBlockEvent(tx, actor, connection, event);
 
   if (event.status === 'cancelled') {
     if (!existing)
@@ -948,6 +1032,23 @@ export async function pullConnection(
   via: ReceivedVia = 'poll',
   now: Date = new Date(),
 ): Promise<PullResult> {
+  // One fetch per connection at a time. A second one waits its turn rather than being
+  // dropped (it may have been asked for because of a booking the first has already
+  // missed), and each starts from the notes the one before it left.
+  return db.transaction(async (turn) => {
+    await turn.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${`pms-pull:${connectionId}`}, 0))`,
+    );
+    return pullInTurn(db, connectionId, via, now);
+  });
+}
+
+async function pullInTurn(
+  db: Database,
+  connectionId: string,
+  via: ReceivedVia,
+  now: Date,
+): Promise<PullResult> {
   const result: PullResult = {
     connectionId,
     outcome: 'skipped',
@@ -997,9 +1098,18 @@ export async function pullConnection(
       entityId: connectionId,
       dedupeKey: `pull_failure:${connectionId}`,
     });
+    // What the adapter noted about the failure itself (which source, since when) is kept;
+    // by contract it records nothing as seen until it has been read.
+    if (JSON.stringify(context.state) !== JSON.stringify(connection.state)) {
+      await db
+        .update(channelConnections)
+        .set({ state: context.state })
+        .where(eq(channelConnections.id, connectionId));
+    }
     return { ...result, outcome: 'failed', error: message };
   }
 
+  let allStored = true;
   for (const event of events) {
     try {
       const ingested = await ingestBookingEvent(db, connection, event, via, adapter);
@@ -1007,19 +1117,59 @@ export async function pullConnection(
       if (!ingested.duplicate) result.fresh++;
     } catch (err) {
       // Storing failed (the database, not the booking). Nothing was acknowledged, so it comes again.
+      allStored = false;
       result.error = err instanceof Error ? err.message : String(err);
     }
   }
   result.received = events.length;
   result.outcome = 'pulled';
 
-  const stateChanged = JSON.stringify(context.state) !== JSON.stringify(connection.state);
+  // The adapter's notes say "these have been seen". They are only kept once everything
+  // seen is safely stored; otherwise the next pull must report the same things again.
+  const stateChanged =
+    allStored && JSON.stringify(context.state) !== JSON.stringify(connection.state);
   await db
     .update(channelConnections)
     .set({ lastPullAt: now, ...(stateChanged ? { state: context.state } : {}) })
     .where(eq(channelConnections.id, connectionId));
   await resolveAlert(db, connection.orgId, `pull_failure:${connectionId}`);
+  await reportSourceProblems(db, connection, adapter.problems?.() ?? []);
   return result;
+}
+
+/** Raises an alert for each source that could not be read, and clears alerts for those that now can. */
+async function reportSourceProblems(
+  db: Database,
+  connection: ConnectionRow,
+  problems: { key: string; message: string }[],
+): Promise<void> {
+  const prefix = `source_failure:${connection.id}:`;
+  const failing = new Set(problems.map((p) => `${prefix}${p.key}`));
+  const { rows: open } = await db.execute<{ dedupe_key: string }>(sql`
+    SELECT dedupe_key FROM alerts
+    WHERE org_id = ${connection.orgId} AND status <> 'resolved' AND dedupe_key LIKE ${`${prefix}%`}
+  `);
+  for (const { dedupe_key } of open) {
+    if (!failing.has(dedupe_key)) await resolveAlert(db, connection.orgId, dedupe_key);
+  }
+  if (problems.length === 0) return;
+  const [property] = await db
+    .select()
+    .from(properties)
+    .where(eq(properties.id, connection.propertyId));
+  for (const problem of problems) {
+    await raiseAlert(db, {
+      orgId: connection.orgId,
+      propertyId: connection.propertyId,
+      kind: 'calendar_feed_failure',
+      severity: 'warning',
+      title: `${property?.name ?? 'Property'}: a calendar could not be read`,
+      body: `${problem.message}\n\nBookings made there are not reaching the PMS until this is fixed. Check that the calendar address is still the one the channel shows.`,
+      entityType: 'channel_connection',
+      entityId: connection.id,
+      dedupeKey: `${prefix}${problem.key}`,
+    });
+  }
 }
 
 export interface ImportResult {
