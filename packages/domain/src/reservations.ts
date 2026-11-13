@@ -232,6 +232,8 @@ export interface ReservationFilter {
   guestId?: string;
   needsReview?: boolean;
   overbooked?: boolean;
+  /** Live reservations that are overbooked or waiting for staff to review them. */
+  needsAttention?: boolean;
   /** Confirmation code, guest name, email, phone or channel reference. */
   search?: string;
   limit?: number;
@@ -260,6 +262,14 @@ export async function listReservations(
   if (filter.departingOn) conditions.push(eq(reservations.checkOut, filter.departingOn));
   if (filter.channelCode) conditions.push(eq(reservations.channelCode, filter.channelCode));
   if (filter.guestId) conditions.push(eq(reservations.guestId, filter.guestId));
+  if (filter.needsAttention) {
+    conditions.push(
+      and(
+        or(eq(reservations.needsReview, true), eq(reservations.overbooked, true))!,
+        inArray(reservations.status, ['tentative', 'confirmed', 'in_house']),
+      )!,
+    );
+  }
   if (filter.needsReview !== undefined)
     conditions.push(eq(reservations.needsReview, filter.needsReview));
   if (filter.overbooked !== undefined)
@@ -508,6 +518,15 @@ async function placeRoom(
     !params.allowUnassigned
   ) {
     throw validationError(`${params.roomType.name} reservations must have a unit`);
+  } else if (
+    params.roomType.assignment === 'at_check_in' &&
+    params.roomType.autoAssign &&
+    params.requestedUnitId === undefined
+  ) {
+    // Sold by count: a room is a convenience, not a condition. Take the best
+    // fitting free room if there is one; otherwise the stay waits unassigned.
+    const [free] = await findFreeUnits(tx, params.roomType.id, params.range);
+    if (free) unitId = free.id;
   }
   if (unitId) {
     await occupyUnit(tx, {
@@ -827,8 +846,10 @@ export interface RoomPatch {
 
 export interface RoomChangeResult {
   reservation: ReservationDetail;
-  /** True when the room lost its unit because the unit is taken on the new dates. */
+  /** True when the room lost its unit because the unit is taken on the new dates and no other was free. */
   unitReleased: boolean;
+  /** Name of the room the stay was moved to because its own was taken on the new dates. */
+  movedToUnit: string | null;
 }
 
 /**
@@ -913,6 +934,7 @@ export async function updateReservationRoom(
     ];
 
     let unitReleased = false;
+    let movedToUnitId: string | null = null;
     const outcome = await withInventoryLock(
       tx,
       actor.orgId,
@@ -946,6 +968,7 @@ export async function updateReservationRoom(
         // Decide the unit: an explicit request wins; otherwise keep the current
         // unit if it still fits; otherwise choose again or leave it open.
         let requested: string | null | undefined = patch.unitId;
+        let keptUnitTaken = false;
         if (requested === undefined && room.unitId && !typeChanged) {
           const conflicts = await occupancyConflicts(tx, room.unitId, priced.range, {
             reservationRoomId: roomId,
@@ -956,8 +979,10 @@ export async function updateReservationRoom(
             // Never silently take the room away from a guest who is in it.
             throw unitOccupiedError(conflicts);
           } else if (priced.roomType.assignment === 'at_check_in') {
-            requested = null;
-            unitReleased = true;
+            // Rooms of one type are interchangeable before arrival: take another
+            // free one if the room type assigns automatically, else leave it open.
+            keptUnitTaken = true;
+            requested = priced.roomType.autoAssign ? undefined : null;
           }
         }
         const unitId = await placeRoom(tx, {
@@ -973,6 +998,10 @@ export async function updateReservationRoom(
         }
         if (unitId)
           await tx.update(reservationRooms).set({ unitId }).where(eq(reservationRooms.id, roomId));
+        if (keptUnitTaken) {
+          if (unitId) movedToUnitId = unitId;
+          else unitReleased = true;
+        }
       },
     );
 
@@ -1013,7 +1042,14 @@ export async function updateReservationRoom(
         },
       },
     ]);
-    return { reservation: await loadReservation(tx, actor.orgId, reservationId), unitReleased };
+    const updated = await loadReservation(tx, actor.orgId, reservationId);
+    return {
+      reservation: updated,
+      unitReleased,
+      movedToUnit: movedToUnitId
+        ? (updated.rooms.find((r) => r.id === roomId)?.unitName ?? null)
+        : null,
+    };
   });
 }
 

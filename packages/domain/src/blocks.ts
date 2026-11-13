@@ -1,19 +1,28 @@
-import { and, asc, eq, gt, inArray, isNull, lt } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNull, lt, sql } from 'drizzle-orm';
 import {
   inventoryBlocks,
+  reservationRooms,
   roomTypes,
   units,
   type BlockKind,
   type BlockSource,
   type DbOrTx,
+  type Transaction,
 } from '@pms/db';
 import { writeAudit } from './audit';
+import { BLOCK_KIND_LABELS } from './block-labels';
 import type { Actor } from './context';
 import { assertRange, diffDays, type DateRange, type DateString } from './dates';
 import { invalidState, notFound, validationError } from './errors';
 import { withInventoryLock, type InventoryScope } from './inventory';
-import { occupancyConflicts, occupyUnit, releaseOccupancy, unitOccupiedError } from './occupancy';
-import { emit } from './outbox';
+import {
+  findFreeUnits,
+  occupancyConflicts,
+  occupyUnit,
+  releaseOccupancy,
+  unitOccupiedError,
+} from './occupancy';
+import { emit, type OutboxEvent } from './outbox';
 import { requireProperty } from './properties';
 import { transact } from './sqlx';
 
@@ -21,12 +30,7 @@ export type BlockRow = typeof inventoryBlocks.$inferSelect;
 
 const MAX_BLOCK_DAYS = 730;
 
-export const BLOCK_KIND_LABELS: Record<BlockKind, string> = {
-  block: 'Blocked',
-  maintenance: 'Out of order',
-  owner_stay: 'Owner stay',
-  hold: 'Held',
-};
+export { BLOCK_KIND_LABELS };
 
 export interface CreateBlockInput {
   propertyId: string;
@@ -51,7 +55,24 @@ export interface CreateBlockInput {
 export interface BlockOptions {
   /** Allow the block even if it leaves existing reservations without a room (they are flagged overbooked). */
   allowOverbooking?: boolean;
+  /**
+   * When the unit already has upcoming stays on these dates, move them to
+   * another free room of the same type (or leave them unassigned if none is
+   * free) instead of refusing the block. Only for room types sold by count,
+   * where rooms are interchangeable, and never for guests who have checked in.
+   */
+  relocateStays?: boolean;
 }
+
+export interface RelocatedStay {
+  reservationId: string;
+  code: string;
+  guestName: string;
+  /** Null when no other room was free: the stay now waits unassigned. */
+  toUnit: string | null;
+}
+
+export type BlockResult = BlockRow & { relocated: RelocatedStay[] };
 
 function validateBlockRange(from: string, to: string): DateRange {
   const range = assertRange(from, to, 'block');
@@ -59,6 +80,90 @@ function validateBlockRange(from: string, to: string): DateRange {
     throw validationError(`A block may span at most ${MAX_BLOCK_DAYS} days`);
   }
   return range;
+}
+
+interface MovableStay {
+  id: string;
+  reservationId: string;
+  roomTypeId: string;
+  checkIn: string;
+  checkOut: string;
+  code: string;
+  guestName: string;
+}
+
+/** Stays assigned to a unit that overlap `range` and may still be given another room. */
+async function movableStays(tx: DbOrTx, unitId: string, range: DateRange): Promise<MovableStay[]> {
+  const { rows } = await tx.execute<{
+    id: string;
+    reservation_id: string;
+    room_type_id: string;
+    check_in: string;
+    check_out: string;
+    code: string;
+    guest_name: string;
+  }>(sql`
+    SELECT rr.id, rr.reservation_id, rr.room_type_id, rr.check_in::text, rr.check_out::text, r.code, r.guest_name
+    FROM reservation_rooms rr
+    JOIN reservations r ON r.id = rr.reservation_id
+    JOIN room_types rt ON rt.id = rr.room_type_id AND rt.assignment = 'at_check_in'
+    WHERE rr.unit_id = ${unitId}
+      AND rr.status IN ('tentative', 'confirmed')
+      AND rr.check_in < ${range.to}::date AND rr.check_out > ${range.from}::date
+    ORDER BY rr.check_in, rr.id
+  `);
+  return rows.map((r) => ({
+    id: r.id,
+    reservationId: r.reservation_id,
+    roomTypeId: r.room_type_id,
+    checkIn: r.check_in,
+    checkOut: r.check_out,
+    code: r.code,
+    guestName: r.guest_name,
+  }));
+}
+
+/** Takes the given stays off their unit so the unit can be blocked. */
+async function unseat(tx: Transaction, stays: MovableStay[]): Promise<void> {
+  for (const stay of stays) {
+    await releaseOccupancy(tx, { reservationRoomId: stay.id });
+    await tx.update(reservationRooms).set({ unitId: null }).where(eq(reservationRooms.id, stay.id));
+  }
+}
+
+/** Finds each unseated stay another free room of its type, where there is one. */
+async function reseat(
+  tx: Transaction,
+  propertyId: string,
+  stays: MovableStay[],
+): Promise<RelocatedStay[]> {
+  const relocated: RelocatedStay[] = [];
+  for (const stay of stays) {
+    const range = { from: stay.checkIn, to: stay.checkOut };
+    const [free] = await findFreeUnits(tx, stay.roomTypeId, range);
+    if (free) {
+      await occupyUnit(tx, { propertyId, unitId: free.id, range, reservationRoomId: stay.id });
+      await tx
+        .update(reservationRooms)
+        .set({ unitId: free.id })
+        .where(eq(reservationRooms.id, stay.id));
+    }
+    relocated.push({
+      reservationId: stay.reservationId,
+      code: stay.code,
+      guestName: stay.guestName,
+      toUnit: free?.name ?? null,
+    });
+  }
+  return relocated;
+}
+
+function relocationEvents(propertyId: string, relocated: RelocatedStay[]): OutboxEvent[] {
+  return relocated.map((r) => ({
+    kind: 'reservation.updated' as const,
+    propertyId,
+    payload: { reservationId: r.reservationId, code: r.code },
+  }));
 }
 
 /**
@@ -70,7 +175,7 @@ export async function createBlock(
   actor: Actor,
   input: CreateBlockInput,
   options: BlockOptions = {},
-): Promise<BlockRow> {
+): Promise<BlockResult> {
   const range = validateBlockRange(input.startDate, input.endDate);
   return transact(db, async (tx) => {
     await requireProperty(tx, actor.orgId, input.propertyId);
@@ -110,9 +215,24 @@ export async function createBlock(
       label = `${quantity} × ${roomType.name}`;
     }
 
-    const scopes: InventoryScope[] = [{ roomTypeId, range }];
+    // Stays to be moved are read before locking so their own dates can be
+    // locked too; the list is re-read under the lock before anything is moved.
+    const candidates = options.relocateStays && unitId ? await movableStays(tx, unitId, range) : [];
+    const scopes: InventoryScope[] = [
+      { roomTypeId, range },
+      ...candidates.map((s) => ({
+        roomTypeId: s.roomTypeId,
+        range: { from: s.checkIn, to: s.checkOut },
+      })),
+    ];
     const outcome = await withInventoryLock(tx, actor.orgId, scopes, options, async () => {
+      let displaced: MovableStay[] = [];
       if (unitId) {
+        if (options.relocateStays) {
+          const lockedIds = new Set(candidates.map((c) => c.id));
+          displaced = (await movableStays(tx, unitId, range)).filter((s) => lockedIds.has(s.id));
+          await unseat(tx, displaced);
+        }
         const conflicts = await occupancyConflicts(tx, unitId, range);
         if (conflicts.length > 0) throw unitOccupiedError(conflicts);
       }
@@ -138,17 +258,22 @@ export async function createBlock(
         .returning();
       if (unitId)
         await occupyUnit(tx, { propertyId: input.propertyId, unitId, range, blockId: block!.id });
-      return block!;
+      const relocated = await reseat(tx, input.propertyId, displaced);
+      return { block: block!, relocated };
     });
 
-    const block = outcome.value;
+    const { block, relocated } = outcome.value;
     await writeAudit(tx, actor, {
       action: 'block.created',
       entityType: 'block',
       entityId: block.id,
       propertyId: input.propertyId,
       summary: `${BLOCK_KIND_LABELS[input.kind]}: ${label}, ${range.from} to ${range.to}`,
-      changes: { reason: input.reason ?? null, overbookedNights: outcome.newlyOverbooked.length },
+      changes: {
+        reason: input.reason ?? null,
+        overbookedNights: outcome.newlyOverbooked.length,
+        relocated: relocated.map((r) => ({ reservation: r.code, to: r.toUnit })),
+      },
     });
     await emit(tx, actor.orgId, [
       {
@@ -156,8 +281,9 @@ export async function createBlock(
         propertyId: input.propertyId,
         payload: { blockId: block.id, unitId, roomTypeId, from: range.from, to: range.to },
       },
+      ...relocationEvents(input.propertyId, relocated),
     ]);
-    return block;
+    return { ...block, relocated };
   });
 }
 
@@ -177,7 +303,7 @@ export async function updateBlock(
   blockId: string,
   patch: BlockPatch,
   options: BlockOptions = {},
-): Promise<BlockRow> {
+): Promise<BlockResult> {
   return transact(db, async (tx) => {
     const [before] = await tx
       .select()
@@ -195,13 +321,27 @@ export async function updateBlock(
       throw validationError('A block on a single unit always has quantity 1');
     }
 
+    const candidates =
+      options.relocateStays && before.unitId ? await movableStays(tx, before.unitId, range) : [];
     const scopes: InventoryScope[] = [
       { roomTypeId: before.roomTypeId, range: { from: before.startDate, to: before.endDate } },
       { roomTypeId: before.roomTypeId, range },
+      ...candidates.map((s) => ({
+        roomTypeId: s.roomTypeId,
+        range: { from: s.checkIn, to: s.checkOut },
+      })),
     ];
     const outcome = await withInventoryLock(tx, actor.orgId, scopes, options, async () => {
       await releaseOccupancy(tx, { blockId });
+      let displaced: MovableStay[] = [];
       if (before.unitId) {
+        if (options.relocateStays) {
+          const lockedIds = new Set(candidates.map((c) => c.id));
+          displaced = (await movableStays(tx, before.unitId, range)).filter((s) =>
+            lockedIds.has(s.id),
+          );
+          await unseat(tx, displaced);
+        }
         const conflicts = await occupancyConflicts(tx, before.unitId, range, { blockId });
         if (conflicts.length > 0) throw unitOccupiedError(conflicts);
       }
@@ -225,9 +365,10 @@ export async function updateBlock(
           blockId,
         });
       }
-      return after!;
+      const relocated = await reseat(tx, before.propertyId, displaced);
+      return { block: after!, relocated };
     });
-    const after = outcome.value;
+    const { block: after, relocated } = outcome.value;
     await writeAudit(tx, actor, {
       action: 'block.updated',
       entityType: 'block',
@@ -247,6 +388,7 @@ export async function updateBlock(
           kind: after.kind,
           reason: after.reason,
         },
+        relocated: relocated.map((r) => ({ reservation: r.code, to: r.toUnit })),
       },
     });
     await emit(tx, actor.orgId, [
@@ -255,8 +397,9 @@ export async function updateBlock(
         propertyId: before.propertyId,
         payload: { blockId, unitId: before.unitId },
       },
+      ...relocationEvents(before.propertyId, relocated),
     ]);
-    return after;
+    return { ...after, relocated };
   });
 }
 
@@ -274,7 +417,12 @@ export async function releaseBlock(db: DbOrTx, actor: Actor, blockId: string): P
     const outcome = await withInventoryLock(
       tx,
       actor.orgId,
-      [{ roomTypeId: before.roomTypeId, range: { from: before.startDate, to: before.endDate } }],
+      [
+        {
+          roomTypeId: before.roomTypeId,
+          range: { from: before.startDate, to: before.endDate },
+        },
+      ],
       { allowOverbooking: true },
       async () => {
         await releaseOccupancy(tx, { blockId });

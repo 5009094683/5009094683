@@ -20,15 +20,19 @@ import { dateRangeQuery, dateString, idParams, uuid, uuidList } from '../lib/sch
 import { authorizeBlock, authorizeProperty, scopedProperties } from '../lib/scope';
 import { authorize } from '../plugins/auth';
 
-function blockOverride(
+function blockOptions(
   actor: Actor,
   propertyId: string,
-  force: boolean | undefined,
-): { allowOverbooking: boolean } {
-  if (force && !can(actor.grants, 'reservations.override', propertyId)) {
+  flags: { force?: boolean; relocate?: boolean },
+): { allowOverbooking: boolean; relocateStays: boolean } {
+  if (flags.force && !can(actor.grants, 'reservations.override', propertyId)) {
     throw forbidden('You do not have permission to block dates that are already sold');
   }
-  return { allowOverbooking: Boolean(force) };
+  // Moving a stay to another room is a reservation change, so it needs that permission too.
+  if (flags.relocate && !can(actor.grants, 'reservations.write', propertyId)) {
+    throw forbidden('You do not have permission to move reservations');
+  }
+  return { allowOverbooking: Boolean(flags.force), relocateStays: Boolean(flags.relocate) };
 }
 
 export async function calendarRoutes(app: FastifyInstance): Promise<void> {
@@ -108,18 +112,22 @@ export async function calendarRoutes(app: FastifyInstance): Promise<void> {
           reason: z.string().max(200).nullable().optional(),
           notes: z.string().max(2000).nullable().optional(),
           force: z.boolean().optional(),
+          relocate: z
+            .boolean()
+            .optional()
+            .describe('Move upcoming stays on the unit to another free room instead of refusing.'),
         }),
       },
     },
     async (req, reply) => {
-      const { force, ...input } = req.body;
+      const { force, relocate, ...input } = req.body;
       const permission = input.kind === 'maintenance' ? 'maintenance.write' : 'blocks.write';
       const actor = await authorizeProperty(app.db, req, input.propertyId, permission);
       const block = await createBlock(
         app.db,
         actor,
         input,
-        blockOverride(actor, input.propertyId, force),
+        blockOptions(actor, input.propertyId, { force, relocate }),
       );
       return reply.status(201).send(block);
     },
@@ -139,6 +147,7 @@ export async function calendarRoutes(app: FastifyInstance): Promise<void> {
           notes: z.string().max(2000).nullable().optional(),
           quantity: z.number().int().min(1).max(500).optional(),
           force: z.boolean().optional(),
+          relocate: z.boolean().optional(),
         }),
       },
     },
@@ -149,13 +158,13 @@ export async function calendarRoutes(app: FastifyInstance): Promise<void> {
         req.params.id,
         'blocks.write',
       );
-      const { force, ...patch } = req.body;
+      const { force, relocate, ...patch } = req.body;
       return updateBlock(
         app.db,
         actor,
         req.params.id,
         patch,
-        blockOverride(actor, propertyId, force),
+        blockOptions(actor, propertyId, { force, relocate }),
       );
     },
   );

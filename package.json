@@ -18,7 +18,8 @@
     "test:e2e": "pnpm --filter @pms/e2e test",
     "db:generate": "pnpm --filter @pms/db generate",
     "db:migrate": "pnpm --filter @pms/db migrate",
-    "db:seed": "pnpm --filter @pms/db seed"
+    "db:seed": "pnpm --filter @pms/domain seed",
+    "db:reset": "bash scripts/db-reset.sh"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

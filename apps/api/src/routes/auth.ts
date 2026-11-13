@@ -39,7 +39,13 @@ import {
 
 const OIDC_COOKIE = 'pms_oidc';
 
-const loginLimit = { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } };
+/**
+ * Attempts per minute from one address on the credential endpoints. A whole
+ * front office can share one address, so this is set to slow down guessing
+ * across many accounts, not to throttle a shift signing in; each account has
+ * its own lockout after repeated failures.
+ */
+const CREDENTIAL_ATTEMPTS_PER_MINUTE = 30;
 
 function safeReturnTo(value: string | undefined): string | undefined {
   // Only same-site paths: an absolute or protocol-relative URL would be an open redirect.
@@ -68,6 +74,15 @@ async function sessionView(app: FastifyInstance, session: SessionContext) {
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   const r = app.withTypeProvider<ZodTypeProvider>();
+  const loginLimit = {
+    config: {
+      rateLimit: {
+        // Automated test runs sign in many times from one address.
+        max: app.env.isTest ? 100_000 : CREDENTIAL_ATTEMPTS_PER_MINUTE,
+        timeWindow: '1 minute',
+      },
+    },
+  };
 
   r.get('/setup/status', { schema: { tags: ['setup'] } }, async () => ({
     setupComplete: await isSetupComplete(app.db),

@@ -67,6 +67,7 @@ const roomTypeFields = {
   maxChildren: z.number().int().min(0).max(30).optional(),
   maxOccupancy: z.number().int().min(1).max(60).optional(),
   assignment: z.enum(UNIT_ASSIGNMENT_MODES).optional(),
+  autoAssign: z.boolean().optional(),
   amenities: z.array(z.string().max(80)).max(100).optional(),
   photos: z.array(z.string().max(500)).max(60).optional(),
   sortOrder: z.number().int().optional(),

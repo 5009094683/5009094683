@@ -297,6 +297,8 @@ export interface RoomTypeInput {
   maxChildren?: number;
   maxOccupancy?: number;
   assignment?: UnitAssignmentMode;
+  /** For room types sold by count: give new bookings a free room straight away when one fits. */
+  autoAssign?: boolean;
   amenities?: string[];
   photos?: string[];
   sortOrder?: number;
@@ -350,6 +352,7 @@ export async function createRoomType(
         maxOccupancy,
         // Villas are single units: every booking is tied to a physical unit straight away.
         assignment: input.assignment ?? (property.kind === 'villa' ? 'at_booking' : 'at_check_in'),
+        autoAssign: input.autoAssign ?? true,
         amenities: input.amenities ?? [],
         photos: input.photos ?? [],
         sortOrder: input.sortOrder ?? 0,

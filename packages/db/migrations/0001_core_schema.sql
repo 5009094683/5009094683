@@ -214,6 +214,7 @@ CREATE TABLE "room_types" (
 	"max_children" integer DEFAULT 0 NOT NULL,
 	"max_occupancy" integer DEFAULT 2 NOT NULL,
 	"assignment" text DEFAULT 'at_check_in' NOT NULL,
+	"auto_assign" boolean DEFAULT true NOT NULL,
 	"amenities" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"photos" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"sort_order" integer DEFAULT 0 NOT NULL,

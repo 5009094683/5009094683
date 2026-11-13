@@ -13,6 +13,7 @@ import {
 } from './properties';
 
 export { startMockOidcProvider, type MockOidcProvider } from './testing/mock-oidc';
+export { DEMO_ADMIN, seedDemo } from './demo-seed';
 
 export const TEST_PASSWORD = 'correct horse battery staple';
 
@@ -91,11 +92,20 @@ export interface TestHotel {
 
 let propertySeq = 0;
 
-/** A hotel with two room types sold by count: `standardRooms` standard rooms and `deluxeRooms` deluxe rooms. */
+/**
+ * A hotel with two room types sold by count: `standardRooms` standard rooms
+ * and `deluxeRooms` deluxe rooms. With `autoAssign: false` bookings get no
+ * room until one is chosen, which is how run-of-house hotels work.
+ */
 export async function createTestHotel(
   db: Database,
   org: TestOrg,
-  options: { standardRooms?: number; deluxeRooms?: number; name?: string } = {},
+  options: {
+    standardRooms?: number;
+    deluxeRooms?: number;
+    name?: string;
+    autoAssign?: boolean;
+  } = {},
 ): Promise<TestHotel> {
   const seq = ++propertySeq;
   const property = await createProperty(db, org.admin, {
@@ -117,6 +127,7 @@ export async function createTestHotel(
       maxAdults: 3,
       maxChildren: 2,
       maxOccupancy: 4,
+      autoAssign: options.autoAssign,
     });
     const units: UnitRow[] = [];
     for (let i = 1; i <= count; i++) {

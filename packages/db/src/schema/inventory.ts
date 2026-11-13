@@ -110,6 +110,12 @@ export const roomTypes = pgTable(
      * linked inventory). `at_check_in`: sold by count, unit chosen later (hotels).
      */
     assignment: text('assignment').$type<UnitAssignmentMode>().notNull().default('at_check_in'),
+    /**
+     * For room types sold by count: give each new booking a free room straight
+     * away when one fits the whole stay, so the calendar shows where guests will
+     * be. The booking is still accepted, unassigned, when none does.
+     */
+    autoAssign: boolean('auto_assign').notNull().default(true),
     amenities: jsonb('amenities')
       .$type<string[]>()
       .notNull()

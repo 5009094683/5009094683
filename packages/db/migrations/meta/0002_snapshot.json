@@ -1,6 +1,6 @@
 {
-  "id": "8f271b73-30a6-4ee1-82e7-bf5a672ec091",
-  "prevId": "03602f74-beea-47e5-b78f-cf39d5649960",
+  "id": "72f6c1f3-512f-4dd2-9095-31240d4402bd",
+  "prevId": "337cef66-3c67-46c3-8f78-d6d166dbefd7",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1810,6 +1810,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'at_check_in'"
+        },
+        "auto_assign": {
+          "name": "auto_assign",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
         },
         "amenities": {
           "name": "amenities",

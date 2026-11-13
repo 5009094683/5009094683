@@ -9,6 +9,7 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/dist/**',
       '**/.next/**',
+      '**/.next-e2e/**',
       '**/coverage/**',
       '**/next-env.d.ts',
       'packages/db/migrations/**',

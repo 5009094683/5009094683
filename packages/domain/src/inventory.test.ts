@@ -559,10 +559,21 @@ describe('hotel inventory (sold by room type)', () => {
       endDate: '2027-12-04',
       reason: 'Burst pipe',
     };
-    expect((await errorOf(createBlock(t.db, org.admin, input))).code).toBe('no_availability');
+    // Both rooms have a guest on those nights: the room cannot simply be closed.
+    const occupied = await errorOf(createBlock(t.db, org.admin, input));
+    expect(occupied.code).toBe('unit_occupied');
+    // Moving that guest does not help either, because the other room is taken too.
+    expect((await errorOf(createBlock(t.db, org.admin, input, { relocateStays: true }))).code).toBe(
+      'no_availability',
+    );
 
     // An emergency closure goes through and exposes the shortfall instead of hiding it.
-    await createBlock(t.db, org.admin, input, { allowOverbooking: true });
+    const block = await createBlock(t.db, org.admin, input, {
+      relocateStays: true,
+      allowOverbooking: true,
+    });
+    expect(block.relocated).toHaveLength(1);
+    expect(block.relocated[0]!.toUnit).toBeNull();
     const [day] = await t.db
       .select()
       .from(inventoryDays)
@@ -597,7 +608,9 @@ describe('hotel inventory (sold by room type)', () => {
       org.admin,
       booking(property.id, standard, '2028-01-11', '2028-01-13'),
     );
-    expect(b.rooms[0]!.unitId).toBeNull(); // hotels assign the room at check-in
+    // B overlaps A, so it is given one of the other rooms.
+    expect(b.rooms[0]!.unitId).not.toBeNull();
+    expect(b.rooms[0]!.unitId).not.toBe(room101);
 
     const err = await errorOf(
       updateReservationRoom(t.db, org.admin, b.id, b.rooms[0]!.id, { unitId: room101 }),
@@ -630,13 +643,147 @@ describe('hotel inventory (sold by room type)', () => {
     );
     expect(wrong.code).toBe('validation');
 
-    // Extending A into C's dates clears A's room assignment rather than double-booking the room.
+    // Extending A into C's dates moves A to the remaining free room rather than double-booking 101.
     const extended = await updateReservationRoom(t.db, org.admin, a.id, a.rooms[0]!.id, {
       checkOut: '2028-01-13',
     });
-    expect(extended.unitReleased).toBe(true);
-    expect(extended.reservation.rooms[0]!.unitId).toBeNull();
+    expect(extended.unitReleased).toBe(false);
+    expect(extended.movedToUnit).toMatch(/^STD-10[23]$/);
+    expect(extended.reservation.rooms[0]!.unitId).not.toBe(room101);
+    expect(extended.reservation.rooms[0]!.unitId).not.toBe(b.rooms[0]!.unitId);
     await expectLedgerSound(property.id);
+  });
+
+  it('gives each booking the room it fits best, keeping long gaps free', async () => {
+    const h = await createTestHotel(t.db, org, { standardRooms: 2, name: 'Best Fit Hotel' });
+    const unitOf = async (checkIn: string, checkOut: string) =>
+      (
+        await createReservation(
+          t.db,
+          org.admin,
+          booking(h.property.id, h.standard, checkIn, checkOut),
+        )
+      ).rooms[0]!.unitName;
+
+    const first = await unitOf('2027-01-10', '2027-01-11');
+    // Each later stay slots in flush against an existing one in the same room.
+    expect(await unitOf('2027-01-12', '2027-01-13')).toBe(first);
+    expect(await unitOf('2027-01-11', '2027-01-12')).toBe(first);
+    // ...which leaves the other room free for a stay spanning all of those nights.
+    const long = await unitOf('2027-01-10', '2027-01-13');
+    expect(long).not.toBeNull();
+    expect(long).not.toBe(first);
+    await expectLedgerSound(h.property.id);
+  });
+
+  it('still accepts a booking when no single room is free for the whole stay', async () => {
+    const h = await createTestHotel(t.db, org, { standardRooms: 2, name: 'Fragmented Hotel' });
+    const inRoom = (unitId: string, checkIn: string, checkOut: string) => ({
+      ...booking(h.property.id, h.standard, checkIn, checkOut),
+      rooms: [
+        {
+          roomTypeId: h.standard.roomType.id,
+          ratePlanId: h.standard.ratePlan.id,
+          unitId,
+          checkIn,
+          checkOut,
+          adults: 2,
+        },
+      ],
+    });
+    await createReservation(
+      t.db,
+      org.admin,
+      inRoom(h.standard.units[0]!.id, '2027-02-10', '2027-02-12'),
+    );
+    await createReservation(
+      t.db,
+      org.admin,
+      inRoom(h.standard.units[1]!.id, '2027-02-12', '2027-02-14'),
+    );
+
+    // One room is free every night of 11-13, but not the same room: the hotel
+    // has the capacity, so the booking is taken and a room move sorts it out later.
+    const split = await createReservation(
+      t.db,
+      org.admin,
+      booking(h.property.id, h.standard, '2027-02-11', '2027-02-13'),
+    );
+    expect(split.status).toBe('confirmed');
+    expect(split.rooms[0]!.unitId).toBeNull();
+    expect(split.overbooked).toBe(false);
+    expect(
+      await available(h.property.id, h.standard.roomType.id, '2027-02-10', '2027-02-14'),
+    ).toEqual([1, 0, 0, 1]);
+    await expectLedgerSound(h.property.id);
+  });
+
+  it('leaves rooms unassigned until check-in when the room type is set that way', async () => {
+    const h = await createTestHotel(t.db, org, {
+      standardRooms: 2,
+      name: 'Run Of House',
+      autoAssign: false,
+    });
+    const r = await createReservation(
+      t.db,
+      org.admin,
+      booking(h.property.id, h.standard, '2027-03-01', '2027-03-03'),
+    );
+    expect(r.rooms[0]!.unitId).toBeNull();
+    expect(
+      await available(h.property.id, h.standard.roomType.id, '2027-03-01', '2027-03-03'),
+    ).toEqual([1, 1]);
+  });
+
+  it('moves upcoming stays to another room when their room is taken out of order', async () => {
+    const h = await createTestHotel(t.db, org, { standardRooms: 3, name: 'Relocation Hotel' });
+    const room = h.standard.units[0]!;
+    const stay = await createReservation(t.db, org.admin, {
+      ...booking(h.property.id, h.standard, '2027-04-10', '2027-04-13'),
+      rooms: [
+        {
+          roomTypeId: h.standard.roomType.id,
+          ratePlanId: h.standard.ratePlan.id,
+          unitId: room.id,
+          checkIn: '2027-04-10',
+          checkOut: '2027-04-13',
+          adults: 2,
+        },
+      ],
+    });
+    const input = {
+      propertyId: h.property.id,
+      unitId: room.id,
+      kind: 'maintenance' as const,
+      startDate: '2027-04-11',
+      endDate: '2027-04-12',
+      reason: 'Leak',
+    };
+    const refused = await errorOf(createBlock(t.db, org.admin, input));
+    expect(refused.code).toBe('unit_occupied');
+    expect(refused.message).toContain(stay.code);
+
+    const block = await createBlock(t.db, org.admin, input, { relocateStays: true });
+    expect(block.relocated).toEqual([
+      {
+        reservationId: stay.id,
+        code: stay.code,
+        guestName: stay.guestName,
+        toUnit: expect.stringMatching(/^STD-10[23]$/),
+      },
+    ]);
+    const moved = await loadReservation(t.db, org.orgId, stay.id);
+    expect(moved.rooms[0]!.unitName).toBe(block.relocated[0]!.toUnit);
+    // The guest keeps the whole stay; only the room changed.
+    expect(moved).toMatchObject({
+      checkIn: '2027-04-10',
+      checkOut: '2027-04-13',
+      status: 'confirmed',
+    });
+    expect(
+      await available(h.property.id, h.standard.roomType.id, '2027-04-10', '2027-04-13'),
+    ).toEqual([2, 1, 2]);
+    await expectLedgerSound(h.property.id);
   });
 
   it('raises availability when a room is added and refuses to retire a room that is needed', async () => {
@@ -668,11 +815,37 @@ describe('hotel inventory (sold by room type)', () => {
       org.admin,
       booking(property.id, deluxe, '2028-02-01', '2028-02-02'),
     );
-    // All three rooms are sold on the 1st: taking one away would overbook that night.
-    expect(
-      (await errorOf(updateUnit(t.db, org.admin, property.id, extra.id, { active: false }))).code,
-    ).toBe('no_availability');
+    // The new room now has a guest of its own, so it cannot be retired.
+    const occupied = await errorOf(
+      updateUnit(t.db, org.admin, property.id, extra.id, { active: false }),
+    );
+    expect(occupied.code).toBe('conflict');
+    expect(occupied.message).toMatch(/upcoming bookings/);
     await expectLedgerSound(property.id);
+  });
+
+  it('refuses to retire a room when the remaining rooms could not hold the bookings', async () => {
+    // Sold by count with no rooms assigned: the check is on capacity, not on a particular room.
+    const h = await createTestHotel(t.db, org, {
+      standardRooms: 2,
+      name: 'Capacity Hotel',
+      autoAssign: false,
+    });
+    for (let i = 0; i < 2; i++) {
+      await createReservation(
+        t.db,
+        org.admin,
+        booking(h.property.id, h.standard, '2028-02-01', '2028-02-02'),
+      );
+    }
+    const err = await errorOf(
+      updateUnit(t.db, org.admin, h.property.id, h.standard.units[1]!.id, { active: false }),
+    );
+    expect(err.code).toBe('no_availability');
+    expect(
+      await available(h.property.id, h.standard.roomType.id, '2028-02-01', '2028-02-03'),
+    ).toEqual([0, 2]);
+    await expectLedgerSound(h.property.id);
   });
 });
 
@@ -999,7 +1172,8 @@ describe('ledger invariants under a long random sequence of operations', () => {
     let seed = 20261113;
     const rnd = (n: number) => {
       seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-      return seed % n;
+      // Take the high bits: the low bits of this generator repeat with a short period.
+      return Math.floor((seed / 0x80000000) * n);
     };
     const live: { id: string; roomId: string; propertyId: string }[] = [];
     const blocks: string[] = [];
