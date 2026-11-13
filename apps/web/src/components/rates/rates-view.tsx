@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Link2, SlidersHorizontal, Tags } from 'lucid
 import { Fragment, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import useSWR from 'swr';
 import { addDays, dayOfWeek, eachDate, isValidDate, todayIn } from '@pms/domain/shared';
+import { RateSuggestions } from '@/components/pricing/rate-suggestions';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Checkbox, Field, Input, Segmented, Select } from '@/components/ui/field';
@@ -685,6 +686,7 @@ export function RatesView() {
             Bulk update
           </Button>
         )}
+        <RateSuggestions property={property} detail={detail} />
       </div>
 
       <div className="scrollbar-thin min-h-0 flex-1 overflow-auto bg-surface">

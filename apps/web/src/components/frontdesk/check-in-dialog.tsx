@@ -8,6 +8,7 @@ import { Checkbox, Field, Select } from '@/components/ui/field';
 import { ErrorState, Notice, PageLoading, Spinner } from '@/components/ui/misc';
 import { useToast } from '@/components/ui/toast';
 import { useReservationFolios } from '@/components/folio/data';
+import { DocumentReader } from '@/components/insights/document-reader';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatDay, formatMoney } from '@/lib/format';
@@ -375,6 +376,7 @@ export function CheckInDialog({
               )}
             </ul>
           )}
+          <DocumentReader reservation={reservation} onSaved={() => void mutate()} />
         </form>
       )}
     </Dialog>

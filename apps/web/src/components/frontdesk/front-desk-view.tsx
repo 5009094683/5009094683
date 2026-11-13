@@ -5,6 +5,9 @@ import { useEffect, useReducer, useState, type ReactNode } from 'react';
 import useSWR from 'swr';
 import { todayIn } from '@pms/domain/shared';
 import { scrollToBill } from '@/components/folio/folio-section';
+import { useArrivalRisks } from '@/components/insights/arrival-risks';
+import { ComingArrivals } from '@/components/insights/coming-arrivals';
+import { SuggestRooms } from '@/components/insights/suggest-rooms';
 import { ReservationPanel } from '@/components/reservations/reservation-panel';
 import { Button } from '@/components/ui/button';
 import { Drawer } from '@/components/ui/dialog';
@@ -112,6 +115,7 @@ export function FrontDeskView() {
     keepPreviousData: false,
   });
   const today = useToday(property?.timezone);
+  const risks = useArrivalRisks(property?.id).byReservation;
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<BoardList>('arrivals');
   const [open, setOpen] = useState<Pick<Stay, 'reservationId' | 'code' | 'guestName'> | null>(null);
@@ -256,6 +260,11 @@ export function FrontDeskView() {
                 }))}
               />
             </div>
+            <SuggestRooms
+              propertyId={property.id}
+              propertyName={property.name}
+              onAssigned={() => void mutate()}
+            />
           </div>
 
           <div className="grid items-start gap-4 lg:grid-cols-3">
@@ -302,6 +311,7 @@ export function FrontDeskView() {
                                   stay={stay}
                                   list={list.value}
                                   hotelDay={board.date}
+                                  risk={risks.get(stay.reservationId)}
                                   roomsOfBooking={roomsOnBoard.get(stay.reservationId) ?? 1}
                                   canOperate={canOperate}
                                   canSeeBill={canSeeBill}
@@ -322,6 +332,7 @@ export function FrontDeskView() {
               );
             })}
           </div>
+          <ComingArrivals propertyId={property.id} hotelDay={board.date} onOpen={setOpen} />
         </>
       )}
 

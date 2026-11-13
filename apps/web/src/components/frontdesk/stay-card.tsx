@@ -12,6 +12,8 @@ import {
   Undo2,
 } from 'lucide-react';
 import { balanceText, BALANCE_TEXT_TONES } from '@/components/folio/labels';
+import { RiskMarker } from '@/components/insights/risk-marker';
+import type { ReservationRisk } from '@/components/insights/types';
 import { Button } from '@/components/ui/button';
 import { Badge, Menu, MenuItem } from '@/components/ui/misc';
 import { cn } from '@/lib/cn';
@@ -30,6 +32,7 @@ export function StayCard({
   stay,
   list,
   hotelDay,
+  risk,
   roomsOfBooking,
   canOperate,
   canSeeBill,
@@ -42,6 +45,8 @@ export function StayCard({
   stay: Stay;
   list: BoardList;
   hotelDay: string;
+  /** How likely the booking is to fall through, where that has been worked out. */
+  risk?: ReservationRisk;
   /** How many rooms of the same booking are on the board. */
   roomsOfBooking: number;
   /** Whether the user may check guests in and out. */
@@ -55,7 +60,7 @@ export function StayCard({
   onCheckOut: () => void;
   onUndoCheckIn: () => void;
 }) {
-  const balance = balanceText(stay.balance, stay.currency);
+  const balance = stay.balance === null ? null : balanceText(stay.balance, stay.currency);
   const channel = stay.channelCode ? (CHANNEL_NAMES[stay.channelCode] ?? stay.channelCode) : null;
   const overdue =
     list === 'arrivals' && stay.checkIn < hotelDay
@@ -87,6 +92,7 @@ export function StayCard({
               </Badge>
             )}
             {stay.needsReview && <Badge tone="warning">Needs review</Badge>}
+            {list === 'arrivals' && risk && <RiskMarker risk={risk} guestName={stay.guestName} />}
           </div>
         </div>
         {canOperate && (
@@ -177,7 +183,7 @@ export function StayCard({
         </div>
       )}
 
-      {canSeeBill && (
+      {canSeeBill && balance && (
         <p className={cn('font-medium', BALANCE_TEXT_TONES[balance.tone])}>
           {balance.text}
           {roomsOfBooking > 1 && stay.balance !== 0 && (
