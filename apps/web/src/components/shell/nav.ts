@@ -13,6 +13,7 @@ import {
   Star,
   Tags,
   Users,
+  UsersRound,
   Wrench,
   type LucideIcon,
 } from 'lucide-react';
@@ -39,6 +40,7 @@ export const NAV: NavItem[] = [
     icon: ClipboardList,
     permissions: ['reservations.read'],
   },
+  { href: '/groups', label: 'Groups', icon: UsersRound, permissions: ['reservations.read'] },
   { href: '/rates', label: 'Rates', icon: Tags, permissions: ['rates.read'] },
   { href: '/guests', label: 'Guests', icon: Users, permissions: ['guests.read'] },
   {

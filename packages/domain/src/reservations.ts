@@ -648,8 +648,12 @@ export async function createReservation(
       }
     }
 
+    const group = input.groupId
+      ? await requireOpenGroup(tx, actor.orgId, input.groupId, property.id)
+      : null;
+    // A group's bookings are for the company the group is for, unless one says otherwise.
+    const companyId = input.companyId === undefined ? (group?.companyId ?? null) : input.companyId;
     if (input.companyId) await requireCompany(tx, actor.orgId, input.companyId);
-    if (input.groupId) await requireOpenGroup(tx, actor.orgId, input.groupId, property.id);
     const guest = await findOrCreateGuest(tx, actor.orgId, input.guest);
     // The name as given for this booking; the profile may spell it differently.
     const guestName = input.guest.firstName?.trim()
@@ -704,8 +708,8 @@ export async function createReservation(
             specialRequests: input.specialRequests ?? null,
             notes: input.notes ?? null,
             holdExpiresAt,
-            groupId: input.groupId ?? null,
-            companyId: input.companyId ?? null,
+            groupId: group?.id ?? null,
+            companyId,
             needsReview: input.needsReview ?? false,
             reviewReason: input.reviewReason ?? null,
             createdBy: actor.userId ?? null,

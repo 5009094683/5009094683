@@ -1,6 +1,7 @@
 'use client';
 
 import { CalendarPlus, ChevronLeft, ChevronRight, Filter, Lock, Plus } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { addDays, todayIn } from '@pms/domain/shared';
@@ -53,6 +54,7 @@ interface PendingMove {
 
 export function CalendarView() {
   const auth = useAuth();
+  const router = useRouter();
   const toast = useToast();
   const { properties, isLoading: propertiesLoading } = useProperties();
 
@@ -417,7 +419,10 @@ export function CalendarView() {
             onToggle={toggle}
             canWrite={canWrite}
             onOpenStay={setOpenStay}
-            onOpenBlock={(block, property) => setEditBlock({ block, property })}
+            onOpenBlock={(block, property) => {
+              if (block.groupId) router.push(`/groups/${block.groupId}`);
+              else setEditBlock({ block, property });
+            }}
             onSelectRange={setSelection}
             canBlock={(propertyId) =>
               auth.can('blocks.write', propertyId) || auth.can('maintenance.write', propertyId)

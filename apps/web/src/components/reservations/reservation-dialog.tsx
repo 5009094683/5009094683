@@ -23,6 +23,13 @@ export interface ReservationPrefill {
   checkOut?: string;
 }
 
+/** The group a booking is being made for: it may use the rooms held for that group. */
+export interface ReservationGroup {
+  id: string;
+  name: string;
+  propertyId: string;
+}
+
 interface RoomDraft {
   key: number;
   roomTypeId: string;
@@ -52,7 +59,7 @@ function defaultPlanId(detail: PropertyDetail | undefined, roomTypeId: string): 
 }
 
 /** Price and availability for one room of the form, refreshed as its fields change. */
-function useRoomCheck(propertyId: string, room: RoomDraft) {
+function useRoomCheck(propertyId: string, room: RoomDraft, groupId?: string) {
   const valid =
     Boolean(propertyId && room.roomTypeId) &&
     isValidDate(room.checkIn) &&
@@ -89,7 +96,7 @@ function useRoomCheck(propertyId: string, room: RoomDraft) {
   );
   const availability = useSWR<{ days: Availability[] }>(
     key
-      ? `/properties/${propertyId}/availability${query({ from: room.checkIn, to: room.checkOut, roomTypeIds: [room.roomTypeId] })}`
+      ? `/properties/${propertyId}/availability${query({ from: room.checkIn, to: room.checkOut, roomTypeIds: [room.roomTypeId], groupId })}`
       : null,
   );
   const soldOut = availability.data?.days.filter((d) => d.available <= 0).map((d) => d.date) ?? [];
@@ -102,6 +109,7 @@ function RoomSection({
   detail,
   currency,
   canRemove,
+  groupId,
   onChange,
   onRemove,
   onCheck,
@@ -111,6 +119,7 @@ function RoomSection({
   detail: PropertyDetail;
   currency: string;
   canRemove: boolean;
+  groupId?: string;
   onChange: (patch: Partial<RoomDraft>) => void;
   onRemove: () => void;
   onCheck: (key: number, state: { soldOut: string[]; total: number | null }) => void;
@@ -118,7 +127,7 @@ function RoomSection({
   const type = detail.roomTypes.find((t) => t.id === room.roomTypeId);
   const plans = type?.ratePlans.filter((p) => p.active) ?? [];
   const units = type?.units.filter((u) => u.active) ?? [];
-  const { valid, quote, quoteLoading, soldOut } = useRoomCheck(detail.property.id, room);
+  const { valid, quote, quoteLoading, soldOut } = useRoomCheck(detail.property.id, room, groupId);
   const nights = valid ? diffDays(room.checkIn, room.checkOut) : 0;
   const custom = room.customRate.trim() === '' ? null : Number(room.customRate);
   const total =
@@ -391,11 +400,13 @@ export function ReservationDialog({
   onClose,
   onCreated,
   prefill,
+  group,
 }: {
   open: boolean;
   onClose: () => void;
   onCreated?: (reservation: Reservation) => void;
   prefill?: ReservationPrefill;
+  group?: ReservationGroup;
 }) {
   const auth = useAuth();
   const toast = useToast();
@@ -424,7 +435,7 @@ export function ReservationDialog({
   // Start from a clean form each time the dialog opens.
   useEffect(() => {
     if (!open) return;
-    setPropertyId(prefill?.propertyId ?? writable[0]?.id ?? '');
+    setPropertyId(group?.propertyId ?? prefill?.propertyId ?? writable[0]?.id ?? '');
     setRooms([]);
     setGuest({ id: '', firstName: '', lastName: '', email: '', phone: '' });
     setSource('direct');
@@ -506,6 +517,7 @@ export function ReservationDialog({
           }),
           notes: notes.trim() || null,
           specialRequests: specialRequests.trim() || null,
+          ...(group ? { groupId: group.id } : {}),
           ...(force ? { force: true } : {}),
         },
       });
@@ -533,7 +545,10 @@ export function ReservationDialog({
     <Dialog
       open={open}
       onClose={onClose}
-      title="New reservation"
+      title={group ? `New reservation for ${group.name}` : 'New reservation'}
+      description={
+        group ? 'It uses a room held for the group where one is left on these nights.' : undefined
+      }
       size="lg"
       footer={
         <>
@@ -571,6 +586,8 @@ export function ReservationDialog({
                   setRooms([]);
                   setChecks({});
                 }}
+                // A group is at one property; so are its bookings.
+                disabled={Boolean(group)}
                 required
               >
                 {writable.map((p) => (
@@ -612,6 +629,7 @@ export function ReservationDialog({
                 detail={detail}
                 currency={currency}
                 canRemove={rooms.length > 1}
+                groupId={group?.id}
                 onChange={(patch) =>
                   setRooms((list) => list.map((r) => (r.key === room.key ? { ...r, ...patch } : r)))
                 }

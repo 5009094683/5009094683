@@ -33,6 +33,7 @@ import { GuestAccessSection } from '@/components/engagement/guest-access';
 import { PaymentRequestsSection } from '@/components/engagement/payment-requests';
 import { SendMessageSection } from '@/components/engagement/send-message';
 import { CompanyRow } from '@/components/folio/company-row';
+import { GroupRow } from '@/components/groups/group-row';
 import { FolioSection } from '@/components/folio/folio-section';
 import { StayActions } from '@/components/frontdesk/stay-actions';
 import { ApiError, api, errorMessage } from '@/lib/api';
@@ -634,6 +635,7 @@ export function ReservationPanel({
           </p>
         )}
         <CompanyRow reservation={reservation} canEdit={canWrite} onChanged={apply} />
+        <GroupRow reservation={reservation} canEdit={canWrite} onChanged={apply} />
       </Section>
 
       <Section title={reservation.rooms.length > 1 ? `Rooms (${liveRooms.length})` : 'Room'}>

@@ -969,7 +969,6 @@ export async function addRoomingList(
               },
             ],
             groupId: group.id,
-            companyId: group.companyId,
           },
           options,
         ),

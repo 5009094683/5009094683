@@ -434,6 +434,19 @@ describe('group bookings', () => {
       group: { name: 'Northwind tour' },
     });
     expect(after).toMatchObject({ bookings: 4, bookedNights: 8, leftNights: 0, value: 2_400_000 });
+    // A single booking made for the group is for the same company, unless it names another.
+    const one = await createReservation(
+      t.db,
+      org.admin,
+      booking(standard, '2027-08-03', '2027-08-04', { groupId: group.id }),
+    );
+    expect(one.company?.name).toBe('Northwind Travel');
+    const own = await createReservation(
+      t.db,
+      org.admin,
+      booking(standard, '2027-08-03', '2027-08-04', { groupId: group.id, companyId: null }),
+    );
+    expect(own.company).toBeNull();
     expect(await available(standard, '2027-08-01', '2027-08-03')).toEqual([2, 2]);
     await expectLedgerSound();
   });

@@ -484,8 +484,9 @@ export function CalendarGrid(props: CalendarGridProps) {
   const renderBlock = (block: CalBlock, property: CalProperty, rowKey: string, lane: number) => {
     const dragging = barDrag?.kind === 'block' && barDrag.id === block.id && barDrag.moved;
     const g = spanGeometry(block.startDate, block.endDate, range.from, range.to, cellWidth);
-    // Blocks created by a calendar feed or the system are managed there, not by dragging.
-    const writable = canWrite(property.id) && block.source === 'manual';
+    // Blocks created by a calendar feed or the system are managed there, not by dragging;
+    // rooms held for a group are managed on the group's page.
+    const writable = canWrite(property.id) && block.source === 'manual' && !block.groupId;
     const kind = BLOCK_KIND_LABELS[block.kind];
     const text = block.unitId
       ? (block.reason ?? kind)
