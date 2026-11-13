@@ -209,8 +209,25 @@ describe('where the business came from', () => {
       from: day(10),
       to: day(13),
     });
-    expect(report.rows.map((r) => r.key)).toEqual(['phone', 'BDC']);
-    const [phone, bdc] = report.rows;
+    expect(report.rows.map((r) => r.key)).toEqual(['phone', 'BDC', 'website']);
+    const [phone, bdc, website] = report.rows;
+    // The website's one booking for these dates was cancelled: it sold nothing, and it is
+    // listed all the same, because that is where the cancellation came from.
+    expect(website).toEqual({
+      key: 'website',
+      channelCode: null,
+      source: 'website',
+      reservations: 0,
+      roomNights: 0,
+      roomRevenue: 0,
+      commission: 0,
+      netRevenue: 0,
+      adr: null,
+      revenueShareBp: 0,
+      avgLeadDays: null,
+      avgNights: null,
+      cancellationBp: 10_000,
+    });
     expect(phone).toEqual({
       key: 'phone',
       channelCode: null,

@@ -5,6 +5,7 @@ import { createTestDatabase, type TestDatabase } from '@pms/db/testing';
 import { toCsv } from './csv';
 import { addDays, todayIn } from './dates';
 import { MemoryMailer, type Mailer } from './mailer';
+import { createProperty } from './properties';
 import {
   createReportSchedule,
   deleteReportSchedule,
@@ -13,6 +14,7 @@ import {
   periodFor,
   reportCsv,
   runDueReportSchedules,
+  sendReportNow,
   updateReportSchedule,
 } from './report-exports';
 import { createReservation } from './reservations';
@@ -282,6 +284,56 @@ describe('reports sent on a schedule', () => {
       lastStatus: 'failed',
       lastError: 'Connection refused by the mail server',
     });
+
+    // "Send now" is a run like any other: how it went is on the schedule afterwards, and
+    // when the report is next due does not move.
+    const next = row!.nextRunAt;
+    const asked = new Date('2026-11-14T08:00:00Z');
+    const mailer = new MemoryMailer();
+    expect(await sendReportNow(t.db, mailer, row!, asked)).toEqual({ status: 'sent' });
+    [row] = await t.db.select().from(reportSchedules).where(eq(reportSchedules.id, schedule.id));
+    expect(row).toMatchObject({ lastStatus: 'sent', lastError: null, lastRunAt: asked });
+    expect(row!.nextRunAt).toEqual(next);
+    expect(await sendReportNow(t.db, noServer, row!, asked)).toMatchObject({
+      status: 'not_configured',
+    });
+    [row] = await t.db.select().from(reportSchedules).where(eq(reportSchedules.id, schedule.id));
+    expect(row!.lastStatus).toBe('not_configured');
     await deleteReportSchedule(t.db, org.admin, schedule.id);
+  });
+
+  it('refuses a schedule across two currencies, which could never be sent', async () => {
+    const abroad = await createProperty(t.db, org.admin, {
+      code: 'DXB1',
+      name: 'Creek Apartments',
+      kind: 'villa',
+      timezone: 'Asia/Dubai',
+      currency: 'AED',
+      country: 'AE',
+    });
+    const refused = createReportSchedule(t.db, org.admin, {
+      ...input,
+      propertyIds: [hotel.property.id, abroad.id],
+    });
+    await expect(refused).rejects.toMatchObject({
+      code: 'validation',
+      message:
+        'These properties are priced in different currencies (AED, INR). Choose properties that share one.',
+      details: { reason: 'mixed_currencies', currencies: ['AED', 'INR'] },
+    });
+    // "Every property" is the same mixture now that the chain has both.
+    await expect(createReportSchedule(t.db, org.admin, input)).rejects.toMatchObject({
+      details: { reason: 'mixed_currencies' },
+    });
+    const one = await createReportSchedule(t.db, org.admin, {
+      ...input,
+      propertyIds: [abroad.id],
+    });
+    await expect(
+      updateReportSchedule(t.db, org.admin, one.id, {
+        propertyIds: [abroad.id, hotel.property.id],
+      }),
+    ).rejects.toMatchObject({ details: { reason: 'mixed_currencies' } });
+    await deleteReportSchedule(t.db, org.admin, one.id);
   });
 });

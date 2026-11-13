@@ -1,4 +1,4 @@
-import { and, asc, eq, lte } from 'drizzle-orm';
+import { and, asc, eq, inArray, lte } from 'drizzle-orm';
 import {
   organizations,
   PAYMENT_METHODS,
@@ -29,18 +29,13 @@ import {
   type PerformanceGrouping,
   type ReportWindow,
 } from './reports';
+import { REPORT_TITLES } from './report-names';
 import { sourceName } from './source-labels';
 import { transact } from './sqlx';
 
 export type ReportScheduleRow = typeof reportSchedules.$inferSelect;
 
-export const REPORT_TITLES: Record<ReportKind, string> = {
-  performance: 'Occupancy and rates',
-  channel_mix: 'Where bookings came from',
-  pace: 'Pace',
-  revenue: 'Charges and takings',
-  agent_commission: 'Travel agent commission',
-};
+export { REPORT_TITLES };
 
 const percent = (bp: number | null): number | null => (bp === null ? null : bp / 100);
 
@@ -387,6 +382,24 @@ async function cleanSchedule(
     const unknown = propertyIds.find((id) => !known.has(id));
     if (unknown) throw notFound('Property', unknown);
   }
+  // A report adds money up, so it covers one currency. A schedule across two could be
+  // saved and would then fail every time it came due.
+  const priced = await tx
+    .select({ currency: properties.currency })
+    .from(properties)
+    .where(
+      and(
+        eq(properties.orgId, orgId),
+        propertyIds ? inArray(properties.id, propertyIds) : undefined,
+      ),
+    );
+  const currencies = [...new Set(priced.map((p) => p.currency))].sort();
+  if (currencies.length > 1) {
+    throw validationError(
+      `These properties are priced in different currencies (${currencies.join(', ')}). Choose properties that share one.`,
+      { reason: 'mixed_currencies', currencies },
+    );
+  }
   let groupBy: string | null = null;
   if (input.report === 'performance') {
     groupBy = (PERFORMANCE_GROUPINGS as readonly string[]).includes(input.groupBy ?? '')
@@ -563,6 +576,24 @@ export async function sendScheduledReport(
       error: (err instanceof Error ? err.message : String(err)).slice(0, 500),
     };
   }
+}
+
+/**
+ * Sends a schedule's report at once, on request, and notes how that went on the schedule
+ * like any other run. When it is next due does not change.
+ */
+export async function sendReportNow(
+  db: DbOrTx,
+  mailer: Mailer,
+  schedule: ReportScheduleRow,
+  now: Date = new Date(),
+): Promise<{ status: 'sent' | 'failed' | 'not_configured'; error?: string }> {
+  const result = await sendScheduledReport(db, mailer, schedule, now);
+  await db
+    .update(reportSchedules)
+    .set({ lastRunAt: now, lastStatus: result.status, lastError: result.error ?? null })
+    .where(eq(reportSchedules.id, schedule.id));
+  return result;
 }
 
 /**

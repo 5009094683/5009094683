@@ -20,7 +20,7 @@ import {
   propertyScope,
   reportCsv,
   revenueReport,
-  sendScheduledReport,
+  sendReportNow,
   taxRegister,
   taxRegisterCsv,
   updateReportSchedule,
@@ -49,6 +49,8 @@ function sendCsv(reply: FastifyReply, file: { filename: string; csv: string }): 
     .send(`\uFEFF${file.csv}`);
 }
 
+const REPORTS_A_MINUTE = 90;
+
 export async function reportRoutes(app: FastifyInstance): Promise<void> {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
@@ -64,6 +66,9 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
   r.get(
     '/reports/performance',
     {
+      // A report over a long period is real work for the database: enough for a person
+      // changing filters, too few for a script to lean on.
+      config: perUser(REPORTS_A_MINUTE),
       schema: {
         tags: ['reports'],
         summary: 'Occupancy, average rate and revenue per available room',
@@ -83,6 +88,9 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
   r.get(
     '/reports/channel-mix',
     {
+      // A report over a long period is real work for the database: enough for a person
+      // changing filters, too few for a script to lean on.
+      config: perUser(REPORTS_A_MINUTE),
       schema: {
         tags: ['reports'],
         summary: 'Room nights, revenue and commission by booking site and source',
@@ -101,6 +109,9 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
   r.get(
     '/reports/pace',
     {
+      // A report over a long period is real work for the database: enough for a person
+      // changing filters, too few for a script to lean on.
+      config: perUser(REPORTS_A_MINUTE),
       schema: {
         tags: ['reports'],
         summary: 'How future dates are filling, against last week, last month and last year',
@@ -120,6 +131,9 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
   r.get(
     '/reports/revenue',
     {
+      // A report over a long period is real work for the database: enough for a person
+      // changing filters, too few for a script to lean on.
+      config: perUser(REPORTS_A_MINUTE),
       schema: {
         tags: ['reports'],
         summary: 'Charges by kind, tax, and money received by method, for each hotel day',
@@ -138,6 +152,9 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
   r.get(
     '/reports/agent-commission',
     {
+      // A report over a long period is real work for the database: enough for a person
+      // changing filters, too few for a script to lean on.
+      config: perUser(REPORTS_A_MINUTE),
       schema: {
         tags: ['reports'],
         summary: 'What each travel agent earned on stays in the period',
@@ -319,7 +336,7 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
     },
     async (req) => {
       const { schedule } = await ownSchedule(req, req.params.id);
-      return sendScheduledReport(app.db, app.mailer, schedule);
+      return sendReportNow(app.db, app.mailer, schedule);
     },
   );
 }

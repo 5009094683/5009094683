@@ -1,15 +1,10 @@
+import { REPORT_TITLES } from '@pms/domain/shared';
 import { plural } from '@/lib/format';
 import type { Property } from '@/lib/types';
 import type { ReportFrequency, ReportKind, ReportPeriod, Schedule } from './types';
 
-/** The reports by the names their tabs have. */
-export const REPORT_LABELS: Record<ReportKind, string> = {
-  performance: 'Performance',
-  channel_mix: 'Where bookings come from',
-  pace: 'Pace',
-  revenue: 'Takings',
-  agent_commission: 'Travel agents',
-};
+/** The reports by the names their tabs, their spreadsheets and their emails have. */
+export const REPORT_LABELS: Record<ReportKind, string> = REPORT_TITLES;
 
 /** The dates a scheduled report covers, counted from the day it is sent. */
 export const PERIOD_WORDS: Record<ReportPeriod, { label: string; covers: string }> = {

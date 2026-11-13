@@ -16,6 +16,7 @@ export {
 } from './auth/permissions';
 export { BLOCK_KIND_LABELS } from './block-labels';
 export type { DomainErrorCode } from './errors';
+export { REPORT_TITLES } from './report-names';
 export { CHANNEL_NAMES, SOURCE_LABELS, sourceName } from './source-labels';
 export {
   SAMPLE_TEMPLATE_VALUES,

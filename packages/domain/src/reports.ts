@@ -52,6 +52,7 @@ async function scopeOf(db: DbOrTx, orgId: string, propertyIds: 'all' | string[])
   if (currencies.length > 1) {
     throw validationError(
       `These properties are priced in different currencies (${currencies.join(', ')}). Choose properties that share one.`,
+      { reason: 'mixed_currencies', currencies },
     );
   }
   return {
@@ -361,9 +362,14 @@ export async function channelMixReport(
     FROM per_booking
     GROUP BY coalesce(channel_code, source)
   `);
-  const { rows: arrivals } = await db.execute<{ key: string; cancelled: number; total: number }>(
+  const { rows: arrivals } = await db.execute<{
+    key: string;
+    is_channel: boolean;
+    cancelled: number;
+    total: number;
+  }>(
     sql`
-      SELECT coalesce(channel_code, source) AS key,
+      SELECT coalesce(channel_code, source) AS key, bool_or(channel_code IS NOT NULL) AS is_channel,
         count(*) FILTER (WHERE status = 'cancelled')::int AS cancelled, count(*)::int AS total
       FROM reservations
       WHERE property_id = ANY(${props}) AND check_in >= ${from}::date AND check_in < ${to}::date
@@ -403,6 +409,28 @@ export async function channelMixReport(
       };
     })
     .sort((a, b) => b.roomRevenue - a.roomRevenue || a.key.localeCompare(b.key));
+  // A source whose every booking for these dates was cancelled sold nothing, but it is
+  // where those cancellations came from: without its line the total could not be added up
+  // from the lines, and the worst source of all would be the one not shown.
+  const withStays = new Set(rows.map((r) => r.key));
+  for (const arriving of arrivals) {
+    if (withStays.has(arriving.key) || arriving.cancelled === 0) continue;
+    rows.push({
+      key: arriving.key,
+      channelCode: arriving.is_channel ? arriving.key : null,
+      source: arriving.is_channel ? null : (arriving.key as ReservationSource),
+      reservations: 0,
+      roomNights: 0,
+      roomRevenue: 0,
+      commission: 0,
+      netRevenue: 0,
+      adr: null,
+      revenueShareBp: shareBp(0, totalRevenue),
+      avgLeadDays: null,
+      avgNights: null,
+      cancellationBp: shareBp(arriving.cancelled, arriving.total),
+    });
+  }
 
   const reservationsTotal = rows.reduce((sum, r) => sum + r.reservations, 0);
   const nightsTotal = rows.reduce((sum, r) => sum + r.roomNights, 0);

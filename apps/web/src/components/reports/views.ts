@@ -1,11 +1,13 @@
+import { REPORT_TITLES } from '@pms/domain/shared';
 import type { PaceGroup, PerformanceGroup } from './types';
 
+// Each report is called the same thing here, at the top of its spreadsheet and in its email.
 export const VIEWS = [
-  { key: 'performance', label: 'Performance' },
-  { key: 'sources', label: 'Where bookings come from' },
-  { key: 'pace', label: 'Pace' },
-  { key: 'takings', label: 'Takings' },
-  { key: 'agents', label: 'Travel agents' },
+  { key: 'performance', label: REPORT_TITLES.performance },
+  { key: 'sources', label: REPORT_TITLES.channel_mix },
+  { key: 'pace', label: REPORT_TITLES.pace },
+  { key: 'takings', label: REPORT_TITLES.revenue },
+  { key: 'agents', label: REPORT_TITLES.agent_commission },
   { key: 'schedules', label: 'Scheduled emails' },
 ] as const;
 
