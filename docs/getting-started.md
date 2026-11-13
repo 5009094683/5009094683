@@ -40,8 +40,9 @@ same code the application runs: guests arrive, eat, pay and leave, rooms are
 cleaned, each night is closed. So on the first look there are guests in
 house, arrivals expected and departures due today, bills with charges and
 payments, invoices, rooms to clean, repairs waiting, messages from guests,
-reviews, rate suggestions, a month of figures in the reports, and last
-month's statements for the two villa owners.
+reviews, rate suggestions, a month of figures in the reports, last month's
+statements for the two villa owners, and two groups holding rooms at the hotel
+in the weeks ahead (a company offsite and a wedding), each partly booked.
 
 Everyone's password is `demo-password-1`:
 
@@ -76,6 +77,11 @@ her to the owner portal: the link it gives sets her password.
 5. **The assistant.** Click Assistant in the top bar and type
    `block Villa Azure from 12 Dec to 15 Dec for maintenance`. It prepares the
    change; nothing happens until you confirm.
+6. **A group.** Open Groups and the wedding. Its rooms are off sale for
+   everyone else; "Book a room" still finds them, and a rooming list books one
+   room for each name you paste. Open http://localhost:4100 beside it: what the
+   booking sites can sell does not move as the group books, and rises when you
+   release the rooms nobody took.
 
 ## Checks
 
