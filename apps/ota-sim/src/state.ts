@@ -156,6 +156,21 @@ export interface SimThread {
   insertedAt: string;
 }
 
+/** What a guest wrote about a stay on a booking site. */
+export interface SimReview {
+  id: string;
+  propertyId: string;
+  bookingId: string | null;
+  ota: string;
+  otaReservationId: string | null;
+  guestName: string | null;
+  overallScore: number | null;
+  scores: { category: string; score: number }[];
+  content: string | null;
+  receivedAt: string;
+  reply: string | null;
+}
+
 export interface SimWebhook {
   id: string;
   callbackUrl: string;
@@ -220,6 +235,7 @@ export class SimState {
   revisions = new Map<string, SimRevision>();
   webhooks = new Map<string, SimWebhook>();
   threads = new Map<string, SimThread>();
+  reviews = new Map<string, SimReview>();
   /** Properties with the paid messages add-on. Others answer 403, as the real service does. */
   messagingDisabled = new Set<string>();
   oneTimeTokens = new Map<string, { propertyId: string; username: string; expiresAt: number }>();
@@ -262,6 +278,7 @@ export class SimState {
     this.revisions.clear();
     this.webhooks.clear();
     this.threads.clear();
+    this.reviews.clear();
     this.messagingDisabled.clear();
     this.oneTimeTokens.clear();
     this.requestLog = [];
@@ -1038,6 +1055,51 @@ export class SimState {
     return message;
   }
 
+  /** A guest leaves a review on a booking site. Announced to the PMS as a `review` event. */
+  guestReview(input: {
+    bookingId?: string;
+    propertyId?: string;
+    channel?: ChannelCode;
+    score?: number | null;
+    scores?: { category: string; score: number }[];
+    content?: string | null;
+    guestName?: string | null;
+    silent?: boolean;
+  }): SimReview {
+    const booking = input.bookingId ? this.bookings.get(input.bookingId) : undefined;
+    if (input.bookingId && !booking) throw new SimError(404, 'Booking not found');
+    const propertyId = booking?.propertyId ?? input.propertyId;
+    if (!propertyId || !this.properties.has(propertyId))
+      throw new SimError(404, 'Property not found');
+    const channel = booking?.channel ?? input.channel ?? 'BDC';
+    const review: SimReview = {
+      id: randomUUID(),
+      propertyId,
+      bookingId: booking?.id ?? null,
+      ota: CHANNELS[channel].otaName,
+      otaReservationId: booking?.otaReservationCode ?? null,
+      guestName:
+        input.guestName ??
+        (booking ? `${booking.customer.name} ${booking.customer.surname}` : null),
+      overallScore: input.score === undefined ? 8 : input.score,
+      scores: input.scores ?? [],
+      content: input.content ?? null,
+      receivedAt: new Date().toISOString(),
+      reply: null,
+    };
+    this.reviews.set(review.id, review);
+    if (!input.silent) {
+      this.onEvent('review', propertyId, {
+        id: review.id,
+        property_id: propertyId,
+        booking_id: review.bookingId,
+        ota: review.ota,
+        overall_score: review.overallScore,
+      });
+    }
+    return review;
+  }
+
   // -------------------------------------------------------------------------
   // Keeping the state across a restart
 
@@ -1056,6 +1118,7 @@ export class SimState {
       revisions: [...this.revisions.values()],
       webhooks: [...this.webhooks.values()],
       threads: [...this.threads.values()],
+      reviews: [...this.reviews.values()],
       messagingDisabled: [...this.messagingDisabled],
       reservationSeq: this.reservationSeq,
     };
@@ -1078,6 +1141,7 @@ export class SimState {
     this.revisions = byId(snapshot.revisions);
     this.webhooks = byId(snapshot.webhooks);
     this.threads = byId(snapshot.threads ?? []);
+    this.reviews = byId(snapshot.reviews ?? []);
     this.messagingDisabled = new Set(snapshot.messagingDisabled ?? []);
     this.reservationSeq = snapshot.reservationSeq;
   }
@@ -1096,6 +1160,7 @@ export interface SimSnapshot {
   revisions: SimRevision[];
   webhooks: SimWebhook[];
   threads: SimThread[];
+  reviews?: SimReview[];
   messagingDisabled: string[];
   reservationSeq: number;
 }

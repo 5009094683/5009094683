@@ -5,6 +5,7 @@ import {
   CHANNELS,
   SimError,
   type SimMessage,
+  type SimReview,
   type SimState,
   type SimThread,
   type SimWebhook,
@@ -648,6 +649,53 @@ export async function channexApi(
     const text = textOf(req.body);
     if (!text) return reply.status(422).send(validationError({ message: ["can't be blank"] }));
     return { data: messageResource(state.propertyMessage({ bookingId: booking.id }, text)) };
+  });
+
+  // -------------------------------------------------------------------------
+  // Reviews (the paid reviews add-on)
+
+  const reviewResource = (r: SimReview) => ({
+    type: 'review',
+    id: r.id,
+    attributes: {
+      id: r.id,
+      content: r.content,
+      guest_name: r.guestName,
+      ota: r.ota,
+      ota_reservation_id: r.otaReservationId,
+      overall_score: r.overallScore,
+      scores: r.scores,
+      received_at: r.receivedAt,
+      inserted_at: r.receivedAt,
+      is_hidden: false,
+      is_replied: r.reply !== null,
+      reply: r.reply,
+    },
+  });
+
+  app.get('/reviews', async (req) => {
+    const query = req.query as Query;
+    const propertyId = query['filter[property_id]'];
+    const all = [...state.reviews.values()]
+      .filter((r) => !propertyId || r.propertyId === propertyId)
+      .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
+    const page = paginate(all, query);
+    return { data: page.data.map(reviewResource), meta: page.meta };
+  });
+
+  app.post('/reviews/:id/reply', async (req, reply) => {
+    const review = state.reviews.get((req.params as { id: string }).id);
+    if (!review) return reply.status(404).send(notFound);
+    const text = (req.body as { reply?: { reply?: unknown } } | undefined)?.reply?.reply;
+    if (typeof text !== 'string' || !text.trim()) {
+      return reply.status(422).send(validationError({ reply: ["can't be blank"] }));
+    }
+    // A booking site takes one reply per review.
+    if (review.reply !== null) {
+      return reply.status(422).send(validationError({ reply: ['has already been given'] }));
+    }
+    review.reply = text;
+    return { data: reviewResource(review) };
   });
 
   app.get('/webhooks', async (req) => {

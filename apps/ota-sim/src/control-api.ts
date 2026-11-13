@@ -187,6 +187,14 @@ export async function controlApi(
     return reply.status(201).send({ id: message.id, threadId: message.threadId });
   });
 
+  /** A guest reviews a stay on a booking site. */
+  app.post('/reviews', async (req, reply) => {
+    const review = state.guestReview((req.body ?? {}) as Parameters<SimState['guestReview']>[0]);
+    return reply.status(201).send({ id: review.id });
+  });
+
+  app.get('/reviews', async () => ({ reviews: [...state.reviews.values()] }));
+
   /** Every conversation, with what each side wrote, oldest first. */
   app.get('/threads', async () => ({ threads: [...state.threads.values()] }));
 
