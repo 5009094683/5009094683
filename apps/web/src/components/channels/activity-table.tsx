@@ -16,6 +16,17 @@ import type { SyncLogRow } from './types';
 
 const COLUMNS = ['Time', 'Direction', 'What', 'Count', 'Result', 'Waited'];
 
+/**
+ * The channel manager's own ids for what was sent: what its support asks for when something
+ * needs tracing, and what its certification asks to be quoted for each test.
+ */
+function referencesOf(row: SyncLogRow): string[] {
+  const references = row.detail?.references;
+  return Array.isArray(references)
+    ? references.filter((r): r is string => typeof r === 'string')
+    : [];
+}
+
 /** What was sent and received on a connection, newest first. */
 export function ActivityTable({
   log,
@@ -51,6 +62,7 @@ export function ActivityTable({
               {log.map((row) => {
                 const status = LOG_STATUS[row.status];
                 const Arrow = row.direction === 'out' ? ArrowUpRight : ArrowDownLeft;
+                const references = referencesOf(row);
                 return (
                   <tr key={row.id}>
                     <td className="tabular w-28 px-4 py-2.5 whitespace-nowrap text-ink-soft">
@@ -72,6 +84,19 @@ export function ActivityTable({
                           )}
                         >
                           {nameRooms(row.error, roomNames)}
+                        </p>
+                      )}
+                      {references.length > 0 && (
+                        <p className="mt-0.5 flex max-w-xl flex-wrap gap-x-2 text-xs text-ink-faint">
+                          <span>Channel manager reference:</span>
+                          {references.map((reference) => (
+                            <span
+                              key={reference}
+                              className="font-mono whitespace-nowrap select-all"
+                            >
+                              {reference}
+                            </span>
+                          ))}
                         </p>
                       )}
                     </td>
