@@ -10,7 +10,10 @@ import { useAction } from '@/lib/hooks';
 import type { Property, PropertyDetail } from '@/lib/types';
 import type { Settings } from './values';
 
-export interface Reading<Body extends Partial<Settings>, Field extends string> {
+/** Settings as they are sent: null takes away one that has no empty value of its own. */
+export type SettingsChange = { [K in keyof Settings]?: Settings[K] | null };
+
+export interface Reading<Body extends SettingsChange, Field extends string> {
   /** The settings the form holds, as the server takes them. */
   body: Body;
   /** What has to be put right before they can be saved, by field. */
@@ -37,7 +40,7 @@ export interface SettingsForm<Values, Field extends string> {
  * the server merges those into the rest, so two people editing different settings do not undo
  * each other's work.
  */
-export function useSettingsForm<Values, Body extends Partial<Settings>, Field extends string>({
+export function useSettingsForm<Values, Body extends SettingsChange, Field extends string>({
   property,
   start,
   read,

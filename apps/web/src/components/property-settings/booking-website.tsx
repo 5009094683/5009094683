@@ -78,10 +78,25 @@ export function BookingWebsiteCard({
         {shown && (
           <Item
             label="Page on the website"
-            note="Put this after the address of your website to open the page."
+            note={
+              detail.bookingSiteUrl
+                ? 'Opens the page guests book on.'
+                : 'Put this after the address of your website to open the page.'
+            }
             className="sm:col-span-2"
           >
-            <span className="font-mono text-[13px]">{websitePath(property)}</span>
+            {detail.bookingSiteUrl ? (
+              <a
+                href={detail.bookingSiteUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="font-mono text-[13px] break-all text-brand-700 hover:underline"
+              >
+                {detail.bookingSiteUrl}
+              </a>
+            ) : (
+              <span className="font-mono text-[13px]">{websitePath(property)}</span>
+            )}
           </Item>
         )}
         <Item label="Paid when booking" note={NON_REFUNDABLE} className="sm:col-span-2">
@@ -116,12 +131,11 @@ interface Values {
 
 type Body = Pick<
   Settings,
-  | 'bookingEngineEnabled'
-  | 'bookingPayment'
-  | 'depositPercent'
-  | 'bookingHoldMinutes'
-  | 'childMaxAge'
->;
+  'bookingEngineEnabled' | 'bookingPayment' | 'depositPercent' | 'bookingHoldMinutes'
+> & {
+  /** Null takes a saved age away again. */
+  childMaxAge?: number | null;
+};
 
 type Problem = 'depositPercent' | 'holdMinutes' | 'childMaxAge';
 
@@ -151,11 +165,8 @@ function read(values: Values, settings: Settings): Reading<Body, Problem> {
   else body.bookingHoldMinutes = minutes;
 
   if (values.childMaxAge.trim() === '') {
-    // The server has no way to take a saved age away again.
-    if (settings.childMaxAge !== undefined) {
-      problems.childMaxAge =
-        'An age that has been saved cannot be removed, only changed. Enter a whole number from 0 to 17.';
-    }
+    // Emptied: the age is taken away, and the website says nothing about age again.
+    if (settings.childMaxAge !== undefined) body.childMaxAge = null;
   } else {
     const age = wholeNumber(values.childMaxAge, LIMITS.childMaxAge);
     if (age === null) problems.childMaxAge = 'Enter a whole number from 0 to 17.';
@@ -280,12 +291,8 @@ export function BookingWebsiteDialog({
       <FormSection title="Children">
         <Field
           label="Children are aged up to"
-          optional={settings.childMaxAge === undefined}
-          hint={
-            settings.childMaxAge === undefined
-              ? 'From 0 to 17. The website tells guests this where they say who is staying. Left empty, it says nothing about age.'
-              : 'From 0 to 17. The website tells guests this where they say who is staying.'
-          }
+          optional
+          hint="From 0 to 17. The website tells guests this where they say who is staying. Left empty, it says nothing about age."
           error={problems.childMaxAge}
           className="sm:col-span-2"
         >

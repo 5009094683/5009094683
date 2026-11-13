@@ -179,6 +179,71 @@ describe('property setup over the API', () => {
     const unknown = await admin.patch(base, { settings: { pricingMagic: true } });
     expect(unknown.statusCode).toBe(400);
     expect(unknown.json().error.message).toContain('pricingMagic');
+
+    // What the booking site could not use is refused rather than saved and ignored.
+    const colour = await admin.patch(base, { settings: { brandColor: 'teal' } });
+    expect(colour.statusCode).toBe(400);
+    expect(colour.json().error.message).toBe(
+      'settings.brandColor: Give the colour as a code like #1f6f5c',
+    );
+    const photo = await admin.patch(base, { settings: { photos: ['pool.jpg'] } });
+    expect(photo.statusCode).toBe(400);
+    expect(photo.json().error.message).toMatch(/starting with https:\/\//);
+    const look = await admin.patch(base, {
+      settings: {
+        brandColor: '#1F6F5C',
+        photos: ['https://images.example.com/pool.jpg'],
+        bookingEngineEnabled: true,
+        invoicePrefix: 'SB',
+        childMaxAge: 12,
+      },
+    });
+    expect(look.statusCode).toBe(200);
+    // The property's own page on the booking site, for the back office to link to.
+    expect((await admin.get(base)).json().bookingSiteUrl).toBe(
+      `http://localhost:3001/${hotel.property.code.toLowerCase()}`,
+    );
+    // A colour is cleared with nothing; a value that has no empty form is taken away with null.
+    const cleared = await admin.patch(base, {
+      settings: {
+        brandColor: '',
+        invoicePrefix: null,
+        childMaxAge: null,
+        bookingEngineEnabled: false,
+      },
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().settings).toMatchObject({ brandColor: '', bookingEngineEnabled: false });
+    expect(cleared.json().settings).not.toHaveProperty('invoicePrefix');
+    expect(cleared.json().settings).not.toHaveProperty('childMaxAge');
+    expect((await admin.get(base)).json().bookingSiteUrl).toBeNull();
+
+    // Food is taxed at 5%, or at 18% where the hotel is "specified premises": the rule
+    // follows the setting, unless the accountant has since set the rule by hand.
+    const foodRate = async () =>
+      (
+        (await admin.get(`${base}/tax-rules`)).json().rules as {
+          category: string;
+          slabs: { rateBp: number }[];
+        }[]
+      ).find((rule) => rule.category === 'food')!.slabs[0]!.rateBp;
+    expect(await foodRate()).toBe(500);
+    await admin.patch(base, { settings: { specifiedPremises: true } });
+    expect(await foodRate()).toBe(1800);
+    await admin.patch(base, { settings: { specifiedPremises: false } });
+    expect(await foodRate()).toBe(500);
+    const byHand = await admin.put(`${base}/tax-rules/food`, {
+      name: 'GST on food and beverage',
+      serviceCode: '996331',
+      slabs: [{ upTo: null, rateBp: 1200 }],
+      components: [
+        { code: 'CGST', shareBp: 5000 },
+        { code: 'SGST', shareBp: 5000 },
+      ],
+    });
+    expect(byHand.statusCode, byHand.body).toBe(200);
+    await admin.patch(base, { settings: { specifiedPremises: true } });
+    expect(await foodRate()).toBe(1200);
   });
 });
 

@@ -65,7 +65,7 @@ export interface PropertySettings {
   pricingEvents?: { from: string; to: string; name: string; upliftPercent?: number }[];
   /** Facts the assistant may use when drafting replies to guests: parking, Wi-Fi, pets, distances. */
   knowledge?: string;
-  /** Children at or below this age count as children for pricing. */
+  /** Up to this age a guest is booked as a child. Told to guests when they say who is coming. */
   childMaxAge?: number;
   /** Minutes of housekeeping work for a departure clean and a stay-over service. */
   departureCleanMinutes?: number;

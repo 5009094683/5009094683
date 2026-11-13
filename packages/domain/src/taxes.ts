@@ -12,6 +12,7 @@ import { writeAudit } from './audit';
 import type { Actor } from './context';
 import { validationError } from './errors';
 import { requireProperty } from './properties';
+import { HALVES, indiaGst } from './tax-presets';
 import { transact } from './sqlx';
 
 export type TaxRuleRow = typeof taxRules.$inferSelect;
@@ -67,63 +68,6 @@ export function computeTax(
     taxAmount: taxes.reduce((sum, t) => sum + t.amount, 0),
     taxes,
   };
-}
-
-interface PresetRule {
-  category: TaxCategory;
-  name: string;
-  serviceCode: string;
-  slabs: TaxSlab[];
-}
-
-const HALVES: TaxComponent[] = [
-  { code: 'CGST', shareBp: 5_000 },
-  { code: 'SGST', shareBp: 5_000 },
-];
-
-/**
- * India's GST for a hotel, as notified from 22 September 2025: accommodation
- * at 5% up to 7,500 rupees per unit per night and 18% above; restaurant
- * service at 5%, or 18% at "specified premises"; other services at 18%.
- * A property's accountant should confirm these before invoices are issued:
- * rates change, and the rules are editable for that reason.
- */
-function indiaGst(specifiedPremises: boolean): PresetRule[] {
-  return [
-    {
-      category: 'room',
-      name: 'GST on accommodation',
-      serviceCode: '996311',
-      slabs: [
-        { upTo: 750_000, rateBp: 500 },
-        { upTo: null, rateBp: 1_800 },
-      ],
-    },
-    {
-      category: 'food',
-      name: 'GST on food and beverage',
-      serviceCode: '996331',
-      slabs: [{ upTo: null, rateBp: specifiedPremises ? 1_800 : 500 }],
-    },
-    {
-      category: 'service',
-      name: 'GST on services',
-      serviceCode: '999799',
-      slabs: [{ upTo: null, rateBp: 1_800 }],
-    },
-    {
-      category: 'extra',
-      name: 'GST on extras',
-      serviceCode: '996311',
-      slabs: [{ upTo: null, rateBp: 1_800 }],
-    },
-    {
-      category: 'fee',
-      name: 'GST on fees',
-      serviceCode: '999799',
-      slabs: [{ upTo: null, rateBp: 1_800 }],
-    },
-  ];
 }
 
 /**

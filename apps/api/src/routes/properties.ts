@@ -33,7 +33,9 @@ const propertySettings = z
     invoicePrefix: z
       .string()
       .regex(/^[A-Za-z0-9]{1,4}$/, 'Up to four letters or digits')
-      .optional(),
+      .nullable()
+      .optional()
+      .describe('Null goes back to using the property code'),
     specifiedPremises: z.boolean().optional(),
     bookingHoldMinutes: z.number().int().min(5).max(120).optional(),
     bookingEngineEnabled: z.boolean().optional(),
@@ -64,13 +66,36 @@ const propertySettings = z
       )
       .max(100)
       .optional(),
-    childMaxAge: z.number().int().min(0).max(17).optional(),
+    childMaxAge: z
+      .number()
+      .int()
+      .min(0)
+      .max(17)
+      .nullable()
+      .optional()
+      .describe('Null removes it: guests are then not told an age'),
     departureCleanMinutes: z.number().int().min(5).max(480).optional(),
     stayoverCleanMinutes: z.number().int().min(5).max(480).optional(),
-    brandColor: z.string().max(20).optional(),
+    // What the booking site can use, and nothing else: it would otherwise be saved and ignored.
+    brandColor: z
+      .string()
+      .regex(/^(#[0-9a-fA-F]{6})?$/, 'Give the colour as a code like #1f6f5c')
+      .optional(),
     description: z.string().max(4000).optional(),
     amenities: z.array(z.string().max(80)).max(100).optional(),
-    photos: z.array(z.string().max(500)).max(60).optional(),
+    photos: z
+      .array(
+        z
+          .string()
+          .max(500)
+          // The same rule the booking site shows photos by: a web address, or a file of its own.
+          .regex(
+            /^(https?:\/\/\S+|\/[^/\s]\S*)$/i,
+            'Give each photo as a web address starting with https://',
+          ),
+      )
+      .max(60)
+      .optional(),
   })
   // A setting this does not know is refused: dropping it quietly would look like saving it.
   .strict()
@@ -183,7 +208,15 @@ export async function propertyRoutes(app: FastifyInstance): Promise<void> {
     },
     async (req) => {
       const actor = await authorizeProperty(app.db, req, req.params.propertyId, 'property.read');
-      return getPropertyConfig(app.db, actor.orgId, req.params.propertyId);
+      const config = await getPropertyConfig(app.db, actor.orgId, req.params.propertyId);
+      // Where guests book it: only the installation knows the booking site's own address.
+      const onWebsite = config.property.active && config.property.settings.bookingEngineEnabled;
+      return {
+        ...config,
+        bookingSiteUrl: onWebsite
+          ? `${app.env.BOOKING_URL.replace(/\/+$/, '')}/${config.property.code.toLowerCase()}`
+          : null,
+      };
     },
   );
 

@@ -67,7 +67,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: property.name,
     description:
-      property.description ??
+      // A description that was cleared is saved as nothing, not as absent.
+      property.description ||
       `Rooms and prices at ${property.name}${place ? `, ${place}` : ''}. Book directly.`,
   };
 }

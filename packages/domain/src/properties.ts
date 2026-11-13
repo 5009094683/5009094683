@@ -23,6 +23,7 @@ import { refreshInventory } from './inventory';
 import { isValidCurrency, isValidTimezone } from './org';
 import { emit } from './outbox';
 import { transact } from './sqlx';
+import { applySpecifiedPremises } from './tax-presets';
 
 export type PropertyRow = typeof properties.$inferSelect;
 export type RoomTypeRow = typeof roomTypes.$inferSelect;
@@ -98,7 +99,23 @@ export interface PropertyInput {
   checkInTime?: string;
   checkOutTime?: string;
   inventoryHorizonDays?: number;
-  settings?: PropertySettings;
+  settings?: SettingsPatch;
+}
+
+/** Settings that have no "empty" value of their own are taken away again by giving null. */
+const REMOVABLE_SETTINGS = ['invoicePrefix', 'childMaxAge'] as const;
+
+export type SettingsPatch = Omit<PropertySettings, (typeof REMOVABLE_SETTINGS)[number]> & {
+  [K in (typeof REMOVABLE_SETTINGS)[number]]?: PropertySettings[K] | null;
+};
+
+/** The settings as they stand once a change is laid over them. */
+function mergeSettings(before: PropertySettings, patch: SettingsPatch): PropertySettings {
+  const merged: Record<string, unknown> = { ...before, ...patch };
+  for (const key of REMOVABLE_SETTINGS) {
+    if (merged[key] === null) delete merged[key];
+  }
+  return merged as PropertySettings;
 }
 
 const GSTIN_RE = /^\d{2}[A-Z]{5}\d{4}[A-Z][A-Z\d]Z[A-Z\d]$/;
@@ -157,6 +174,7 @@ export async function createProperty(
       .insert(properties)
       .values({
         ...input,
+        settings: mergeSettings({}, input.settings ?? {}),
         currency: input.currency ?? org?.currency,
         timezone: input.timezone ?? org?.timezone,
         gstin: input.gstin?.toUpperCase() ?? null,
@@ -202,12 +220,13 @@ export async function updateProperty(
         );
       }
     }
+    const { settings: settingsPatch, ...fields } = patch;
     const next = {
-      ...patch,
+      ...fields,
       ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
       ...(patch.gstin !== undefined ? { gstin: patch.gstin?.toUpperCase() ?? null } : {}),
-      ...(patch.settings !== undefined
-        ? { settings: { ...before.settings, ...patch.settings } }
+      ...(settingsPatch !== undefined
+        ? { settings: mergeSettings(before.settings, settingsPatch) }
         : {}),
     };
     if (next.name !== undefined && !next.name) throw validationError('Property name is required');
@@ -231,6 +250,10 @@ export async function updateProperty(
       patch.inventoryHorizonDays > before.inventoryHorizonDays
     ) {
       await extendHorizon(tx, after!);
+    }
+    const premises = after!.settings.specifiedPremises ?? false;
+    if (premises !== (before.settings.specifiedPremises ?? false)) {
+      await applySpecifiedPremises(tx, propertyId, premises);
     }
     return after!;
   });

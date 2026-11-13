@@ -45,7 +45,10 @@ export type Property = Serialized<PropertyRow>;
 export type RoomType = Serialized<RoomTypeRow>;
 export type Unit = Serialized<UnitRow>;
 export type RatePlan = Serialized<RatePlanRow>;
-export type PropertyDetail = Serialized<PropertyConfig>;
+export type PropertyDetail = Serialized<PropertyConfig> & {
+  /** The property's page on the booking site, while guests can book it there. */
+  bookingSiteUrl?: string | null;
+};
 export type Reservation = Serialized<ReservationDetail>;
 export type ReservationRoom = Serialized<ReservationRoomView>;
 export type Block = Serialized<BlockRow>;
