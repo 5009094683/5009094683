@@ -66,20 +66,20 @@ function useRoomCheck(propertyId: string, room: RoomDraft, groupId?: string) {
     isValidDate(room.checkOut) &&
     room.checkOut > room.checkIn &&
     diffDays(room.checkIn, room.checkOut) <= 365;
-  const key = useDebounced(
-    valid
-      ? JSON.stringify([
-          propertyId,
-          room.roomTypeId,
-          room.ratePlanId,
-          room.checkIn,
-          room.checkOut,
-          room.adults,
-          room.children,
-        ])
-      : null,
-    250,
-  );
+  const asked = valid
+    ? JSON.stringify([
+        propertyId,
+        room.roomTypeId,
+        room.ratePlanId,
+        room.checkIn,
+        room.checkOut,
+        room.adults,
+        room.children,
+      ])
+    : null;
+  const key = useDebounced(asked, 250);
+  // Until the pause after typing is over, what was fetched is for the stay as it was before.
+  const settled = key === asked;
   const quote = useSWR<Quote>(
     key && room.ratePlanId ? ['quote', key] : null,
     () =>
@@ -100,7 +100,12 @@ function useRoomCheck(propertyId: string, room: RoomDraft, groupId?: string) {
       : null,
   );
   const soldOut = availability.data?.days.filter((d) => d.available <= 0).map((d) => d.date) ?? [];
-  return { valid, quote: quote.data, quoteLoading: quote.isLoading, soldOut };
+  return {
+    valid,
+    quote: settled ? quote.data : undefined,
+    quoteLoading: valid && (!settled || quote.isLoading),
+    soldOut,
+  };
 }
 
 function RoomSection({
