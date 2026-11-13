@@ -258,6 +258,23 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
 
 let cached: Env | undefined;
 
+/**
+ * The configuration for a process that is starting. A setting that is missing
+ * or wrong ends the process with one line saying which, instead of a stack
+ * trace: it is the operator who has to read it.
+ */
+export function getEnvOrExit(component: string): Env {
+  try {
+    return getEnv();
+  } catch (err) {
+    if (err instanceof ConfigError) {
+      console.error(`[${component}] Cannot start. ${err.message}`);
+      process.exit(1);
+    }
+    throw err;
+  }
+}
+
 export function getEnv(): Env {
   if (!cached) {
     loadEnvFiles();

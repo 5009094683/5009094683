@@ -1,8 +1,8 @@
-import { getEnv } from '@pms/config';
+import { getEnvOrExit } from '@pms/config';
 import { createDb, runMigrations } from '@pms/db';
 import { buildApp } from './app';
 
-const env = getEnv();
+const env = getEnvOrExit('api');
 
 if (env.usingDevEncryptionKey) {
   console.warn(

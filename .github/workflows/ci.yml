@@ -85,3 +85,33 @@ jobs:
             tests/e2e/playwright-report
             tests/e2e/test-results
           retention-days: 7
+
+  containers:
+    name: Container images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build the images and start the whole system
+        run: |
+          cat > .env <<EOF
+          POSTGRES_PASSWORD=ci-only-password
+          APP_ENCRYPTION_KEY=$(openssl rand -base64 32)
+          PAYMENT_PROVIDER=mock
+          EOF
+          docker compose up -d --build --wait --wait-timeout 300
+      - name: Check that it answers
+        run: |
+          curl -fsS http://localhost:3000/login > /dev/null
+          curl -fsS http://localhost:3000/api/setup/status | grep -q '"setupComplete":false'
+          curl -fsS -H 'content-type: application/json' \
+            -d '{"orgName":"CI Hotels","adminName":"CI Admin","adminEmail":"ci@example.com","adminPassword":"a long enough passphrase 42"}' \
+            http://localhost:3000/api/setup
+          curl -fsS http://localhost:3000/api/setup/status | grep -q '"setupComplete":true'
+          curl -fsS http://localhost:3001/ > /dev/null
+      - name: Back up and check the dump
+        run: |
+          docker compose --profile backup run --rm --entrypoint /usr/local/bin/pms-backup backup
+      - name: Logs
+        if: failure()
+        run: docker compose logs --tail 200

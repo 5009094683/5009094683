@@ -1,10 +1,10 @@
-import { getEnv } from '@pms/config';
+import { getEnvOrExit } from '@pms/config';
 import { createDb, runMigrations } from '@pms/db';
 import { registerDefaultAdapters } from '@pms/channels';
 import { createLogger } from './logger';
 import { Worker } from './worker';
 
-const env = getEnv();
+const env = getEnvOrExit('worker');
 const log = createLogger(env);
 
 if (env.usingDevEncryptionKey) {

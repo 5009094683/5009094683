@@ -154,8 +154,10 @@ export async function buildApp(deps: AppDeps): Promise<App> {
 
   registerAuth(app);
 
-  app.get('/health', { schema: { hide: true } }, async () => ({ status: 'ok' }));
-  app.get('/ready', { schema: { hide: true } }, async (_req, reply) => {
+  // Asked every few seconds by whatever watches the process: not worth a log line each time.
+  const quiet = { schema: { hide: true }, logLevel: 'warn' } as const;
+  app.get('/health', quiet, async () => ({ status: 'ok' }));
+  app.get('/ready', quiet, async (_req, reply) => {
     try {
       await app.db.execute(sql`SELECT 1`);
       return { status: 'ok' };
