@@ -2,7 +2,10 @@ import { lookup as dnsLookup } from 'node:dns/promises';
 import http from 'node:http';
 import https from 'node:https';
 import { isIP } from 'node:net';
+import { isPrivateAddress } from '@pms/domain';
 import { ChannelError } from './adapter';
+
+export { isPrivateAddress };
 
 export interface SafeFetchOptions {
   /**
@@ -24,45 +27,6 @@ export interface SafeResponse {
   body: string;
   /** The address the content finally came from, after redirects. */
   url: string;
-}
-
-function ipv4ToInt(address: string): number {
-  return address.split('.').reduce((n, part) => (n << 8) + Number(part), 0) >>> 0;
-}
-
-const PRIVATE_V4: [string, number][] = [
-  ['0.0.0.0', 8],
-  ['10.0.0.0', 8],
-  ['100.64.0.0', 10],
-  ['127.0.0.0', 8],
-  ['169.254.0.0', 16],
-  ['172.16.0.0', 12],
-  ['192.0.0.0', 24],
-  ['192.168.0.0', 16],
-  ['198.18.0.0', 15],
-  ['224.0.0.0', 3],
-];
-
-/** True for addresses that are not on the public internet. */
-export function isPrivateAddress(address: string): boolean {
-  const family = isIP(address);
-  if (family === 4) {
-    const value = ipv4ToInt(address);
-    return PRIVATE_V4.some(([base, bits]) => {
-      const mask = bits === 0 ? 0 : (~0 << (32 - bits)) >>> 0;
-      return (value & mask) === (ipv4ToInt(base) & mask);
-    });
-  }
-  if (family === 6) {
-    const lower = address.toLowerCase();
-    if (lower === '::' || lower === '::1') return true;
-    // IPv4 written inside IPv6.
-    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(lower);
-    if (mapped) return isPrivateAddress(mapped[1]!);
-    // Unique local fc00::/7, link local fe80::/10, multicast ff00::/8.
-    return /^(f[cd]|fe[89ab]|ff)/.test(lower);
-  }
-  return true;
 }
 
 async function resolvePublic(
