@@ -79,6 +79,8 @@ export async function startStack(options: StackOptions = {}): Promise<Stack> {
     // The same in-memory mail server and file store as the API, so tests can look at what was sent.
     mailer: api.mailer,
     files: api.files,
+    // As for the API under test: no AI service, whatever keys the machine running the tests has.
+    ai: null,
     timings: {
       syncIdleMs: 250,
       syncDebounceMs: 10,

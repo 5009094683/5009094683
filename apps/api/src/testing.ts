@@ -1,3 +1,4 @@
+import type { LlmProvider } from '@pms/ai';
 import { parseEnv, type Env } from '@pms/config';
 import { createTestDatabase, type TestDatabase } from '@pms/db/testing';
 import { MemoryFileStore, MemoryMailer, type PaymentGateway } from '@pms/domain';
@@ -59,7 +60,7 @@ function client(app: App, initialCookie?: string): TestClient {
 
 export async function createTestApp(
   envOverrides: Record<string, string> = {},
-  deps: { gateway?: PaymentGateway } = {},
+  deps: { gateway?: PaymentGateway; ai?: LlmProvider | null } = {},
 ): Promise<TestApp> {
   const t = await createTestDatabase();
   const env = parseEnv({ ...process.env, NODE_ENV: 'test', DATABASE_URL: t.url, ...envOverrides });
@@ -71,6 +72,8 @@ export async function createTestApp(
     mailer,
     files,
     gateway: deps.gateway,
+    // No language model unless a test brings one: nothing in a test may call a real AI service.
+    ai: deps.ai ?? null,
     logger: false,
   });
   await app.ready();

@@ -1,6 +1,14 @@
 import { randomBytes } from 'node:crypto';
 import { hostname } from 'node:os';
 import { inArray, sql } from 'drizzle-orm';
+import {
+  analysePendingReviews,
+  createProvider,
+  detectUnusualCancellations,
+  expireActions,
+  readBookingEmail,
+  type LlmProvider,
+} from '@pms/ai';
 import type { Env } from '@pms/config';
 import {
   channelConnections,
@@ -19,6 +27,7 @@ import {
   recordHeartbeat,
   registerMessageTransports,
   removeHeartbeat,
+  setEmailFallbackReader,
   requestDueFullSyncs,
   retryPendingRevisions,
   routeOutbox,
@@ -60,6 +69,8 @@ export interface WorkerOptions {
   mailer?: Mailer;
   files?: FileStore;
   gateway?: PaymentGateway;
+  /** Pass null to run without a language model whatever the environment says. */
+  ai?: LlmProvider | null;
   /** Timings, shortened by tests. */
   timings?: Partial<Timings>;
 }
@@ -122,13 +133,26 @@ export class Worker {
     this.env = options.env;
     this.log = options.log;
     this.timings = { ...DEFAULT_TIMINGS, ...options.timings };
+    const ai = options.ai === undefined ? createProvider(this.env) : options.ai;
     this.context = {
       db: this.db,
       env: this.env,
       log: this.log,
       files: options.files ?? new LocalFileStore(this.env.STORAGE_DIR),
+      ai,
     };
     registerMessageTransports(this.db, this.env, options.mailer ?? createMailer(this.env));
+    setEmailFallbackReader(
+      ai
+        ? (message, context) =>
+            readBookingEmail(this.db, ai, context.orgId, {
+              subject: message.subject,
+              text: message.text,
+              channelName: context.channelName,
+              defaultCurrency: context.defaultCurrency,
+            })
+        : null,
+    );
     const onError = (name: string) => (err: unknown) =>
       this.log.error({ err, loop: name }, 'worker loop failed; it will run again');
     this.syncLoop = new Loop(() => this.syncTick(), {
@@ -344,6 +368,19 @@ export class Worker {
       if (run.sent + run.skipped > 0) this.log.info({ ...run }, 'automatic messages');
     });
     await step('online payments', () => this.checkPaymentOrders(now));
+    await step('rate suggestions', () =>
+      enqueueRecurring(this.db, JOBS.pricing, 6 * 3600_000, {}, { now }),
+    );
+    await step('reviews', async () => {
+      await this.queueReviewPulls(now);
+      const read = await analysePendingReviews(this.db, this.context.ai);
+      if (read > 0) this.log.info({ read }, 'read new guest reviews');
+    });
+    await step('unusual cancellations', async () => {
+      const raised = await detectUnusualCancellations(this.db, now);
+      if (raised > 0) this.log.warn({ raised }, 'unusual cancellations');
+    });
+    await step('assistant proposals', () => expireActions(this.db, now));
     await step('pruning', () => enqueueRecurring(this.db, JOBS.prune, DAY_MS, {}, { now }));
     return this.timings.scheduleMs;
   }
@@ -373,6 +410,28 @@ export class Worker {
         Math.min(interval, POLL_RETRY_MS),
         { connectionId: connection.id, via: 'poll' },
         { key: `${JOBS.channelPull}:poll:${connection.id}`, now },
+      );
+    }
+  }
+
+  /** Asks each connection that carries reviews for new ones, a few times a day. */
+  private async queueReviewPulls(now: Date): Promise<void> {
+    const connections = await this.db
+      .select()
+      .from(channelConnections)
+      .where(inArray(channelConnections.status, ['active', 'error']));
+    for (const connection of connections) {
+      try {
+        if (!adapterFor(connection).listReviews) continue;
+      } catch {
+        continue;
+      }
+      await enqueueRecurring(
+        this.db,
+        JOBS.pullReviews,
+        6 * 3600_000,
+        { connectionId: connection.id },
+        { key: `${JOBS.pullReviews}:${connection.id}`, now },
       );
     }
   }

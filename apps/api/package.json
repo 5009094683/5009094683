@@ -19,6 +19,7 @@
     "@fastify/rate-limit": "^11.2.2",
     "@fastify/swagger": "^9.9.3",
     "@fastify/swagger-ui": "^6.1.3",
+    "@pms/ai": "workspace:*",
     "@pms/channels": "workspace:*",
     "@pms/config": "workspace:*",
     "@pms/db": "workspace:*",

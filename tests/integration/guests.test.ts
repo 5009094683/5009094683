@@ -252,3 +252,97 @@ describe('a guest writing on a booking site', () => {
     stack.sim.state.messagingDisabled.delete(live.externalPropertyId);
   });
 });
+
+describe('a guest reviewing a stay on a booking site', () => {
+  it('is read and filed under the booking, and the reply is posted on that site, once', async () => {
+    const ota = guestBooks(
+      stack,
+      live,
+      'BDC',
+      {
+        roomTypeId: std(),
+        ratePlanId: hotel.standard.ratePlan.id,
+        checkIn: day(60),
+        checkOut: day(62),
+      },
+      { guest: { name: 'Kabir', surname: 'Sethi' } },
+    );
+    const reservation = await waitFor('the booking to arrive', () =>
+      reservationFor(stack, ota.code),
+    );
+
+    const posted = stack.sim.state.guestReview({
+      bookingId: ota.id,
+      score: 4,
+      scores: [{ category: 'staff', score: 9 }],
+      content: 'The room was dirty and the wifi was slow.',
+    });
+    interface Review {
+      id: string;
+      externalId: string;
+      sentiment: string | null;
+      topics: { topic: string; sentiment: string }[];
+      replyStatus: string;
+    }
+    const find = async (): Promise<Review | undefined> =>
+      (await stack.admin.get('/reviews'))
+        .json()
+        .reviews.find((r: Review) => r.externalId === posted.id);
+    const review = await waitFor('the review to arrive and be read', async () => {
+      const row = await find();
+      return row?.sentiment ? row : undefined;
+    });
+    expect(review).toMatchObject({
+      channelCode: 'BDC',
+      reservationId: reservation.id,
+      otaReservationCode: ota.code,
+      guestName: 'Kabir Sethi',
+      overallScore: 40,
+      sentiment: 'negative',
+      analysedBy: 'rules',
+      reply: null,
+      replyStatus: 'none',
+    });
+    expect(review.topics).toEqual(
+      expect.arrayContaining([
+        { topic: 'cleanliness', sentiment: 'negative' },
+        { topic: 'wifi', sentiment: 'negative' },
+        { topic: 'staff', sentiment: 'positive' },
+      ]),
+    );
+    const insights = (await stack.admin.get('/reviews/insights')).json();
+    expect(insights).toMatchObject({ count: 1, averageScore: 4, unanswered: 1 });
+
+    const text = 'Dear Kabir, we are sorry about the room and have spoken to the team.';
+    const reply = await stack.admin.post(`/reviews/${review.id}/reply`, { text });
+    expect(reply.statusCode).toBe(200);
+    await waitFor(
+      'the reply to reach the booking site',
+      () => stack.sim.state.reviews.get(posted.id)?.reply === text,
+    );
+    await waitFor('the review to show as answered', async () => {
+      return (await find())?.replyStatus === 'sent';
+    });
+    // Booking sites take one reply per review.
+    const again = await stack.admin.post(`/reviews/${review.id}/reply`, { text: 'One more thing' });
+    expect(again.statusCode).toBe(409);
+    expect(stack.sim.state.reviews.get(posted.id)?.reply).toBe(text);
+    expect((await stack.admin.get('/reviews/insights')).json().unanswered).toBe(0);
+
+    // A review nobody announced is found when staff ask for the latest.
+    const quiet = stack.sim.state.guestReview({
+      propertyId: live.externalPropertyId,
+      channel: 'ABB',
+      score: 10,
+      content: 'Wonderful stay, spotless villa.',
+      guestName: 'Asha',
+      silent: true,
+    });
+    const refreshed = await stack.admin.post(`/properties/${hotel.property.id}/reviews/refresh`);
+    expect(refreshed.statusCode).toBe(202);
+    await waitFor('the unannounced review', async () => {
+      const rows = (await stack.admin.get('/reviews?sentiment=positive')).json().reviews;
+      return rows.some((r: Review) => r.externalId === quiet.id);
+    });
+  });
+});

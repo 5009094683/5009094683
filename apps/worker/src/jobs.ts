@@ -1,13 +1,16 @@
 import type { Env } from '@pms/config';
 import type { Database } from '@pms/db';
+import { generateAllRecommendations, type LlmProvider } from '@pms/ai';
 import {
   CHANNEL_JOBS,
   checkDrift,
   importBookings,
   pruneSyncHistory,
   pullConnection,
+  pullReviews,
   pullThread,
   queueStaleThreads,
+  sendReviewReply,
 } from '@pms/channels';
 import {
   deliverMessage,
@@ -24,6 +27,8 @@ export interface JobContext {
   env: Env;
   log: Logger;
   files: FileStore;
+  /** The language model, or null: features then use their built-in rules. */
+  ai: LlmProvider | null;
 }
 
 /**
@@ -57,6 +62,9 @@ export const JOBS = {
   importBookings: CHANNEL_JOBS.importBookings,
   pullMessages: CHANNEL_JOBS.pullMessages,
   sendMessage: MESSAGE_JOBS.send,
+  pullReviews: CHANNEL_JOBS.pullReviews,
+  replyReview: CHANNEL_JOBS.replyReview,
+  pricing: 'pricing.recommend',
   prune: 'maintenance.prune',
 } as const;
 
@@ -90,6 +98,27 @@ registerJobHandler(JOBS.channelPull, async (payload, { db, log }) => {
 registerJobHandler(JOBS.pullMessages, async (payload, { db }) => {
   const result = await pullThread(db, String(payload.connectionId), String(payload.threadId));
   return { ...result };
+});
+
+registerJobHandler(JOBS.pullReviews, async (payload, { db }) => {
+  const result = await pullReviews(db, String(payload.connectionId));
+  return { ...result };
+});
+
+registerJobHandler(JOBS.replyReview, async (payload, { db }, job) => {
+  const outcome = await sendReviewReply(db, String(payload.reviewId), {
+    finalAttempt: job.attempts >= job.maxAttempts,
+  });
+  return { outcome };
+});
+
+registerJobHandler(JOBS.pricing, async (_payload, { db }) => {
+  const runs = await generateAllRecommendations(db);
+  return {
+    properties: runs.length,
+    created: runs.reduce((sum, r) => sum + r.created, 0),
+    autoApplied: runs.reduce((sum, r) => sum + r.autoApplied, 0),
+  };
 });
 
 registerJobHandler(JOBS.sendMessage, async (payload, { db }, job) => {

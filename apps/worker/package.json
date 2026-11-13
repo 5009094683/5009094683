@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@pms/ai": "workspace:*",
     "@pms/channels": "workspace:*",
     "@pms/config": "workspace:*",
     "@pms/db": "workspace:*",

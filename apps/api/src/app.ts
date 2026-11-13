@@ -12,11 +12,13 @@ import {
 } from 'fastify-type-provider-zod';
 import { sql } from 'drizzle-orm';
 import type { Env } from '@pms/config';
+import { createProvider, readBookingEmail, type LlmProvider } from '@pms/ai';
 import type { Database, DbHandle } from '@pms/db';
 import {
   checkWorkerLiveness,
   registerDefaultAdapters,
   registerMessageTransports,
+  setEmailFallbackReader,
 } from '@pms/channels';
 import {
   createGateway,
@@ -29,6 +31,7 @@ import {
 import { registerAuth } from './plugins/auth';
 import { registerErrorHandling } from './plugins/errors';
 import { registerLive } from './plugins/live';
+import { aiRoutes } from './routes/ai';
 import { auditRoutes } from './routes/audit';
 import { authRoutes } from './routes/auth';
 import { calendarRoutes } from './routes/calendar';
@@ -53,6 +56,8 @@ declare module 'fastify' {
     files: FileStore;
     /** The payment gateway in use. Fails with "not configured" when its keys are missing. */
     gateway(): PaymentGateway;
+    /** The language model in use, or null: the AI features then answer from their built-in rules. */
+    ai: LlmProvider | null;
   }
 }
 
@@ -62,6 +67,8 @@ export interface AppDeps {
   mailer?: Mailer;
   files?: FileStore;
   gateway?: PaymentGateway;
+  /** Pass null to run without a language model whatever the environment says. */
+  ai?: LlmProvider | null;
   /** Pino options, or false to disable logging (tests). */
   logger?: boolean | Record<string, unknown>;
 }
@@ -88,6 +95,20 @@ export async function buildApp(deps: AppDeps): Promise<App> {
   let gateway = deps.gateway;
   app.decorate('gateway', () => (gateway ??= createGateway(deps.env, deps.handle.db)));
   registerMessageTransports(deps.handle.db, deps.env, app.mailer);
+  const ai = deps.ai === undefined ? createProvider(deps.env) : deps.ai;
+  app.decorate('ai', ai);
+  // Booking emails the pattern reader cannot make out get a second reading when a model is there.
+  setEmailFallbackReader(
+    ai
+      ? (message, context) =>
+          readBookingEmail(deps.handle.db, ai, context.orgId, {
+            subject: message.subject,
+            text: message.text,
+            channelName: context.channelName,
+            defaultCurrency: context.defaultCurrency,
+          })
+      : null,
+  );
 
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
@@ -153,6 +174,7 @@ export async function buildApp(deps: AppDeps): Promise<App> {
   await typed.register(guestRoutes);
   await typed.register(operationsRoutes);
   await typed.register(engagementRoutes);
+  await typed.register(aiRoutes);
   await typed.register(publicRoutes);
   await typed.register(channelRoutes);
   await typed.register(icalRoutes);
