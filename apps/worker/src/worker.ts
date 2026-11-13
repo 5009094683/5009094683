@@ -39,6 +39,7 @@ import {
   createGateway,
   createMailer,
   deliverDueWebhooks,
+  emailNewAlerts,
   enqueueJob,
   enqueueRecurring,
   expireHolds,
@@ -434,6 +435,11 @@ export class Worker {
       if (raised > 0) this.log.warn({ raised }, 'unusual cancellations');
     });
     await step('assistant proposals', () => expireActions(this.db, now));
+    await step('alert emails', async () => {
+      const sent = await emailNewAlerts(this.db, this.mailer, { webUrl: this.env.WEB_URL, now });
+      if (sent > 0) this.log.info({ sent }, 'alerts emailed');
+    });
+    await step('retention', () => enqueueRecurring(this.db, JOBS.retention, DAY_MS, {}, { now }));
     await step('scheduled reports', async () => {
       const run = await runDueReportSchedules(this.db, this.mailer, now);
       if (run.sent + run.failed > 0) this.log.info({ ...run }, 'scheduled reports');

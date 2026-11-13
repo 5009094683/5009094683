@@ -13,6 +13,7 @@ import {
   sendReviewReply,
 } from '@pms/channels';
 import {
+  applyRetention,
   deliverMessage,
   draftDueOwnerStatements,
   MESSAGE_JOBS,
@@ -68,6 +69,7 @@ export const JOBS = {
   replyReview: CHANNEL_JOBS.replyReview,
   pricing: 'pricing.recommend',
   ownerStatements: 'owners.draft_statements',
+  retention: 'privacy.retention',
   prune: 'maintenance.prune',
 } as const;
 
@@ -126,6 +128,10 @@ registerJobHandler(JOBS.pricing, async (_payload, { db }) => {
 
 registerJobHandler(JOBS.ownerStatements, async (_payload, { db }) => {
   return draftDueOwnerStatements(db);
+});
+
+registerJobHandler(JOBS.retention, async (_payload, { db }) => {
+  return { ...(await applyRetention(db)) };
 });
 
 registerJobHandler(JOBS.sendMessage, async (payload, { db }, job) => {

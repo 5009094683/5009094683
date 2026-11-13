@@ -121,6 +121,12 @@ const schema = z.object({
 
   BACKUP_DIR: z.string().default('./var/backups'),
 
+  /**
+   * Bearer token a monitoring system presents to read /metrics. Without it the
+   * metrics are not served at all.
+   */
+  METRICS_TOKEN: optionalString,
+
   /** Requests one API key may make in a minute, on each API server. */
   API_KEY_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).max(100_000).default(600),
   /**

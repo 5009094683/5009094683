@@ -39,6 +39,7 @@ import { channelRoutes, channelWebhookRoutes, icalRoutes, mailboxRoutes } from '
 import { engagementRoutes } from './routes/engagement';
 import { guestRoutes } from './routes/guests';
 import { integrationRoutes } from './routes/integrations';
+import { metricsRoutes } from './routes/metrics';
 import { operationsRoutes } from './routes/operations';
 import { ownerRoutes } from './routes/owners';
 import { orgRoutes } from './routes/org';
@@ -164,6 +165,7 @@ export async function buildApp(deps: AppDeps): Promise<App> {
   });
 
   await registerLive(app);
+  await metricsRoutes(app);
 
   const typed = app.withTypeProvider<ZodTypeProvider>();
   await typed.register(authRoutes);
