@@ -29,6 +29,20 @@
       "when": 1794580168947,
       "tag": "0003_sync_engine",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794585235626,
+      "tag": "0004_operations",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794586038301,
+      "tag": "0005_folio_line_order",
+      "breakpoints": true
     }
   ]
 }

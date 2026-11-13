@@ -102,6 +102,68 @@ export type JobStatus = (typeof JOB_STATUSES)[number];
 export const ACTOR_TYPES = ['user', 'system', 'channel', 'api_key', 'copilot', 'guest'] as const;
 export type ActorType = (typeof ACTOR_TYPES)[number];
 
+export const COMPANY_KINDS = ['corporate', 'travel_agent'] as const;
+export type CompanyKind = (typeof COMPANY_KINDS)[number];
+
+export const FOLIO_KINDS = ['guest', 'company', 'house'] as const;
+export type FolioKind = (typeof FOLIO_KINDS)[number];
+
+export const FOLIO_STATUSES = ['open', 'closed'] as const;
+export type FolioStatus = (typeof FOLIO_STATUSES)[number];
+
+/** What a folio line is. Charges are positive amounts; payments, discounts and refunds of charges negative. */
+export const FOLIO_LINE_KINDS = [
+  'room',
+  'food',
+  'service',
+  'extra',
+  'fee',
+  'discount',
+  'payment',
+  'refund',
+  'transfer',
+] as const;
+export type FolioLineKind = (typeof FOLIO_LINE_KINDS)[number];
+
+/** What a tax rule applies to. A charge is taxed by the rule for its category. */
+export const TAX_CATEGORIES = ['room', 'food', 'service', 'extra', 'fee'] as const;
+export type TaxCategory = (typeof TAX_CATEGORIES)[number];
+
+export const PAYMENT_METHODS = [
+  'cash',
+  'card',
+  'upi',
+  'bank_transfer',
+  'online',
+  'channel',
+  'other',
+] as const;
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+export const PAYMENT_STATUSES = ['pending', 'captured', 'failed', 'voided'] as const;
+export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
+
+export const INVOICE_TYPES = ['invoice', 'credit_note'] as const;
+export type InvoiceType = (typeof INVOICE_TYPES)[number];
+
+export const HOUSEKEEPING_TASK_KINDS = [
+  'departure',
+  'stayover',
+  'touch_up',
+  'deep_clean',
+  'inspection',
+] as const;
+export type HousekeepingTaskKind = (typeof HOUSEKEEPING_TASK_KINDS)[number];
+
+export const TASK_STATUSES = ['pending', 'in_progress', 'done', 'skipped'] as const;
+export type TaskStatus = (typeof TASK_STATUSES)[number];
+
+export const MAINTENANCE_STATUSES = ['open', 'in_progress', 'resolved', 'closed'] as const;
+export type MaintenanceStatus = (typeof MAINTENANCE_STATUSES)[number];
+
+export const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
+export type Priority = (typeof PRIORITIES)[number];
+
 /** SQL fragment helper: `'a','b','c'` for CHECK constraints. */
 export function sqlList(values: readonly string[]): string {
   return values.map((v) => `'${v}'`).join(',');

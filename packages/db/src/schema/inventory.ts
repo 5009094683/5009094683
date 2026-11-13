@@ -28,6 +28,14 @@ import {
 import { organizations } from './identity';
 
 export interface PropertySettings {
+  /** Local hour (0-23) at which the night audit runs by itself. Absent: 3. Null turns the automatic run off. */
+  nightAuditHour?: number | null;
+  /** Guests who have not arrived by the night audit are marked no-show by it. Absent: false (they are only listed). */
+  autoNoShow?: boolean;
+  /** Up to four letters or digits that start every invoice number. Absent: taken from the property code. */
+  invoicePrefix?: string;
+  /** India GST: restaurant and room service are taxed at the higher rate at "specified premises". */
+  specifiedPremises?: boolean;
   /** Minutes a website booking holds inventory while the guest pays. */
   bookingHoldMinutes?: number;
   bookingEngineEnabled?: boolean;
@@ -79,6 +87,11 @@ export const properties = pgTable(
     checkOutTime: text('check_out_time').notNull().default('11:00'),
     /** How far ahead availability is kept and pushed to channels. */
     inventoryHorizonDays: integer('inventory_horizon_days').notNull().default(540),
+    /**
+     * The hotel day in progress: charges are dated to it, and the night audit
+     * closes it and opens the next. Null until the first audit; today is used meanwhile.
+     */
+    businessDate: date('business_date', { mode: 'string' }),
     settings: jsonb('settings').$type<PropertySettings>().notNull().default(emptyJson),
     active: boolean('active').notNull().default(true),
     createdAt: createdAt(),

@@ -23,6 +23,7 @@ import { authRoutes } from './routes/auth';
 import { calendarRoutes } from './routes/calendar';
 import { channelRoutes, channelWebhookRoutes, icalRoutes, mailboxRoutes } from './routes/channels';
 import { guestRoutes } from './routes/guests';
+import { operationsRoutes } from './routes/operations';
 import { orgRoutes } from './routes/org';
 import { propertyRoutes } from './routes/properties';
 import { reservationRoutes } from './routes/reservations';
@@ -127,6 +128,7 @@ export async function buildApp(deps: AppDeps): Promise<App> {
   await typed.register(reservationRoutes);
   await typed.register(calendarRoutes);
   await typed.register(guestRoutes);
+  await typed.register(operationsRoutes);
   await typed.register(channelRoutes);
   await typed.register(icalRoutes);
   await typed.register(mailboxRoutes);

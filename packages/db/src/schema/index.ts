@@ -4,3 +4,4 @@ export * from './inventory';
 export * from './reservations';
 export * from './channels';
 export * from './system';
+export * from './operations';

@@ -324,7 +324,7 @@ export function deriveReservationStatus(roomStatuses: ReservationStatus[]): Rese
 }
 
 /** Rewrites the reservation's summary columns from its rooms. */
-async function syncReservationSummary(
+export async function syncReservationSummary(
   tx: Transaction,
   reservationId: string,
 ): Promise<ReservationRow> {
@@ -746,7 +746,7 @@ export async function createReservation(
 // ---------------------------------------------------------------------------
 // Changing
 
-async function lockReservation(
+export async function lockReservation(
   tx: Transaction,
   orgId: string,
   reservationId: string,

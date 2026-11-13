@@ -30,6 +30,7 @@ import {
   enqueueRecurring,
   expireHolds,
   failJob,
+  runDueNightAudits,
   systemActor,
   type JobRow,
 } from '@pms/domain';
@@ -306,6 +307,17 @@ export class Worker {
     });
     await step('sync lag', () => checkSyncLag(this.db, now));
     await step('expired holds', () => this.expireHolds(now));
+    await step('night audit', async () => {
+      const closed = await runDueNightAudits(
+        this.db,
+        (orgId) => systemActor(orgId, 'night-audit'),
+        now,
+      );
+      for (const audit of closed) {
+        if (audit.ok) this.log.info({ ...audit }, 'night audit completed');
+        else this.log.error({ ...audit }, 'night audit failed');
+      }
+    });
     await step('pruning', () => enqueueRecurring(this.db, JOBS.prune, DAY_MS, {}, { now }));
     return this.timings.scheduleMs;
   }
