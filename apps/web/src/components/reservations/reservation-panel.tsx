@@ -29,6 +29,9 @@ import {
   STATUS_TONES,
 } from '@/components/ui/misc';
 import { useToast } from '@/components/ui/toast';
+import { GuestAccessSection } from '@/components/engagement/guest-access';
+import { PaymentRequestsSection } from '@/components/engagement/payment-requests';
+import { SendMessageSection } from '@/components/engagement/send-message';
 import { CompanyRow } from '@/components/folio/company-row';
 import { FolioSection } from '@/components/folio/folio-section';
 import { StayActions } from '@/components/frontdesk/stay-actions';
@@ -715,6 +718,26 @@ export function ReservationPanel({
         reservation={reservation}
         frame={(bill) => <Section title="Bill">{bill}</Section>}
         onChanged={apply}
+      />
+
+      <PaymentRequestsSection
+        reservation={reservation}
+        frame={(requests, action) => (
+          <Section title="Payment requests" action={action}>
+            {requests}
+          </Section>
+        )}
+        onChanged={apply}
+      />
+
+      <GuestAccessSection
+        reservation={reservation}
+        frame={(content) => <Section title="Guest link and online check-in">{content}</Section>}
+      />
+
+      <SendMessageSection
+        reservation={reservation}
+        frame={(content) => <Section title="Send a message">{content}</Section>}
       />
 
       <Section title="Requests and notes">
