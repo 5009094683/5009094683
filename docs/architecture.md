@@ -111,7 +111,7 @@ refusing it would only hide a guest who is going to arrive.
 - **The webhook is only a nudge.** Nothing in its body is trusted or used. The
   booking is fetched from the channel manager's feed, which is the record. A
   webhook that never arrives costs nothing: the feed is also polled every
-  fifteen minutes, and "Fetch now" does it on demand.
+  fifteen minutes, and "Fetch bookings now" does it on demand.
 - **Each revision is applied once.** A revision is stored under its own id
   before it is applied; delivered twice, it is recognised. Revisions of one
   booking are applied in the order they happened; one that is older than what

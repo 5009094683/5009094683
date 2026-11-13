@@ -59,7 +59,7 @@ Every error has the same shape:
 {
   "error": {
     "code": "no_availability",
-    "message": "No Deluxe Room is free on 12 Dec",
+    "message": "No availability on 2026-12-12",
     "requestId": "req-1a2b"
   }
 }
