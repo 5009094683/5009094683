@@ -22,6 +22,7 @@ import { useAuth } from '@/lib/auth';
 import { STATUS_LABELS, formatDate, formatMoney, formatStay, plural } from '@/lib/format';
 import { useDebounced } from '@/lib/hooks';
 import type { Guest, Reservation } from '@/lib/types';
+import { PrivacyActions } from './privacy-actions';
 
 function GuestPanel({ guestId, onChanged }: { guestId: string; onChanged: () => void }) {
   const auth = useAuth();
@@ -39,7 +40,7 @@ function GuestPanel({ guestId, onChanged }: { guestId: string; onChanged: () => 
   if (error) return <ErrorState error={error} onRetry={() => void mutate()} />;
   if (!data) return <PageLoading />;
   const { guest, stays } = data;
-  const canWrite = auth.can('guests.write');
+  const canWrite = auth.can('guests.write') && !guest.anonymizedAt;
   const canSeeId = auth.can('guests.pii');
 
   const startEdit = () => {
@@ -315,6 +316,13 @@ function GuestPanel({ guestId, onChanged }: { guestId: string; onChanged: () => 
           </ul>
         )}
       </div>
+      <PrivacyActions
+        guest={guest}
+        onErased={async () => {
+          await mutate();
+          onChanged();
+        }}
+      />
       <p className="text-xs text-ink-faint">
         Guest since {formatDate(guest.createdAt.slice(0, 10))}
       </p>
