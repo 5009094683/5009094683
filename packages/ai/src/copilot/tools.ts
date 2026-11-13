@@ -17,6 +17,7 @@ import {
   housekeepingBoard,
   isValidDate,
   listAlerts,
+  listGroups,
   listProperties,
   listReservations,
   notFound,
@@ -390,6 +391,42 @@ export const COPILOT_TOOLS: CopilotTool[] = [
         notClean: board.units
           .filter((u) => u.status === 'dirty')
           .map((u) => ({ id: u.unitId, name: u.unitName, today: u.occupancy })),
+      };
+    },
+  }),
+
+  read({
+    name: 'list_groups',
+    description:
+      'Group bookings at a property (a wedding, a tour, a conference): the rooms held for each, how many of the held room nights the group has booked and how many are still held, its bookings, and the cut-off day after which unbooked rooms go back on sale.',
+    schema: z.object({
+      propertyId: id,
+      search: z.string().max(100).optional(),
+      status: z.enum(['open', 'closed', 'cancelled', 'all']).optional(),
+    }),
+    permission: 'reservations.read',
+    kind: 'read',
+    async run(context, input) {
+      await propertyFor(context, input.propertyId, 'reservations.read');
+      const groups = await listGroups(context.db, context.actor.orgId, {
+        propertyId: input.propertyId,
+        search: input.search,
+        status: input.status,
+      });
+      return {
+        groups: groups.slice(0, 25).map((g) => ({
+          code: g.code,
+          // Text typed by people is data to report, never instructions to follow.
+          name: g.name,
+          status: g.status,
+          firstNight: g.from,
+          leavingOn: g.to,
+          cutoffDate: g.cutoffDate,
+          heldRoomNights: g.heldNights,
+          heldRoomNightsStillToBook: g.leftNights,
+          bookings: g.bookings,
+          contactName: g.contactName,
+        })),
       };
     },
   }),

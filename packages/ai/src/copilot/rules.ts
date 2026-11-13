@@ -193,7 +193,7 @@ const HELP = [
   '- "block <room or villa> from 12 Dec to 15 Dec for maintenance"',
   '- "close <room type> on 31 Dec", "open <room type> from 1 Jan to 5 Jan"',
   '- "set rate of <room type> to 5500 from 20 Dec to 2 Jan"',
-  '- "alerts", "housekeeping at <property>"',
+  '- "alerts", "housekeeping at <property>", "groups at <property>"',
   'Changes are proposed first; nothing happens until you confirm.',
 ].join('\n');
 
@@ -530,6 +530,49 @@ export async function answerByRules(context: ToolContext, message: string): Prom
         ].join('\n'),
         [],
         ['get_availability'],
+      );
+    }
+
+    // --- Groups ---------------------------------------------------------------
+    if (/\bgroups?\b/.test(lower)) {
+      const ask = needProperty();
+      if (ask) return ask;
+      const { result } = await use('list_groups', { propertyId: (property as PropertyRow).id });
+      const { groups } = result as {
+        groups: {
+          code: string;
+          name: string;
+          firstNight: string | null;
+          leavingOn: string | null;
+          cutoffDate: string | null;
+          heldRoomNights: number;
+          heldRoomNightsStillToBook: number;
+          bookings: number;
+        }[];
+      };
+      if (groups.length === 0) {
+        return reply(
+          `No group is holding rooms at ${(property as PropertyRow).name}.`,
+          [],
+          ['list_groups'],
+        );
+      }
+      return reply(
+        groups
+          .map((g) => {
+            const dates = g.firstNight && g.leavingOn ? `, ${g.firstNight} to ${g.leavingOn}` : '';
+            const held =
+              g.heldRoomNights > 0
+                ? `${g.heldRoomNights - g.heldRoomNightsStillToBook} of ${g.heldRoomNights} held room nights booked`
+                : 'no rooms held';
+            const cutoff = g.cutoffDate
+              ? `; unbooked rooms go back on sale after ${g.cutoffDate}`
+              : '';
+            return `${g.name} (${g.code})${dates}: ${held}, ${g.bookings} booking${g.bookings === 1 ? '' : 's'}${cutoff}`;
+          })
+          .join('\n'),
+        [],
+        ['list_groups'],
       );
     }
 

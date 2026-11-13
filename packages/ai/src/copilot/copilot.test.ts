@@ -10,7 +10,14 @@ import {
   type Role,
 } from '@pms/db';
 import { createTestDatabase, type TestDatabase } from '@pms/db/testing';
-import { addDays, createReservation, getAvailability, todayIn, type Actor } from '@pms/domain';
+import {
+  addDays,
+  createGroup,
+  createReservation,
+  getAvailability,
+  todayIn,
+  type Actor,
+} from '@pms/domain';
 import {
   createTestHotel,
   createTestOrg,
@@ -170,6 +177,42 @@ describe('the assistant without a language model', () => {
     expect((await t.db.select().from(aiActions)).map((a) => a.id)).toEqual([
       waiting.actions[0]!.id,
     ]);
+  });
+
+  it('says how the groups at a property are getting on', async () => {
+    const nothing = await ask(admin, `groups at ${hotel.property.name}`);
+    expect(nothing.reply).toBe(`No group is holding rooms at ${hotel.property.name}.`);
+    const group = await createGroup(t.db, admin, {
+      propertyId: hotel.property.id,
+      name: 'Mehta wedding',
+      cutoffDate: day(20),
+      holds: [{ roomTypeId: hotel.standard.roomType.id, from: day(40), to: day(42), quantity: 2 }],
+    });
+    await createReservation(t.db, admin, {
+      propertyId: hotel.property.id,
+      source: 'phone',
+      guest: { firstName: 'Rohan', lastName: 'Mehta' },
+      groupId: group.id,
+      rooms: [
+        {
+          roomTypeId: hotel.standard.roomType.id,
+          ratePlanId: hotel.standard.ratePlan.id,
+          checkIn: day(40),
+          checkOut: day(42),
+          adults: 2,
+        },
+      ],
+    });
+    const answer = await ask(admin, `groups at ${hotel.property.name}`);
+    expect(answer.reply).toBe(
+      `Mehta wedding (${group.code}), ${day(40)} to ${day(42)}: 2 of 4 held room nights booked, 1 booking; unbooked rooms go back on sale after ${day(20)}`,
+    );
+    expect(answer.actions).toEqual([]);
+    // Someone who may not see reservations is not told about groups either.
+    const fixer = await staff('maintenance', hotel.property.id);
+    expect((await ask(fixer, `groups at ${hotel.property.name}`)).reply).toMatch(
+      /no tool called list_groups available/,
+    );
   });
 
   it('never goes beyond what the person asking may do', async () => {
