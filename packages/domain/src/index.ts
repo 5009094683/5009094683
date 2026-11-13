@@ -51,3 +51,5 @@ export * from './owners';
 export * from './report-exports';
 export * from './api-keys';
 export * from './webhooks';
+export * from './privacy';
+export * from './alert-emails';

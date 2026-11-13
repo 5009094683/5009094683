@@ -3,7 +3,7 @@ import { guests, type DbOrTx } from '@pms/db';
 import { diff, writeAudit } from './audit';
 import type { Actor } from './context';
 import { decryptSecret, encryptSecret } from './crypto';
-import { notFound, validationError } from './errors';
+import { invalidState, notFound, validationError } from './errors';
 
 export type GuestRow = typeof guests.$inferSelect;
 
@@ -187,6 +187,9 @@ export async function updateGuest(
     .from(guests)
     .where(and(eq(guests.id, guestId), eq(guests.orgId, actor.orgId)));
   if (!before) throw notFound('Guest', guestId);
+  if (before.anonymizedAt) {
+    throw invalidState('This guest\u2019s details have been erased and cannot be filled in again');
+  }
   const { idNumber, ...rest } = patch;
   const next: Partial<typeof guests.$inferInsert> = { ...rest };
   if (patch.email !== undefined) next.email = normalizeEmail(patch.email);

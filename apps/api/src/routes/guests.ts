@@ -4,6 +4,10 @@ import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { guests } from '@pms/db';
 import {
+  anonymiseGuest,
+  canAcrossOrganisation,
+  exportGuestData,
+  forbidden,
   guestView,
   listReservations,
   notFound,
@@ -97,6 +101,46 @@ export async function guestRoutes(app: FastifyInstance): Promise<void> {
     async (req) => {
       const actor = authorize(req, 'guests.pii');
       return { idNumber: await revealGuestIdNumber(app.db, actor, req.params.id) };
+    },
+  );
+
+  r.get(
+    '/guests/:id/export',
+    {
+      schema: {
+        tags: ['guests'],
+        summary:
+          'Everything held about a guest, for a guest who asks for a copy of their data (recorded in the audit log)',
+        params: idParams,
+      },
+    },
+    async (req, reply) => {
+      const actor = authorize(req, 'guests.pii');
+      // A guest's stays and messages span properties, so the copy is for roles that do too.
+      if (!canAcrossOrganisation(actor.grants, 'guests.pii')) throw forbidden();
+      const data = await exportGuestData(app.db, actor, req.params.id);
+      return reply
+        .header('content-disposition', `attachment; filename="guest-data-${req.params.id}.json"`)
+        .header('cache-control', 'private, no-store')
+        .send(data);
+    },
+  );
+
+  r.post(
+    '/guests/:id/erase',
+    {
+      schema: {
+        tags: ['guests'],
+        summary:
+          'Erase a guest\u2019s personal details. Their stays remain, without a name. Cannot be undone.',
+        params: idParams,
+      },
+    },
+    async (req, reply) => {
+      const actor = authorize(req, 'property.manage');
+      if (!canAcrossOrganisation(actor.grants, 'property.manage')) throw forbidden();
+      await anonymiseGuest(app.db, actor, req.params.id);
+      return reply.status(204).send();
     },
   );
 }
