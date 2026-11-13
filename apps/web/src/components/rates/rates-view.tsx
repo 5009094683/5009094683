@@ -1,550 +1,35 @@
 'use client';
 
 import { ChevronLeft, ChevronRight, Link2, SlidersHorizontal, Tags } from 'lucide-react';
-import { Fragment, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import useSWR from 'swr';
-import { addDays, dayOfWeek, eachDate, isValidDate, todayIn } from '@pms/domain/shared';
+import { addDays, dayOfWeek, eachDate, todayIn } from '@pms/domain/shared';
 import { RateSuggestions } from '@/components/pricing/rate-suggestions';
 import { Button } from '@/components/ui/button';
-import { Dialog } from '@/components/ui/dialog';
-import { Checkbox, Field, Input, Segmented, Select } from '@/components/ui/field';
-import {
-  EmptyState,
-  ErrorState,
-  Notice,
-  PageLoading,
-  Popover,
-  Tooltip,
-} from '@/components/ui/misc';
+import { Input, Segmented, Select } from '@/components/ui/field';
+import { EmptyState, ErrorState, PageLoading, Tooltip } from '@/components/ui/misc';
 import { useToast } from '@/components/ui/toast';
 import { api, errorMessage, query } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
-import {
-  formatAmount,
-  formatMonth,
-  formatWeekday,
-  formatWeekdayName,
-  fromMinor,
-  plural,
-  toMinor,
-} from '@/lib/format';
+import { formatMonth, formatWeekdayName, plural } from '@/lib/format';
 import { useCurrentProperty, usePropertyDetail, useStoredState } from '@/lib/hooks';
 import { useLive } from '@/lib/live';
-import type { Availability, PropertyDetail, RateDay, RatePlan } from '@/lib/types';
+import type { Availability, RateDay, RatePlan } from '@/lib/types';
+import { BulkDialog } from './bulk-dialog';
+import {
+  addChanges,
+  batchBody,
+  parentRatePending,
+  withPending,
+  type NewChange,
+  type RateChangeBody,
+} from './pending';
+import { PendingBar, type PlanName } from './pending-bar';
+import { CELL, RateCell, RestrictionCell } from './rate-cells';
+import { usePendingChanges } from './use-pending';
 
-const CELL = 58;
 const LABEL = 220;
-const WEEKDAYS = [
-  { value: 1, label: 'Mon' },
-  { value: 2, label: 'Tue' },
-  { value: 3, label: 'Wed' },
-  { value: 4, label: 'Thu' },
-  { value: 5, label: 'Fri' },
-  { value: 6, label: 'Sat' },
-  { value: 0, label: 'Sun' },
-];
-
-interface RateChangeBody {
-  rate?: number | null;
-  minStayArrival?: number | null;
-  minStayThrough?: number | null;
-  maxStay?: number | null;
-  closedToArrival?: boolean;
-  closedToDeparture?: boolean;
-  stopSell?: boolean;
-}
-
-/** One editable rate cell. Enter saves and moves right; Escape cancels; clearing the field removes the override. */
-function RateCell({
-  day,
-  currency,
-  editable,
-  onSave,
-}: {
-  day: RateDay;
-  currency: string;
-  editable: boolean;
-  onSave: (rate: number | null) => Promise<void>;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState('');
-  const [saving, setSaving] = useState(false);
-  const cancelled = useRef(false);
-
-  const commit = async (moveNext: boolean, element: HTMLInputElement) => {
-    if (cancelled.current) return;
-    const text = value.trim();
-    const next = text === '' ? null : toMinor(Number(text), currency);
-    setEditing(false);
-    if (next !== null && (!Number.isFinite(next) || next < 0)) return;
-    const unchanged = next === null ? !day.rateOverridden : next === day.rate && day.rateOverridden;
-    if (!unchanged) {
-      setSaving(true);
-      try {
-        await onSave(next);
-      } finally {
-        setSaving(false);
-      }
-    }
-    if (moveNext) {
-      const cell = element.closest('[data-rate-cell]')?.nextElementSibling;
-      (cell?.querySelector('button') as HTMLButtonElement | null)?.click();
-    }
-  };
-
-  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      void commit(true, e.currentTarget);
-    } else if (e.key === 'Escape') {
-      cancelled.current = true;
-      setEditing(false);
-    }
-  };
-
-  return (
-    <div data-rate-cell className="shrink-0 border-r border-line" style={{ width: CELL }}>
-      {editing ? (
-        <input
-          autoFocus
-          type="number"
-          min={0}
-          step="any"
-          inputMode="decimal"
-          value={value}
-          aria-label={`Rate on ${day.date}`}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={onKeyDown}
-          onBlur={(e) => void commit(false, e.currentTarget)}
-          onFocus={(e) => e.currentTarget.select()}
-          className="tabular h-8 w-full bg-brand-50 px-1 text-center text-[13px] outline-2 -outline-offset-2 outline-brand-500"
-        />
-      ) : (
-        <button
-          type="button"
-          disabled={!editable}
-          title={day.rateOverridden ? 'Set for this day' : 'Plan default'}
-          aria-label={`Rate on ${day.date}: ${formatAmount(day.rate, currency)}`}
-          onClick={() => {
-            cancelled.current = false;
-            setValue(String(fromMinor(day.rate, currency)));
-            setEditing(true);
-          }}
-          className={cn(
-            'tabular h-8 w-full text-center text-[13px] transition-colors',
-            editable && 'hover:bg-brand-50',
-            !editable && 'cursor-default',
-            day.rateOverridden ? 'font-semibold text-ink' : 'text-ink-soft',
-            day.stopSell && 'text-ink-faint line-through',
-            saving && 'animate-pulse',
-          )}
-        >
-          {formatAmount(day.rate, currency)}
-        </button>
-      )}
-    </div>
-  );
-}
-
-/** Restrictions for one day, edited in a popover. */
-function RestrictionCell({
-  day,
-  planMinStay,
-  editable,
-  onSave,
-}: {
-  day: RateDay;
-  planMinStay: number;
-  editable: boolean;
-  onSave: (change: RateChangeBody) => Promise<void>;
-}) {
-  const [open, setOpen] = useState(false);
-  const [minStay, setMinStay] = useState('');
-  const [stopSell, setStopSell] = useState(false);
-  const [cta, setCta] = useState(false);
-  const [ctd, setCtd] = useState(false);
-  const [busy, setBusy] = useState(false);
-
-  const flags = [
-    day.stopSell && { text: 'Stop', tone: 'bg-danger-100 text-danger-700', title: 'Not on sale' },
-    day.closedToArrival && {
-      text: 'CTA',
-      tone: 'bg-warning-100 text-warning-700',
-      title: 'Closed to arrival',
-    },
-    day.closedToDeparture && {
-      text: 'CTD',
-      tone: 'bg-warning-100 text-warning-700',
-      title: 'Closed to departure',
-    },
-    day.minStayArrival > 1 && {
-      text: `${day.minStayArrival}n`,
-      tone: 'bg-info-100 text-info-700',
-      title: `Minimum stay ${day.minStayArrival} nights`,
-    },
-  ].filter(Boolean) as { text: string; tone: string; title: string }[];
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    const nights = minStay.trim() === '' ? null : Math.max(1, Math.round(Number(minStay)));
-    try {
-      await onSave({
-        // The plan default needs no override: store null so the day follows the plan again.
-        minStayArrival: nights === planMinStay ? null : nights,
-        minStayThrough: nights === planMinStay ? null : nights,
-        stopSell,
-        closedToArrival: cta,
-        closedToDeparture: ctd,
-      });
-      setOpen(false);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const trigger = (
-    <button
-      type="button"
-      disabled={!editable}
-      aria-label={`Restrictions on ${day.date}${flags.length ? `: ${flags.map((f) => f.title).join(', ')}` : ': none'}`}
-      className={cn(
-        'flex h-7 w-full items-center justify-center gap-0.5 px-0.5',
-        editable ? 'hover:bg-brand-50' : 'cursor-default',
-      )}
-    >
-      {flags.length === 0 ? (
-        <span className="text-[11px] text-line-strong">·</span>
-      ) : (
-        flags.slice(0, 2).map((flag) => (
-          <span
-            key={flag.text}
-            title={flag.title}
-            className={cn('rounded px-1 text-[10px] leading-4 font-medium', flag.tone)}
-          >
-            {flag.text}
-          </span>
-        ))
-      )}
-    </button>
-  );
-
-  return (
-    <div className="shrink-0 border-r border-line" style={{ width: CELL }}>
-      {editable ? (
-        <Popover
-          open={open}
-          onOpenChange={(next) => {
-            if (next) {
-              setMinStay(String(day.minStayArrival));
-              setStopSell(day.stopSell);
-              setCta(day.closedToArrival);
-              setCtd(day.closedToDeparture);
-            }
-            setOpen(next);
-          }}
-          trigger={trigger}
-          className="w-64"
-        >
-          <form onSubmit={submit} className="flex flex-col gap-3">
-            <p className="text-sm font-medium text-ink">{formatWeekday(day.date)}</p>
-            <Field label="Minimum stay (nights)">
-              {(props) => (
-                <Input
-                  {...props}
-                  type="number"
-                  min={1}
-                  max={365}
-                  value={minStay}
-                  onChange={(e) => setMinStay(e.target.value)}
-                />
-              )}
-            </Field>
-            <Checkbox
-              label="Stop sell (not on sale)"
-              checked={stopSell}
-              onChange={(e) => setStopSell(e.target.checked)}
-            />
-            <Checkbox
-              label="Closed to arrival"
-              checked={cta}
-              onChange={(e) => setCta(e.target.checked)}
-            />
-            <Checkbox
-              label="Closed to departure"
-              checked={ctd}
-              onChange={(e) => setCtd(e.target.checked)}
-            />
-            <div className="flex justify-end gap-2">
-              <Button size="sm" onClick={() => setOpen(false)}>
-                Cancel
-              </Button>
-              <Button size="sm" type="submit" variant="primary" loading={busy}>
-                Save
-              </Button>
-            </div>
-          </form>
-        </Popover>
-      ) : (
-        trigger
-      )}
-    </div>
-  );
-}
-
-function BulkDialog({
-  detail,
-  defaultFrom,
-  onClose,
-  onSaved,
-}: {
-  detail: PropertyDetail;
-  defaultFrom: string;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const toast = useToast();
-  const plans = detail.roomTypes.flatMap((t) =>
-    t.ratePlans.filter((p) => p.active).map((p) => ({ plan: p, type: t })),
-  );
-  const currency = detail.property.currency;
-  const [selected, setSelected] = useState<string[]>(plans[0] ? [plans[0].plan.id] : []);
-  const [from, setFrom] = useState(defaultFrom);
-  const [to, setTo] = useState(addDays(defaultFrom, 30));
-  const [days, setDays] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
-  const [rate, setRate] = useState('');
-  const [minStay, setMinStay] = useState('');
-  const [stopSell, setStopSell] = useState<'keep' | 'on' | 'off'>('keep');
-  const [cta, setCta] = useState<'keep' | 'on' | 'off'>('keep');
-  const [ctd, setCtd] = useState<'keep' | 'on' | 'off'>('keep');
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const change: RateChangeBody = {};
-  if (rate.trim() !== '') change.rate = toMinor(Number(rate), currency);
-  if (minStay.trim() !== '') {
-    change.minStayArrival = Math.max(1, Math.round(Number(minStay)));
-    change.minStayThrough = change.minStayArrival;
-  }
-  if (stopSell !== 'keep') change.stopSell = stopSell === 'on';
-  if (cta !== 'keep') change.closedToArrival = cta === 'on';
-  if (ctd !== 'keep') change.closedToDeparture = ctd === 'on';
-  const hasChange = Object.keys(change).length > 0;
-  const derivedSelected = plans.filter(
-    (p) => selected.includes(p.plan.id) && p.plan.parentRatePlanId,
-  );
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      let total = 0;
-      for (const { plan } of plans.filter((p) => selected.includes(p.plan.id))) {
-        // A derived plan follows its parent's price, so only its restrictions are sent.
-        const { rate: _rate, ...restrictions } = change;
-        const body = plan.parentRatePlanId ? restrictions : change;
-        if (Object.keys(body).length === 0) continue;
-        const result = await api<{ daysChanged: number }>(
-          `/properties/${detail.property.id}/rates`,
-          {
-            body: {
-              ratePlanId: plan.id,
-              from,
-              to: addDays(to, 1),
-              daysOfWeek: days.length === 7 ? undefined : days,
-              change: body,
-            },
-          },
-        );
-        total += result.daysChanged;
-      }
-      toast.success(
-        total === 0 ? 'Nothing needed changing' : `${plural(total, 'day')} updated`,
-        'Connected channels are being updated.',
-      );
-      onSaved();
-      onClose();
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const tri = (
-    label: string,
-    value: 'keep' | 'on' | 'off',
-    set: (v: 'keep' | 'on' | 'off') => void,
-  ) => (
-    <div className="flex items-center justify-between gap-3">
-      <span className="text-sm text-ink">{label}</span>
-      <Segmented
-        label={label}
-        size="sm"
-        value={value}
-        onChange={set}
-        options={[
-          { value: 'keep', label: 'No change' },
-          { value: 'on', label: 'On' },
-          { value: 'off', label: 'Off' },
-        ]}
-      />
-    </div>
-  );
-
-  return (
-    <Dialog
-      open
-      onClose={onClose}
-      title="Update rates and restrictions"
-      description="Applies to every chosen day in the range. Channels are updated straight away."
-      footer={
-        <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button
-            type="submit"
-            form="bulk-form"
-            variant="primary"
-            loading={busy}
-            disabled={
-              !hasChange ||
-              selected.length === 0 ||
-              days.length === 0 ||
-              !isValidDate(from) ||
-              !isValidDate(to) ||
-              to < from
-            }
-          >
-            Apply
-          </Button>
-        </>
-      }
-    >
-      <form id="bulk-form" onSubmit={submit} className="flex flex-col gap-4">
-        {error && <Notice tone="danger">{error}</Notice>}
-        <fieldset>
-          <legend className="mb-1.5 text-[13px] font-medium text-ink-soft">Rate plans</legend>
-          <div className="scrollbar-thin flex max-h-40 flex-col gap-1.5 overflow-y-auto rounded-md border border-line p-2.5">
-            {plans.map(({ plan, type }) => (
-              <Checkbox
-                key={plan.id}
-                label={
-                  <span>
-                    {type.name} <span className="text-ink-faint">·</span> {plan.name}
-                  </span>
-                }
-                checked={selected.includes(plan.id)}
-                onChange={(e) =>
-                  setSelected(
-                    e.target.checked
-                      ? [...selected, plan.id]
-                      : selected.filter((id) => id !== plan.id),
-                  )
-                }
-              />
-            ))}
-          </div>
-        </fieldset>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="From">
-            {(props) => (
-              <Input
-                {...props}
-                type="date"
-                value={from}
-                onChange={(e) => setFrom(e.target.value)}
-                required
-              />
-            )}
-          </Field>
-          <Field label="To (inclusive)">
-            {(props) => (
-              <Input
-                {...props}
-                type="date"
-                value={to}
-                min={from}
-                onChange={(e) => setTo(e.target.value)}
-                required
-              />
-            )}
-          </Field>
-        </div>
-        <fieldset>
-          <legend className="mb-1.5 text-[13px] font-medium text-ink-soft">Days of the week</legend>
-          <div className="flex flex-wrap gap-1.5">
-            {WEEKDAYS.map((d) => {
-              const on = days.includes(d.value);
-              return (
-                <button
-                  key={d.value}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() =>
-                    setDays(on ? days.filter((x) => x !== d.value) : [...days, d.value])
-                  }
-                  className={cn(
-                    'h-8 w-12 rounded-md border text-[13px] font-medium transition-colors',
-                    on
-                      ? 'border-brand-600 bg-brand-600 text-white'
-                      : 'border-line-strong bg-surface text-ink-soft hover:bg-sunken',
-                  )}
-                >
-                  {d.label}
-                </button>
-              );
-            })}
-          </div>
-        </fieldset>
-        <div className="grid grid-cols-2 gap-3">
-          <Field
-            label={`Rate per night (${currency})`}
-            optional
-            hint="Leave empty to keep current rates."
-          >
-            {(props) => (
-              <Input
-                {...props}
-                type="number"
-                min={0}
-                step="any"
-                inputMode="decimal"
-                value={rate}
-                onChange={(e) => setRate(e.target.value)}
-              />
-            )}
-          </Field>
-          <Field label="Minimum stay (nights)" optional>
-            {(props) => (
-              <Input
-                {...props}
-                type="number"
-                min={1}
-                max={365}
-                value={minStay}
-                onChange={(e) => setMinStay(e.target.value)}
-              />
-            )}
-          </Field>
-        </div>
-        {derivedSelected.length > 0 && change.rate !== undefined && (
-          <Notice tone="info">
-            {derivedSelected.map((p) => p.plan.name).join(', ')}{' '}
-            {derivedSelected.length === 1 ? 'follows' : 'follow'} another plan&apos;s price, so the
-            rate is not applied there. Restrictions are.
-          </Notice>
-        )}
-        <div className="flex flex-col gap-2.5 rounded-md border border-line p-3">
-          {tri('Stop sell', stopSell, setStopSell)}
-          {tri('Closed to arrival', cta, setCta)}
-          {tri('Closed to departure', ctd, setCtd)}
-        </div>
-      </form>
-    </Dialog>
-  );
-}
 
 export function RatesView() {
   const auth = useAuth();
@@ -557,6 +42,10 @@ export function RatesView() {
   const to = addDays(from, Number(span));
   const dates = useMemo(() => eachDate(from, to), [from, to]);
   const [bulk, setBulk] = useState(false);
+  // Changes are held here and saved together, so the booking sites are told once.
+  const [pending, setPending] = usePendingChanges(property?.id);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const { data: detail, error: detailError } = usePropertyDetail(property?.id);
   const ratesKey = property ? `/properties/${property.id}/rates${query({ from, to })}` : null;
@@ -600,16 +89,40 @@ export function RatesView() {
   const canEdit = auth.can('rates.write', property.id);
   const currency = property.currency;
 
-  const save = async (plan: RatePlan, date: string, change: RateChangeBody) => {
+  const hold = (changes: NewChange[]) => {
+    setSaveError(null);
+    setPending(addChanges(pending, changes));
+  };
+  const holdDay = (plan: RatePlan, date: string, change: RateChangeBody) =>
+    hold([{ ratePlanId: plan.id, from: date, to: addDays(date, 1), change }]);
+
+  const saveAll = async () => {
+    setSaving(true);
+    setSaveError(null);
     try {
-      await api(`/properties/${property.id}/rates`, {
-        body: { ratePlanId: plan.id, from: date, to: addDays(date, 1), change },
+      const result = await api<{ daysChanged: number }>(`/properties/${property.id}/rates/batch`, {
+        body: batchBody(pending),
       });
+      setPending([]);
+      toast.success(
+        result.daysChanged === 0
+          ? 'Nothing needed changing'
+          : `${plural(result.daysChanged, 'day')} updated`,
+        result.daysChanged === 0 ? undefined : 'The booking sites are being updated.',
+      );
       await mutateRates();
     } catch (err) {
-      toast.error(err);
+      setSaveError(errorMessage(err));
+    } finally {
+      setSaving(false);
     }
   };
+
+  const plansById = new Map<string, PlanName>(
+    (detail?.roomTypes ?? []).flatMap((type) =>
+      type.ratePlans.map((plan) => [plan.id, { plan, typeName: type.name }] as const),
+    ),
+  );
 
   const months: { key: string; label: string; days: number }[] = [];
   for (const date of dates) {
@@ -816,10 +329,15 @@ export function RatesView() {
                               return day ? (
                                 <RateCell
                                   key={date}
-                                  day={day}
+                                  day={withPending(day, plan, pending)}
                                   currency={currency}
                                   editable={canEdit && !derived}
-                                  onSave={(rate) => save(plan, date, { rate })}
+                                  follows={
+                                    parentRatePending(plan, date, pending)
+                                      ? planName(plan.parentRatePlanId)
+                                      : null
+                                  }
+                                  onChange={(rate) => holdDay(plan, date, { rate })}
                                 />
                               ) : (
                                 <div
@@ -842,10 +360,10 @@ export function RatesView() {
                               return day ? (
                                 <RestrictionCell
                                   key={date}
-                                  day={day}
-                                  planMinStay={plan.minStay}
+                                  day={withPending(day, plan, pending)}
+                                  plan={plan}
                                   editable={canEdit}
-                                  onSave={(change) => save(plan, date, change)}
+                                  onChange={(change) => holdDay(plan, date, change)}
                                 />
                               ) : (
                                 <div
@@ -865,14 +383,31 @@ export function RatesView() {
         )}
       </div>
 
+      {canEdit && (
+        <PendingBar
+          pending={pending}
+          plans={plansById}
+          currency={currency}
+          saving={saving}
+          error={saveError}
+          onRemove={(id) => {
+            setSaveError(null);
+            setPending(pending.filter((change) => change.id !== id));
+          }}
+          onDiscard={() => {
+            setSaveError(null);
+            setPending([]);
+          }}
+          onSave={() => void saveAll()}
+        />
+      )}
+
       {bulk && detail && (
         <BulkDialog
           detail={detail}
           defaultFrom={from}
           onClose={() => setBulk(false)}
-          onSaved={() => {
-            void mutateRates();
-          }}
+          onAdd={hold}
         />
       )}
     </div>
