@@ -64,7 +64,7 @@ out at the allowed pace; sometimes a worker that is stuck.
 sites are not being fetched and nothing is being sent.
 
 1. `docker compose ps worker` and `docker compose logs --tail 100 worker`.
-2. A line starting "Cannot start." names a wrong setting. Fix it.
+2. A line reading "[worker] Cannot start." names a wrong setting. Fix it.
 3. Otherwise `docker compose up -d worker`. On starting it fetches what was
    missed and sends what was queued.
 
