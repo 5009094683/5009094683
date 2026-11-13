@@ -4,7 +4,7 @@ import { diff, writeAudit } from './audit';
 import type { Actor } from './context';
 import { addDays, type DateString } from './dates';
 import { conflict, notFound, validationError } from './errors';
-import { formatMoney } from './money';
+import { displayMoney } from './money';
 import { isValidCurrency } from './org';
 import { transact } from './sqlx';
 
@@ -283,7 +283,7 @@ export function promoLabel(promo: Pick<PromoRow, 'kind' | 'value' | 'currency'>)
     const percent = promo.value / 100;
     return `${Number.isInteger(percent) ? percent : percent.toFixed(2)}% off`;
   }
-  return `${formatMoney(promo.value, promo.currency ?? 'INR')} off`;
+  return `${displayMoney(promo.value, promo.currency ?? 'INR')} off`;
 }
 
 /**

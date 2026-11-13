@@ -13,6 +13,9 @@ export interface MailMessage {
   text: string;
   html?: string;
   replyTo?: string;
+  /** The Message-ID this answers, and the thread it belongs to, so mail clients keep the exchange together. */
+  inReplyTo?: string;
+  references?: string[];
   attachments?: MailAttachment[];
 }
 
@@ -44,6 +47,8 @@ class SmtpMailer implements Mailer {
       text: message.text,
       html: message.html,
       replyTo: message.replyTo,
+      inReplyTo: message.inReplyTo,
+      references: message.references,
       attachments: message.attachments,
     });
     return { delivered: true, messageId: info.messageId };

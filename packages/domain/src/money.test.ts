@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { currencyExponent, decimalToMinor, formatMoney, minorToDecimal } from './money';
+import {
+  currencyExponent,
+  decimalToMinor,
+  displayMoney,
+  formatMoney,
+  minorToDecimal,
+} from './money';
 
 describe('money', () => {
   it('knows how many decimal places a currency has', () => {
@@ -39,5 +45,13 @@ describe('money', () => {
     expect(minorToDecimal(1_235, 'KWD')).toBe('1.235');
     expect(minorToDecimal(-1_230, 'INR')).toBe('-12.30');
     expect(formatMoney(24_000, 'usd')).toBe('USD 240.00');
+  });
+
+  it('writes amounts for guests the way they are read', () => {
+    expect(displayMoney(945_000, 'INR')).toBe('₹9,450');
+    expect(displayMoney(12_345_650, 'INR')).toBe('₹1,23,456.50');
+    expect(displayMoney(24_050, 'usd')).toBe('$240.50');
+    expect(displayMoney(1_500, 'JPY')).toBe('¥1,500');
+    expect(displayMoney(100, 'XXXX')).toBe('XXXX 1.00');
   });
 });

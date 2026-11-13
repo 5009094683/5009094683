@@ -92,6 +92,12 @@ const schema = z.object({
   RESERVATIONS_IMAP_MAILBOX: z.string().default('INBOX'),
   /** Shared secret for the inbound-email HTTP hook (for mail providers that POST raw MIME). */
   INBOUND_EMAIL_SECRET: optionalString,
+  /**
+   * Address guests' replies are sent to (the Reply-To of messages from the
+   * inbox). Its mail must be delivered to the inbound-email hook for replies
+   * to show in the inbox. Without it, replies go to the property's own address.
+   */
+  INBOX_REPLY_ADDRESS: optionalString,
 
   PAYMENT_PROVIDER: z.enum(['razorpay', 'stripe', 'mock']).optional(),
   RAZORPAY_KEY_ID: optionalString,
@@ -104,6 +110,14 @@ const schema = z.object({
   WHATSAPP_PHONE_NUMBER_ID: optionalString,
   WHATSAPP_VERIFY_TOKEN: optionalString,
   WHATSAPP_APP_SECRET: optionalString,
+  /** Graph API version the WhatsApp calls are made against. Meta retires versions about two years after release. */
+  WHATSAPP_API_VERSION: z
+    .string()
+    .regex(/^v\d+\.\d+$/)
+    .default('v27.0'),
+
+  /** Where uploaded files (identity documents, attachments) are kept. They are encrypted before they are written. */
+  STORAGE_DIR: z.string().default('./var/files'),
 
   BACKUP_DIR: z.string().default('./var/backups'),
 });

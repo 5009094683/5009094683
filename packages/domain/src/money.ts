@@ -54,3 +54,22 @@ export function minorToDecimal(amount: number, currency: string): string {
 export function formatMoney(amount: number, currency: string): string {
   return `${currency.toUpperCase()} ${minorToDecimal(amount, currency)}`;
 }
+
+/**
+ * An amount as a guest reads it: "₹9,450", "$240.50". For messages and the
+ * booking site; internal text uses `formatMoney`.
+ */
+export function displayMoney(amount: number, currency: string): string {
+  const exponent = currencyExponent(currency);
+  const value = amount / 10 ** exponent;
+  try {
+    return new Intl.NumberFormat(currency.toUpperCase() === 'INR' ? 'en-IN' : 'en', {
+      style: 'currency',
+      currency: currency.toUpperCase(),
+      minimumFractionDigits: Number.isInteger(value) ? 0 : exponent,
+      maximumFractionDigits: exponent,
+    }).format(value);
+  } catch {
+    return formatMoney(amount, currency);
+  }
+}

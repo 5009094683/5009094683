@@ -65,6 +65,43 @@ export function decryptSecret(stored: string): string {
   ]).toString('utf8');
 }
 
+const FILE_MAGIC = Buffer.from('PMSF1');
+
+/**
+ * Encrypts a file for the file store (AES-256-GCM). Layout: a five-byte
+ * marker, the four-byte key id, the 12-byte nonce, the 16-byte tag, then the
+ * ciphertext.
+ */
+export function encryptBytes(plain: Buffer): Buffer {
+  const { current } = keys();
+  const iv = randomBytes(12);
+  const cipher = createCipheriv(ALGORITHM, current, iv);
+  const ciphertext = Buffer.concat([cipher.update(plain), cipher.final()]);
+  return Buffer.concat([
+    FILE_MAGIC,
+    Buffer.from(keyId(current), 'hex'),
+    iv,
+    cipher.getAuthTag(),
+    ciphertext,
+  ]);
+}
+
+export function decryptBytes(stored: Buffer): Buffer {
+  const header = FILE_MAGIC.length + 4 + 12 + 16;
+  if (stored.length < header || !stored.subarray(0, FILE_MAGIC.length).equals(FILE_MAGIC)) {
+    throw new Error('Stored file has an unknown format');
+  }
+  let offset = FILE_MAGIC.length;
+  const id = stored.subarray(offset, (offset += 4)).toString('hex');
+  const iv = stored.subarray(offset, (offset += 12));
+  const tag = stored.subarray(offset, (offset += 16));
+  const key = keys().all.find((k) => keyId(k) === id);
+  if (!key) throw new Error('Stored file was encrypted with a key that is no longer configured');
+  const decipher = createDecipheriv(ALGORITHM, key, iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(stored.subarray(offset)), decipher.final()]);
+}
+
 export function encryptJson(value: unknown): string {
   return encryptSecret(JSON.stringify(value));
 }
