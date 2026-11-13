@@ -74,8 +74,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
+      {/* On a phone the foot of the screen is where dialogs keep their buttons, so notices go
+          under the top bar there. */}
       <div
-        className="pointer-events-none fixed right-4 bottom-4 z-[60] flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2"
+        className="pointer-events-none fixed top-14 right-4 left-4 z-[60] flex flex-col gap-2 sm:top-auto sm:bottom-4 sm:left-auto sm:w-96"
         aria-live="polite"
         aria-atomic="false"
       >
