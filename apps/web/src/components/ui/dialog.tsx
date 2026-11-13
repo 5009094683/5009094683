@@ -37,10 +37,12 @@ function useReturnFocus(open: boolean): (event: Event) => void {
     opener: null,
   });
   if (seen.open !== open) {
-    // Read as the dialog opens: once it is on screen it has taken the keyboard itself.
+    // Read as the dialog opens: once it is on screen it has taken the keyboard itself. It is
+    // kept through the closing, which is when it is needed.
     setSeen({
       open,
-      opener: open && typeof document !== 'undefined' ? openerOf(document.activeElement) : null,
+      opener:
+        open && typeof document !== 'undefined' ? openerOf(document.activeElement) : seen.opener,
     });
   }
   return (event) => {
