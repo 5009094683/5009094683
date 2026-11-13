@@ -17,6 +17,7 @@ import {
   notFound,
   publicOrganization,
   removeCheckinDocument,
+  reopenBookingPayment,
   reservationForGuestToken,
   searchStay,
   submitGuestCheckin,
@@ -25,8 +26,11 @@ import {
 } from '@pms/domain';
 import { dateString, uuid } from '../lib/schemas';
 
-/** Guest links are about 53 characters; anything far from that is not one. */
-const token = z.string().min(20).max(120);
+/**
+ * Guest links are about 53 characters. Whatever else is put in their place is a link that
+ * does not work, and is answered as one: "not found", the same as a link that has run out.
+ */
+const token = z.string().min(1).max(300);
 const tokenParams = z.object({ token });
 const org = z.string().max(80).optional();
 const propertyCode = z.string().min(1).max(20);
@@ -136,11 +140,20 @@ export async function publicRoutes(app: FastifyInstance): Promise<void> {
             phone: z.string().trim().max(40).nullable().optional(),
             country: z.string().trim().max(60).nullable().optional(),
           }),
-          arrivalTime: z.string().max(20).nullable().optional(),
+          arrivalTime: z
+            .string()
+            .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Give the arrival time as hours and minutes')
+            .nullable()
+            .optional(),
           specialRequests: z.string().max(2000).nullable().optional(),
           promoCode: z.string().max(30).nullable().optional(),
           acceptTerms: z.boolean(),
           marketingConsent: z.boolean().optional(),
+          requestId: uuid
+            .optional()
+            .describe(
+              'Made up by the caller for one attempt to book and repeated on every retry of it: the same id never makes a second booking.',
+            ),
         }),
       },
     },
@@ -168,6 +181,20 @@ export async function publicRoutes(app: FastifyInstance): Promise<void> {
       },
     },
     async (req) => syncGuestPayments(app.db, app.gateway(), req.params.token),
+  );
+
+  r.post(
+    '/public/bookings/:token/pay',
+    {
+      ...limit(10),
+      schema: {
+        tags: ['booking site'],
+        summary: 'Open a new payment page for a booking that is held but was not paid',
+        params: tokenParams,
+      },
+    },
+    async (req, reply) =>
+      reply.status(201).send(await reopenBookingPayment(app.db, app.gateway(), req.params.token)),
   );
 
   r.post(
@@ -344,7 +371,7 @@ export async function publicRoutes(app: FastifyInstance): Promise<void> {
         const action = `${app.env.API_PUBLIC_URL.replace(/\/+$/, '')}/public/mock-pay/${order.providerOrderId}`;
         return reply.type('text/html; charset=utf-8').send(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex"><title>Test payment</title>
+<meta name="robots" content="noindex"><link rel="icon" href="data:,"><title>Test payment</title>
 <style>
 body{font:16px/1.5 system-ui,sans-serif;background:#f4f5f7;color:#1c2430;margin:0;display:grid;place-items:center;min-height:100vh}
 main{background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);padding:28px;max-width:380px;width:calc(100% - 32px)}

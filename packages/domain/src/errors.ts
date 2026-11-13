@@ -10,6 +10,8 @@ export type DomainErrorCode =
   | 'stale_version'
   | 'invalid_state'
   | 'rate_limited'
+  /** A guest already holds as many unpaid bookings as one guest may. */
+  | 'too_many_holds'
   | 'upstream_failed'
   | 'not_configured';
 
@@ -25,6 +27,7 @@ const HTTP_STATUS: Record<DomainErrorCode, number> = {
   stale_version: 409,
   invalid_state: 409,
   rate_limited: 429,
+  too_many_holds: 429,
   upstream_failed: 502,
   not_configured: 503,
 };

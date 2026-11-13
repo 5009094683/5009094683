@@ -38,9 +38,14 @@ export function computeTax(
   rule: Pick<TaxRuleRow, 'slabs' | 'components'> | null | undefined,
   unitAmount: number,
   quantity = 1,
+  /**
+   * The price that decides the rate, when it is not the amount being taxed: a charge for
+   * cancelling a room is taxed at the rate of the room's nightly price, whatever its own size.
+   */
+  priceForRate: number = unitAmount,
 ): TaxResult {
   if (!rule || unitAmount === 0) return NO_TAX;
-  const value = Math.abs(unitAmount);
+  const value = Math.abs(priceForRate);
   const slabs = [...rule.slabs].sort(
     (a, b) => (a.upTo ?? Number.MAX_SAFE_INTEGER) - (b.upTo ?? Number.MAX_SAFE_INTEGER),
   );

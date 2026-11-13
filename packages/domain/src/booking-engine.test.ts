@@ -12,6 +12,7 @@ import {
   getPublicProperty,
   listPublicProperties,
   paymentOrdersToCheck,
+  reopenBookingPayment,
   searchStay,
   syncGuestPayments,
   syncPaymentOrder,
@@ -169,6 +170,13 @@ describe('cancellation terms', () => {
       freeUntil: '2026-12-07',
       text: 'Free cancellation until 7 December 2026. After that, the first night is charged.',
     });
+    // Told on a day when the free period is over, the terms do not offer it as still open.
+    expect(cancellationTerms(flexible, '2026-12-10', '2026-12-07').text).toMatch(
+      /^Free cancellation until 7 December 2026/,
+    );
+    expect(cancellationTerms(flexible, '2026-12-10', '2026-12-08').text).toBe(
+      'Free cancellation ended on 7 December 2026. Cancelling now costs the first night.',
+    );
     expect(cancellationCharge(flexible, '2026-12-10', nights, '2026-12-07')).toBe(0);
     expect(cancellationCharge(flexible, '2026-12-10', nights, '2026-12-08')).toBe(450_000);
     expect(
@@ -293,6 +301,38 @@ describe('what the booking site shows', () => {
     });
     expect(crowd.offers).toEqual([]);
 
+    // A room type with nothing left is still shown, as sold out and not to be booked.
+    for (let i = 0; i < 2; i++) {
+      await createReservation(t.db, org.admin, {
+        propertyId: hotel.property.id,
+        source: 'phone',
+        guest: { firstName: 'Deluxe', lastName: `Guest${i}` },
+        rooms: [
+          {
+            roomTypeId: hotel.deluxe.roomType.id,
+            ratePlanId: hotel.deluxe.ratePlan.id,
+            checkIn: day(30),
+            checkOut: day(31),
+            adults: 2,
+          },
+        ],
+      });
+    }
+    const full = await searchStay(t.db, org.orgId, {
+      propertyCode: hotel.property.code,
+      checkIn: day(30),
+      checkOut: day(31),
+      adults: 2,
+    });
+    const deluxe = full.offers.find((o) => o.roomType.id === hotel.deluxe.roomType.id)!;
+    expect(deluxe.available).toBe(0);
+    expect(deluxe.plans.map((p) => [p.bookable, p.reason])).toEqual([
+      [false, 'Sold out for these dates'],
+    ]);
+    expect(
+      full.offers.find((o) => o.roomType.id === hotel.standard.roomType.id)!.plans[0],
+    ).toMatchObject({ bookable: true, reason: null });
+
     await expect(
       searchStay(t.db, org.orgId, {
         propertyCode: hotel.property.code,
@@ -354,6 +394,99 @@ describe('booking and paying', () => {
     expect(lines.filter((l) => l.kind === 'payment')).toHaveLength(1);
     expect(reservation).toMatchObject({ source: 'website', status: 'confirmed' });
     expect(await available(hotel, 10, 12)).toEqual([1, 1]);
+  });
+
+  it('makes one booking of an attempt that is sent twice', async () => {
+    const hotel = await bookableHotel({}, { standardRooms: 3 });
+    const attempt = request(hotel, 10, 12, { requestId: '5b0f6d0e-6f0a-4c56-9a53-0d6f0c1d2e3f' });
+    const first = await createBooking(t.db, gateway, org.orgId, attempt);
+    // The answer was lost on the way, so the form sends the same attempt again.
+    const second = await createBooking(t.db, gateway, org.orgId, attempt);
+    expect(second).toEqual(first);
+    expect(await available(hotel, 10, 12)).toEqual([2, 2]);
+    // Two sends at the same moment: still one booking, and both are told of it.
+    const both = { ...attempt, requestId: '0a6f3f0c-52b1-4c0e-8d2f-9d5e1f7a4b21' };
+    const [a, b] = await Promise.all([
+      createBooking(t.db, gateway, org.orgId, both),
+      createBooking(t.db, gateway, org.orgId, both),
+    ]);
+    expect(a.code).toBe(b.code);
+    expect(await available(hotel, 10, 12)).toEqual([1, 1]);
+    // Another attempt is another booking.
+    const other = await createBooking(t.db, gateway, org.orgId, {
+      ...attempt,
+      requestId: '7c1d2e3f-0a6f-4b21-9a53-5b0f6d0e6f0a',
+    });
+    expect(other.code).not.toBe(first.code);
+    // Once the first has been paid, a late repeat is told it is confirmed, with nothing to pay.
+    const order = await orderOf(first.code);
+    await gateway.complete(order.providerOrderId, 'paid');
+    await syncPaymentOrder(t.db, gateway, order.id);
+    expect(await createBooking(t.db, gateway, org.orgId, attempt)).toMatchObject({
+      code: first.code,
+      status: 'confirmed',
+      payment: null,
+    });
+    // A booking that was given up does not stand in the way of trying again.
+    await cancelGuestBooking(t.db, gateway, other.token);
+    const afresh = await createBooking(t.db, gateway, org.orgId, {
+      ...attempt,
+      requestId: '7c1d2e3f-0a6f-4b21-9a53-5b0f6d0e6f0a',
+    });
+    expect(afresh.code).not.toBe(other.code);
+    expect(afresh.status).toBe('tentative');
+  });
+
+  it('lets a guest who left the payment page pay after all, while the room is held', async () => {
+    const hotel = await bookableHotel({}, { standardRooms: 1 });
+    const booked = await createBooking(t.db, gateway, org.orgId, request(hotel, 10, 12));
+    const first = await orderOf(booked.code);
+    // Asked for while a payment page is open, the same page is given again.
+    expect(await reopenBookingPayment(t.db, gateway, booked.token)).toEqual(booked.payment);
+
+    await gateway.complete(first.providerOrderId, 'cancelled');
+    const left = await syncGuestPayments(t.db, gateway, booked.token);
+    expect(left).toMatchObject({ status: 'tentative', pendingPayment: null });
+    expect(left.payAgain).toEqual({ amount: 945_000, until: booked.payment!.expiresAt });
+    // The room is still theirs.
+    expect(await available(hotel, 10, 12)).toEqual([0, 0]);
+
+    const again = await reopenBookingPayment(t.db, gateway, booked.token);
+    expect(again.checkoutUrl).not.toBe(booked.payment!.checkoutUrl);
+    // Asking does not buy more time.
+    expect(again.expiresAt).toEqual(booked.payment!.expiresAt);
+    const waiting = await getGuestBooking(t.db, booked.token);
+    expect(waiting.pendingPayment).toMatchObject({ amount: 945_000 });
+    expect(waiting.payAgain).toBeNull();
+    const orders = await t.db
+      .select()
+      .from(paymentOrders)
+      .where(eq(paymentOrders.reservationId, first.reservationId));
+    const second = orders.find((o) => o.id !== first.id)!;
+    await gateway.complete(second.providerOrderId, 'paid');
+    expect(await syncGuestPayments(t.db, gateway, booked.token)).toMatchObject({
+      status: 'confirmed',
+      paid: 945_000,
+      balance: 0,
+      payAgain: null,
+    });
+    await expect(reopenBookingPayment(t.db, gateway, booked.token)).rejects.toThrow(
+      'This booking is already confirmed',
+    );
+
+    // Once the hold has run out there is nothing to pay for: the guest books again.
+    const late = await createBooking(t.db, gateway, org.orgId, request(hotel, 20, 22));
+    const order = await orderOf(late.code);
+    await gateway.complete(order.providerOrderId, 'cancelled');
+    await syncGuestPayments(t.db, gateway, late.token);
+    const after = new Date(late.payment!.expiresAt.getTime() + 1000);
+    await expect(reopenBookingPayment(t.db, gateway, late.token, after)).rejects.toThrow(
+      /time to pay for this booking has run out/,
+    );
+    expect((await getGuestBooking(t.db, late.token, after)).payAgain).toBeNull();
+    await expect(reopenBookingPayment(t.db, gateway, 'not-a-link')).rejects.toMatchObject({
+      code: 'not_found',
+    });
   });
 
   it('never sells the last room twice, and gives it back when a hold runs out', async () => {
@@ -649,7 +782,12 @@ describe('booking and paying', () => {
     }
     await expect(
       createBooking(t.db, gateway, org.orgId, request(hotel, 20, 22, { guest })),
-    ).rejects.toMatchObject({ code: 'rate_limited' });
+    ).rejects.toMatchObject({
+      // Not the same thing as asking too often, and told apart by its code.
+      code: 'too_many_holds',
+      httpStatus: 429,
+      message: 'You have several bookings waiting for payment. Finish or cancel one of them first.',
+    });
     expect(await paymentOrdersToCheck(t.db, 'mock', new Date(Date.now() + 120_000))).not.toEqual(
       [],
     );
@@ -700,22 +838,61 @@ describe('cancelling online', () => {
     // Arriving in three days: the free period ended two days ago.
     const booked = await createBooking(t.db, gateway, org.orgId, request(hotel, 3, 5));
     await pay(booked.code);
-    // The first night, 4,500, with 18% GST on the charge.
+    // The first night, 4,500, taxed as the night itself would have been: 5%, not the 18% of a fee.
     expect((await getGuestBooking(t.db, booked.token)).cancellation).toMatchObject({
       allowed: true,
-      charge: 531_000,
-      refund: 414_000,
+      charge: 472_500,
+      refund: 472_500,
     });
     const result = await cancelGuestBooking(t.db, gateway, booked.token);
-    expect(result).toMatchObject({ charge: 531_000, refunded: 414_000, refundPending: 0 });
+    expect(result).toMatchObject({ charge: 472_500, refunded: 472_500, refundPending: 0 });
     expect(result.booking).toMatchObject({
       status: 'cancelled',
-      total: 531_000,
-      tax: 81_000,
-      paid: 531_000,
-      refunded: 414_000,
+      total: 472_500,
+      tax: 22_500,
+      paid: 472_500,
+      refunded: 472_500,
       balance: 0,
     });
+    // On the bill it is a charge for that room, under the accommodation's own tax heading.
+    const [line] = await t.db
+      .select()
+      .from(folioLines)
+      .where(eq(folioLines.source, 'cancellation'));
+    expect(line).toMatchObject({
+      kind: 'fee',
+      amount: 450_000,
+      taxAmount: 22_500,
+      serviceCode: '996311',
+    });
+    expect(line!.reservationRoomId).not.toBeNull();
+  });
+
+  it('taxes the charge for a dearer room at that room’s higher rate, and each room on its own', async () => {
+    const hotel = await bookableHotel();
+    for (const type of [hotel.standard, hotel.deluxe]) {
+      await updateRatePlan(t.db, org.admin, hotel.property.id, type.ratePlan.id, {
+        cancellationPolicy: { freeCancelDays: 5, penalty: 'first_night' },
+        ...(type === hotel.deluxe ? { baseRate: 900_000 } : {}),
+      });
+    }
+    // The deluxe room is 9,000 a night: above the 7,500 at which accommodation is taxed at 18%.
+    const both = request(hotel, 3, 5);
+    both.rooms.push({
+      roomTypeId: hotel.deluxe.roomType.id,
+      ratePlanId: hotel.deluxe.ratePlan.id,
+      adults: 2,
+    });
+    const booked = await createBooking(t.db, gateway, org.orgId, both);
+    await pay(booked.code);
+    // 4,500 + 5% and 9,000 + 18%.
+    expect((await getGuestBooking(t.db, booked.token)).cancellation.charge).toBe(
+      472_500 + 1_062_000,
+    );
+    const result = await cancelGuestBooking(t.db, gateway, booked.token);
+    expect(result.charge).toBe(1_534_500);
+    // Never more than the stay itself would have cost: a balance is not created by cancelling.
+    expect(result.booking.balance).toBe(0);
   });
 
   it('returns nothing on a non-refundable rate, and leaves channel bookings to the channel', async () => {
@@ -726,9 +903,9 @@ describe('cancelling online', () => {
     const booked = await createBooking(t.db, gateway, org.orgId, request(hotel, 10, 11));
     await pay(booked.code);
     const result = await cancelGuestBooking(t.db, gateway, booked.token);
-    // 4,500 at the 18% charged on fees comes to more than was paid with 5% room GST: nothing goes back.
-    expect(result).toMatchObject({ refunded: 0, refundPending: 0 });
-    expect(result.booking.status).toBe('cancelled');
+    // The whole stay is kept, with the tax it was paid with: nothing goes back and nothing is owed.
+    expect(result).toMatchObject({ charge: 472_500, refunded: 0, refundPending: 0 });
+    expect(result.booking).toMatchObject({ status: 'cancelled', paid: 472_500, balance: 0 });
 
     const ota = await createReservation(t.db, org.admin, {
       propertyId: hotel.property.id,

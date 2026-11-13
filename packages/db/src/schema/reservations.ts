@@ -159,6 +159,11 @@ export const reservations = pgTable(
     promoCodeId: uuid('promo_code_id'),
     promoCode: text('promo_code'),
     discountAmount: money('discount_amount').notNull().default(0),
+    /**
+     * Given by the booking site with each attempt to book, so that an attempt sent twice (the
+     * answer to the first was lost on the way) makes one booking.
+     */
+    clientRequestId: text('client_request_id'),
     /** Raising this makes every link sent to the guest for this booking stop working. */
     guestTokenVersion: integer('guest_token_version').notNull().default(1),
     /** When the guest completed online check-in. */
@@ -190,6 +195,9 @@ export const reservations = pgTable(
     index('reservations_promo_idx')
       .on(t.promoCodeId)
       .where(sql`promo_code_id IS NOT NULL`),
+    uniqueIndex('reservations_client_request_key')
+      .on(t.orgId, t.clientRequestId)
+      .where(sql`client_request_id IS NOT NULL`),
     index('reservations_group_idx')
       .on(t.groupId)
       .where(sql`group_id IS NOT NULL`),

@@ -344,6 +344,11 @@ export interface ChargeInput {
   reservationRoomId?: string | null;
   /** For a discount: the kind of charge it reduces, which decides the tax taken off with it. Default: room. */
   discountOn?: Exclude<ChargeKind, 'discount'>;
+  /**
+   * Tax the charge as part of another supply, at the rate that supply has at `price`. A
+   * charge for cancelling a stay is taxed as the stay would have been, not as a fee.
+   */
+  taxAs?: { category: TaxCategory; price: number };
   source?: string;
 }
 
@@ -383,9 +388,10 @@ export async function postCharge(
       .where(eq(properties.id, folio.propertyId));
     const sign = input.kind === 'discount' ? -1 : 1;
     const category: TaxCategory =
-      input.kind === 'discount' ? (input.discountOn ?? 'room') : input.kind;
+      input.taxAs?.category ??
+      (input.kind === 'discount' ? (input.discountOn ?? 'room') : input.kind);
     const rule = await taxRuleFor(tx, folio.propertyId, category);
-    const tax = computeTax(rule, sign * input.unitAmount, quantity);
+    const tax = computeTax(rule, sign * input.unitAmount, quantity, input.taxAs?.price);
     const [line] = await tx
       .insert(folioLines)
       .values({

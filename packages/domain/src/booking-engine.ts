@@ -4,6 +4,7 @@ import {
   guests,
   organizations,
   paymentOrders,
+  pgErrorInfo,
   payments,
   properties,
   ratePlans,
@@ -280,6 +281,8 @@ function longDate(date: DateString): string {
 export function cancellationTerms(
   policy: CancellationPolicy | null | undefined,
   checkIn: DateString,
+  /** The day at the property, so that a free period already over is not offered as still open. */
+  today?: DateString,
 ): CancellationTerms {
   if (policy?.nonRefundable) {
     return {
@@ -304,7 +307,10 @@ export function cancellationTerms(
     freeUntil,
     penalty,
     penaltyPercent: percent,
-    text: `Free cancellation until ${longDate(freeUntil)}. After that, ${cost} is charged.`,
+    text:
+      today !== undefined && today > freeUntil
+        ? `Free cancellation ended on ${longDate(freeUntil)}. Cancelling now costs ${cost}.`
+        : `Free cancellation until ${longDate(freeUntil)}. After that, ${cost} is charged.`,
   };
 }
 
@@ -472,6 +478,7 @@ export async function searchStay(db: DbOrTx, orgId: string, query: StayQuery): P
   const code = query.promoCode?.trim();
   const promo = code ? await findPromo(db, orgId, code) : undefined;
 
+  const today = todayIn(property.timezone);
   const types = await sellable(db, property.id);
   const days = types.length
     ? await getAvailability(db, {
@@ -513,15 +520,15 @@ export async function searchStay(db: DbOrTx, orgId: string, query: StayQuery): P
         name: plan.name,
         description: plan.description,
         mealPlan: plan.mealPlan,
-        cancellation: cancellationTerms(plan.cancellationPolicy, query.checkIn),
+        cancellation: cancellationTerms(plan.cancellationPolicy, query.checkIn, today),
         nightly: p.nightly,
         subtotal: p.subtotal,
         discount: p.discount,
         taxes: p.taxes,
         total: p.total,
         payNow: payNowOf(property, plan, p.total),
-        bookable: !p.violation,
-        reason: p.violation,
+        bookable: !p.violation && available > 0,
+        reason: p.violation ?? (available > 0 ? null : 'Sold out for these dates'),
       });
     }
     priced.sort((a, b) => Number(b.bookable) - Number(a.bookable) || a.total - b.total);
@@ -572,6 +579,11 @@ export interface BookingRequest {
   /** The guest ticked the box accepting the property's terms. */
   acceptTerms: boolean;
   marketingConsent?: boolean;
+  /**
+   * Made up by the booking site for one attempt to book and sent again with every retry of
+   * it. The same id never makes a second booking: the first one is answered again.
+   */
+  requestId?: string | null;
 }
 
 export interface BookingResult {
@@ -613,6 +625,11 @@ export async function createBooking(
       `Bookings of more than ${MAX_WEBSITE_ROOMS} rooms are arranged with the property directly`,
     );
   }
+  const requestId = request.requestId?.trim() || null;
+  if (requestId) {
+    const again = await bookingAlreadyMade(db, orgId, requestId, now);
+    if (again) return again;
+  }
   const property = await bookableProperty(db, orgId, request.propertyCode);
   validateWindow(property, request.checkIn, request.checkOut);
   const actor = guestActor(orgId, email);
@@ -633,7 +650,7 @@ export async function createBooking(
     );
   if (holds >= MAX_OPEN_HOLDS_PER_GUEST) {
     throw new DomainError(
-      'rate_limited',
+      'too_many_holds',
       'You have several bookings waiting for payment. Finish or cancel one of them first.',
     );
   }
@@ -642,92 +659,111 @@ export async function createBooking(
   const promo = code ? await findPromo(db, orgId, code) : undefined;
   const types = await sellable(db, property.id);
 
-  const outcome = await transact(db, async (tx) => {
-    const rooms: { priced: PricedPlan; adults: number; children: number; roomTypeId: string }[] =
-      [];
-    for (const room of request.rooms) {
-      const type = types.find((t) => t.roomType.id === room.roomTypeId);
-      const plan = type?.plans.find((p) => p.id === room.ratePlanId);
-      if (!type || !plan) throw validationError('That room or rate is not sold on the website');
-      const priced = await pricePlan(
-        tx,
-        property,
-        plan,
-        {
-          checkIn: request.checkIn,
-          checkOut: request.checkOut,
+  const make = () =>
+    transact(db, async (tx) => {
+      const rooms: { priced: PricedPlan; adults: number; children: number; roomTypeId: string }[] =
+        [];
+      for (const room of request.rooms) {
+        const type = types.find((t) => t.roomType.id === room.roomTypeId);
+        const plan = type?.plans.find((p) => p.id === room.ratePlanId);
+        if (!type || !plan) throw validationError('That room or rate is not sold on the website');
+        const priced = await pricePlan(
+          tx,
+          property,
+          plan,
+          {
+            checkIn: request.checkIn,
+            checkOut: request.checkOut,
+            adults: room.adults,
+            children: room.children ?? 0,
+          },
+          promo,
+        );
+        if (priced.violation) throw new DomainError('restriction_violated', priced.violation);
+        if (promo !== undefined && priced.promoProblem && request.rooms.length === 1) {
+          throw validationError(priced.promoProblem);
+        }
+        rooms.push({
+          priced,
           adults: room.adults,
           children: room.children ?? 0,
-        },
-        promo,
-      );
-      if (priced.violation) throw new DomainError('restriction_violated', priced.violation);
-      if (promo !== undefined && priced.promoProblem && request.rooms.length === 1) {
-        throw validationError(priced.promoProblem);
+          roomTypeId: room.roomTypeId,
+        });
       }
-      rooms.push({
-        priced,
-        adults: room.adults,
-        children: room.children ?? 0,
-        roomTypeId: room.roomTypeId,
-      });
-    }
-    const usedPromo =
-      promo && rooms.some((r) => !r.priced.promoProblem && r.priced.discount > 0) ? promo : null;
-    if (promo !== undefined && !usedPromo) {
-      throw validationError(rooms[0]?.priced.promoProblem ?? 'This code is not valid');
-    }
+      const usedPromo =
+        promo && rooms.some((r) => !r.priced.promoProblem && r.priced.discount > 0) ? promo : null;
+      if (promo !== undefined && !usedPromo) {
+        throw validationError(rooms[0]?.priced.promoProblem ?? 'This code is not valid');
+      }
 
-    const reservation = await createReservation(
-      tx,
-      actor,
-      {
-        propertyId: property.id,
-        status: 'tentative',
-        source: 'website',
-        guest: {
-          firstName: request.guest.firstName.trim(),
-          lastName: request.guest.lastName.trim(),
-          email,
-          phone: request.guest.phone ?? null,
-          country: request.guest.country ?? null,
+      const reservation = await createReservation(
+        tx,
+        actor,
+        {
+          propertyId: property.id,
+          status: 'tentative',
+          source: 'website',
+          guest: {
+            firstName: request.guest.firstName.trim(),
+            lastName: request.guest.lastName.trim(),
+            email,
+            phone: request.guest.phone ?? null,
+            country: request.guest.country ?? null,
+          },
+          rooms: rooms.map((r) => ({
+            roomTypeId: r.roomTypeId,
+            ratePlanId: r.priced.plan.id,
+            checkIn: request.checkIn,
+            checkOut: request.checkOut,
+            adults: r.adults,
+            children: r.children,
+            nightlyRates: r.priced.nightly.map((n) => n.amount),
+          })),
+          arrivalTime: request.arrivalTime?.trim().slice(0, 20) || null,
+          specialRequests: request.specialRequests?.trim().slice(0, 4000) || null,
+          holdExpiresAt,
         },
-        rooms: rooms.map((r) => ({
-          roomTypeId: r.roomTypeId,
-          ratePlanId: r.priced.plan.id,
-          checkIn: request.checkIn,
-          checkOut: request.checkOut,
-          adults: r.adults,
-          children: r.children,
-          nightlyRates: r.priced.nightly.map((n) => n.amount),
-        })),
-        arrivalTime: request.arrivalTime?.trim().slice(0, 20) || null,
-        specialRequests: request.specialRequests?.trim().slice(0, 4000) || null,
-        holdExpiresAt,
-      },
-      // The website never books past capacity and never skips the occupancy limits.
-      {},
-    );
-    const discount = rooms.reduce((sum, r) => sum + r.priced.discount, 0);
-    if (usedPromo) {
-      await tx
-        .update(reservations)
-        .set({ promoCodeId: usedPromo.id, promoCode: usedPromo.code, discountAmount: discount })
-        .where(eq(reservations.id, reservation.id));
-    }
-    if (request.marketingConsent && reservation.guestId) {
-      await tx.execute(
-        sql`UPDATE guests SET marketing_consent = true WHERE id = ${reservation.guestId}`,
+        // The website never books past capacity and never skips the occupancy limits.
+        {},
       );
-    }
-    const total = rooms.reduce((sum, r) => sum + r.priced.total, 0);
-    const payNow = rooms.reduce(
-      (sum, r) => sum + payNowOf(property, r.priced.plan, r.priced.total),
-      0,
-    );
-    return { reservation, total, payNow };
-  });
+      const discount = rooms.reduce((sum, r) => sum + r.priced.discount, 0);
+      if (usedPromo) {
+        await tx
+          .update(reservations)
+          .set({ promoCodeId: usedPromo.id, promoCode: usedPromo.code, discountAmount: discount })
+          .where(eq(reservations.id, reservation.id));
+      }
+      if (requestId) {
+        // Fails, and takes the whole booking back with it, if the same attempt got here first.
+        await tx
+          .update(reservations)
+          .set({ clientRequestId: requestId })
+          .where(eq(reservations.id, reservation.id));
+      }
+      if (request.marketingConsent && reservation.guestId) {
+        await tx.execute(
+          sql`UPDATE guests SET marketing_consent = true WHERE id = ${reservation.guestId}`,
+        );
+      }
+      const total = rooms.reduce((sum, r) => sum + r.priced.total, 0);
+      const payNow = rooms.reduce(
+        (sum, r) => sum + payNowOf(property, r.priced.plan, r.priced.total),
+        0,
+      );
+      return { reservation, total, payNow };
+    });
 
+  let outcome: Awaited<ReturnType<typeof make>>;
+  try {
+    outcome = await make();
+  } catch (err) {
+    // The same attempt, sent twice at once: the other one made the booking. Answer with it.
+    if (requestId && pgErrorInfo(err)?.constraint === 'reservations_client_request_key') {
+      const again = await bookingAlreadyMade(db, orgId, requestId, now);
+      if (again) return again;
+    }
+    throw err;
+  }
   const { reservation, total, payNow } = outcome;
   const subject = {
     id: reservation.id,
@@ -768,6 +804,91 @@ export async function createBooking(
     }).catch(() => undefined);
     throw err;
   }
+}
+
+/**
+ * The booking an earlier send of the same attempt made, answered as it stands now. A booking
+ * that has since lapsed or been cancelled no longer counts: the attempt may then book afresh.
+ */
+async function bookingAlreadyMade(
+  db: Database,
+  orgId: string,
+  requestId: string,
+  now: Date,
+): Promise<BookingResult | null> {
+  const [reservation] = await db
+    .select()
+    .from(reservations)
+    .where(and(eq(reservations.orgId, orgId), eq(reservations.clientRequestId, requestId)));
+  if (!reservation) return null;
+  if (reservation.status !== 'tentative' && reservation.status !== 'confirmed') {
+    await db
+      .update(reservations)
+      .set({ clientRequestId: null })
+      .where(eq(reservations.id, reservation.id));
+    return null;
+  }
+  const orders = await db
+    .select()
+    .from(paymentOrders)
+    .where(
+      and(eq(paymentOrders.reservationId, reservation.id), eq(paymentOrders.purpose, 'booking')),
+    )
+    .orderBy(desc(paymentOrders.createdAt));
+  const open = orders.find((o) => o.status === 'created' && o.expiresAt > now);
+  return {
+    token: guestToken(reservation),
+    code: reservation.code,
+    status: reservation.status,
+    currency: reservation.currency,
+    total: (await stayMoney(db, reservation)).total,
+    payNow: orders[0]?.amount ?? 0,
+    payment: open ? { checkoutUrl: open.checkoutUrl, expiresAt: open.expiresAt } : null,
+  };
+}
+
+/**
+ * The guest left the payment page without paying, and wants to pay after all. While the
+ * rooms are still held, a fresh payment page is opened for the same amount; the hold is
+ * not made any longer by asking.
+ */
+export async function reopenBookingPayment(
+  db: Database,
+  gateway: PaymentGateway,
+  token: string,
+  now: Date = new Date(),
+): Promise<{ checkoutUrl: string; expiresAt: Date }> {
+  const { reservation, property } = await reservationForGuestToken(db, token, now);
+  if (reservation.status !== 'tentative') {
+    throw invalidState(
+      reservation.status === 'confirmed'
+        ? 'This booking is already confirmed'
+        : 'This booking is no longer held. Please book again.',
+    );
+  }
+  if (!reservation.holdExpiresAt || reservation.holdExpiresAt <= now) {
+    throw invalidState('The time to pay for this booking has run out. Please book again.');
+  }
+  const orders = await db
+    .select()
+    .from(paymentOrders)
+    .where(
+      and(eq(paymentOrders.reservationId, reservation.id), eq(paymentOrders.purpose, 'booking')),
+    )
+    .orderBy(desc(paymentOrders.createdAt));
+  const open = orders.find((o) => o.status === 'created' && o.expiresAt > now);
+  if (open) return { checkoutUrl: open.checkoutUrl, expiresAt: open.expiresAt };
+  const last = orders[0];
+  if (!last) throw invalidState('Nothing is waiting to be paid for this booking');
+  const order = await openPaymentOrder(db, gateway, {
+    reservation,
+    purpose: 'booking',
+    amount: last.amount,
+    description: last.description ?? `${property.name}, booking ${reservation.code}`,
+    expiresAt: reservation.holdExpiresAt,
+    createdBy: null,
+  });
+  return { checkoutUrl: order.checkoutUrl, expiresAt: order.expiresAt };
 }
 
 /** Confirms a held booking and counts the promotional code it used. Safe to repeat. */
@@ -1152,6 +1273,11 @@ export interface GuestBooking {
   discount: number;
   /** An unfinished payment the guest can still complete. */
   pendingPayment: { orderId: string; amount: number; checkoutUrl: string; expiresAt: Date } | null;
+  /**
+   * Set when the rooms are still held but no payment page is open (the guest cancelled on
+   * it): what is to be paid and until when a new payment page can be asked for.
+   */
+  payAgain: { amount: number; until: Date } | null;
   /** What cancelling now would cost, and whether the guest may still do it online. */
   cancellation: { allowed: boolean; charge: number; refund: number; reason: string | null };
   onlineCheckin: { available: boolean; completedAt: Date | null };
@@ -1250,7 +1376,27 @@ interface CancellationQuote {
   /** Before tax. */
   charge: number;
   reason: string | null;
-  perRoom: { roomId: string; charge: number }[];
+  /** `nightly` is the room's average price a night, which decides the tax rate of its charge. */
+  perRoom: { roomId: string; charge: number; nightly: number }[];
+}
+
+/**
+ * The tax on what cancelling costs. The charge stands in for the stay that was given up, so
+ * it is taxed at the stay's own rate (India: CBIC circular 178/10/2022), room by room, and
+ * can never come to more than the stay itself would have with its tax.
+ */
+async function cancellationTax(
+  db: DbOrTx,
+  propertyId: string,
+  quote: Pick<CancellationQuote, 'perRoom'>,
+): Promise<number> {
+  const charged = quote.perRoom.filter((room) => room.charge > 0);
+  if (charged.length === 0) return 0;
+  const rule = await taxRuleFor(db, propertyId, 'room');
+  return charged.reduce(
+    (sum, room) => sum + computeTax(rule, room.charge, 1, room.nightly).taxAmount,
+    0,
+  );
 }
 
 async function quoteCancellation(
@@ -1298,19 +1444,20 @@ async function quoteCancellation(
         )
         .orderBy(asc(reservationNights.date))
     : [];
-  const perRoom = rooms.map(({ room, policy }) => ({
-    roomId: room.id,
-    // A hold that was never paid for costs nothing to drop.
-    charge:
-      reservation.status === 'tentative'
-        ? 0
-        : cancellationCharge(
-            policy,
-            room.checkIn,
-            nights.filter((n) => n.reservationRoomId === room.id).map((n) => n.amount),
-            today,
-          ),
-  }));
+  const perRoom = rooms.map(({ room, policy }) => {
+    const amounts = nights.filter((n) => n.reservationRoomId === room.id).map((n) => n.amount);
+    return {
+      roomId: room.id,
+      // A hold that was never paid for costs nothing to drop.
+      charge:
+        reservation.status === 'tentative'
+          ? 0
+          : cancellationCharge(policy, room.checkIn, amounts, today),
+      nightly: amounts.length
+        ? Math.round(amounts.reduce((sum, amount) => sum + amount, 0) / amounts.length)
+        : 0,
+    };
+  });
   return {
     allowed: true,
     charge: perRoom.reduce((sum, r) => sum + r.charge, 0),
@@ -1352,9 +1499,27 @@ export async function getGuestBooking(
     )
     .orderBy(desc(paymentOrders.createdAt))
     .limit(1);
+  // The rooms are held but the payment page was left: the guest may ask for a new one.
+  const held =
+    !order &&
+    reservation.status === 'tentative' &&
+    reservation.holdExpiresAt !== null &&
+    reservation.holdExpiresAt > now;
+  const [lastOrder] = held
+    ? await db
+        .select({ amount: paymentOrders.amount })
+        .from(paymentOrders)
+        .where(
+          and(
+            eq(paymentOrders.reservationId, reservation.id),
+            eq(paymentOrders.purpose, 'booking'),
+          ),
+        )
+        .orderBy(desc(paymentOrders.createdAt))
+        .limit(1)
+    : [];
   const quote = await quoteCancellation(db, context);
-  const rule = quote.charge > 0 ? await taxRuleFor(db, property.id, 'fee') : null;
-  const chargeWithTax = quote.charge + computeTax(rule, quote.charge).taxAmount;
+  const chargeWithTax = quote.charge + (await cancellationTax(db, property.id, quote));
   const today = todayIn(property.timezone);
   const public_ = publicProperty(property);
   return {
@@ -1385,7 +1550,7 @@ export async function getGuestBooking(
       children: r.room.children,
       status: r.room.status,
       amount: r.room.amount,
-      cancellation: cancellationTerms(r.policy, r.room.checkIn),
+      cancellation: cancellationTerms(r.policy, r.room.checkIn, today),
     })),
     currency: reservation.currency,
     total: money.total,
@@ -1403,6 +1568,7 @@ export async function getGuestBooking(
           expiresAt: order.expiresAt,
         }
       : null,
+    payAgain: lastOrder ? { amount: lastOrder.amount, until: reservation.holdExpiresAt! } : null,
     cancellation: {
       allowed: quote.allowed,
       charge: chargeWithTax,
@@ -1478,15 +1644,18 @@ export async function cancelGuestBooking(
     if (!quote.allowed) throw invalidState(quote.reason ?? 'This booking cannot be cancelled');
     await cancelReservation(tx, actor, reservation.id, { reason: 'Cancelled by the guest online' });
     let withTax = 0;
-    if (quote.charge > 0) {
+    for (const room of quote.perRoom) {
+      if (room.charge <= 0) continue;
       const line = await postCharge(tx, actor, {
         reservationId: reservation.id,
         kind: 'fee',
         description: 'Cancellation charge',
-        unitAmount: quote.charge,
+        unitAmount: room.charge,
+        reservationRoomId: room.roomId,
+        taxAs: { category: 'room', price: room.nightly },
         source: 'cancellation',
       });
-      withTax = line.amount + line.taxAmount;
+      withTax += line.amount + line.taxAmount;
     }
     await closeOpenOrders(tx, reservation.id);
     const money = await stayMoney(tx, { ...locked!, status: 'cancelled' });

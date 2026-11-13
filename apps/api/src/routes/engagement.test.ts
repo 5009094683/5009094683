@@ -196,8 +196,12 @@ describe('the booking site', () => {
   it('opens a booking only with its own link', async () => {
     const a = await bookAndPay(14, 15, 'a@example.com');
     const b = await bookAndPay(14, 15, 'b@example.com');
-    expect((await guest.get(`/public/bookings/${a.code}`)).statusCode).toBe(400);
-    expect((await guest.get(`/public/bookings/${a.token.slice(0, -2)}xx`)).statusCode).toBe(404);
+    // Anything that is not a working link is answered the same way: not found.
+    for (const wrong of [a.code, 'x', `${a.token.slice(0, -2)}xx`]) {
+      const answer = await guest.get(`/public/bookings/${wrong}`);
+      expect(answer.statusCode, wrong).toBe(404);
+      expect(answer.json().error.code).toBe('not_found');
+    }
     // One guest's link does not open another guest's payment.
     const [order] = await ctx.t.db
       .select()
@@ -221,6 +225,68 @@ describe('the booking site', () => {
     expect((await guest.get(`/public/bookings/${a.token}`)).statusCode).toBe(404);
     const fresh = replaced.json().url.split('/booking/')[1];
     expect((await guest.get(`/public/bookings/${fresh}`)).json().code).toBe(a.code);
+  });
+
+  it('answers a repeated attempt with the booking it made, and lets a guest pay after leaving the payment page', async () => {
+    // Another visitor, as the limiter sees it: its count for bookings is this test's own.
+    const book = (body: object) =>
+      guest.request({
+        method: 'POST',
+        url: '/public/bookings',
+        headers: { 'x-forwarded-for': '203.0.113.50' },
+        payload: body,
+      });
+    const attempt = {
+      ...bookingBody(40, 41, 'twice@example.com'),
+      requestId: '3f2a1b0c-9d8e-4f7a-8b6c-5d4e3f2a1b0c',
+    };
+    const first = await book(attempt);
+    const second = await book(attempt);
+    expect(first.statusCode, first.body).toBe(201);
+    expect(second.json()).toEqual(first.json());
+    expect((await book({ ...attempt, requestId: 'not-an-id' })).statusCode).toBe(400);
+    const clock = await book({
+      ...bookingBody(42, 43, 'clock@example.com'),
+      arrivalTime: '25:99',
+    });
+    expect(clock.statusCode).toBe(400);
+    expect(clock.json().error.message).toBe(
+      'arrivalTime: Give the arrival time as hours and minutes',
+    );
+
+    // The guest cancels on the payment page, then thinks better of it.
+    const booked = first.json();
+    const payPath = new URL(booked.payment.checkoutUrl).pathname.replace(/^\/api/, '');
+    await guest.request({
+      method: 'POST',
+      url: payPath,
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: 'outcome=cancelled',
+    });
+    const left = (await guest.post(`/public/bookings/${booked.token}/sync`)).json();
+    expect(left).toMatchObject({
+      status: 'tentative',
+      pendingPayment: null,
+      payAgain: { amount: 472_500 },
+    });
+    const again = await guest.post(`/public/bookings/${booked.token}/pay`);
+    expect(again.statusCode).toBe(201);
+    expect(again.json().checkoutUrl).not.toBe(booked.payment.checkoutUrl);
+    await guest.request({
+      method: 'POST',
+      url: new URL(again.json().checkoutUrl).pathname.replace(/^\/api/, ''),
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: 'outcome=paid',
+    });
+    expect((await guest.post(`/public/bookings/${booked.token}/sync`)).json()).toMatchObject({
+      status: 'confirmed',
+      paid: 472_500,
+      payAgain: null,
+    });
+    const late = await guest.post(`/public/bookings/${booked.token}/pay`);
+    expect(late.statusCode).toBe(409);
+    expect(late.json().error.message).toBe('This booking is already confirmed');
+    expect((await guest.post('/public/bookings/nonsense/pay')).statusCode).toBe(404);
   });
 
   it('lets the guest cancel, and sends the refund back through the gateway', async () => {
