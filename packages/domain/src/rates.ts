@@ -288,6 +288,38 @@ export async function setRates(
   });
 }
 
+export interface RatesBatchInput {
+  propertyId: string;
+  changes: Omit<SetRatesInput, 'propertyId'>[];
+}
+
+/**
+ * Applies several rate changes as one save: all of them or none. They are
+ * queued for the channels in the same transaction, so however many rate
+ * plans and dates were touched, the channels are told once.
+ */
+export async function setRatesBatch(
+  db: DbOrTx,
+  actor: Actor,
+  input: RatesBatchInput,
+): Promise<{ daysChanged: number; results: { ratePlanId: string; daysChanged: number }[] }> {
+  if (input.changes.length === 0) throw validationError('Nothing to change');
+  if (input.changes.length > 200) {
+    throw validationError('At most 200 changes can be saved at once');
+  }
+  return transact(db, async (tx) => {
+    const results: { ratePlanId: string; daysChanged: number }[] = [];
+    for (const change of input.changes) {
+      const { daysChanged } = await setRates(tx, actor, {
+        ...change,
+        propertyId: input.propertyId,
+      });
+      results.push({ ratePlanId: change.ratePlanId, daysChanged });
+    }
+    return { daysChanged: results.reduce((sum, r) => sum + r.daysChanged, 0), results };
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Quoting
 

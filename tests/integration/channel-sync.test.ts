@@ -14,6 +14,7 @@ import {
   reservationFor,
   shownEverywhere,
   shownOn,
+  sleep,
   startStack,
   waitFor,
   type ConnectedProperty,
@@ -199,6 +200,85 @@ describe('a change in the PMS reaches every site', () => {
       closedToArrival: true,
     });
     expect(stack.sim.state.restrictionOn(external, day(43)).rate).toBe(450_000);
+  });
+
+  it('sends one save that touches several rate plans as a single request', async () => {
+    const standard = hotel.standard.ratePlan.id;
+    const deluxe = hotel.deluxe.ratePlan.id;
+    const sim = stack.sim.state;
+    // Let anything still on its way from the tests above arrive first.
+    await waitFor(
+      'the queue to empty',
+      async () => (await connectionOf(stack, live.connectionId)).pendingChanges === 0,
+    );
+    await sleep(150);
+    const before = sim.requestLog.length;
+
+    // The kind of thing a revenue manager does in one sitting: a price on one night, another
+    // plan's price on another, a restriction over ten days, and a new season of half a year.
+    const res = await stack.admin.post(`/properties/${hotel.property.id}/rates/batch`, {
+      changes: [
+        { ratePlanId: standard, from: day(60), to: day(61), change: { rate: 520_000 } },
+        { ratePlanId: deluxe, from: day(64), to: day(65), change: { rate: 912_350 } },
+        {
+          ratePlanId: deluxe,
+          from: day(70),
+          to: day(80),
+          change: { minStayArrival: 3, closedToDeparture: true, maxStay: 6 },
+        },
+        {
+          ratePlanId: standard,
+          from: day(90),
+          to: day(270),
+          change: { rate: 480_000, minStayThrough: 2 },
+        },
+      ],
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ daysChanged: 1 + 1 + 10 + 180 });
+    await waitFor(
+      'the changes at the channel manager',
+      () => sim.restrictionOn(live.rates[standard]!, day(269)).rate === 480_000,
+    );
+    expect(sim.restrictionOn(live.rates[standard]!, day(60)).rate).toBe(520_000);
+    expect(sim.restrictionOn(live.rates[deluxe]!, day(64)).rate).toBe(912_350);
+    expect(sim.restrictionOn(live.rates[deluxe]!, day(75))).toMatchObject({
+      minStayArrival: 3,
+      closedToDeparture: true,
+      maxStay: 6,
+    });
+    expect(sim.restrictionOn(live.rates[standard]!, day(180))).toMatchObject({
+      rate: 480_000,
+      minStayThrough: 2,
+    });
+    expect(sim.restrictionOn(live.rates[standard]!, day(270)).rate).toBe(450_000);
+
+    // One request, carrying one entry for each run of dates that changed and nothing else.
+    await sleep(300);
+    const sent = ariRequests(stack, before);
+    expect(sent.map((r) => [r.path, r.status, r.values])).toEqual([['/restrictions', 200, 4]]);
+
+    // All or nothing: one change that cannot be made stops the others too, and nothing is sent.
+    const refused = await stack.admin.post(`/properties/${hotel.property.id}/rates/batch`, {
+      changes: [
+        { ratePlanId: standard, from: day(300), to: day(301), change: { rate: 999_900 } },
+        {
+          ratePlanId: '00000000-0000-4000-8000-000000000000',
+          from: day(300),
+          to: day(301),
+          change: { rate: 1 },
+        },
+      ],
+    });
+    expect(refused.statusCode).toBe(404);
+    const rates = (
+      await stack.admin.get(
+        `/properties/${hotel.property.id}/rates?from=${day(300)}&to=${day(301)}`,
+      )
+    ).json() as { days: { ratePlanId: string; rate: number }[] };
+    expect(rates.days.find((d) => d.ratePlanId === standard)!.rate).toBe(450_000);
+    await sleep(300);
+    expect(ariRequests(stack, before)).toHaveLength(1);
   });
 });
 

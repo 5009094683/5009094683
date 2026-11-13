@@ -15,6 +15,7 @@ import {
   listProperties,
   quoteStay,
   setRates,
+  setRatesBatch,
   updateProperty,
   updateRatePlan,
   updateRoomType,
@@ -333,6 +334,45 @@ export async function propertyRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  const rateChange = z.object({
+    ratePlanId: uuid,
+    from: dateString,
+    to: dateString,
+    daysOfWeek: z.array(z.number().int().min(0).max(6)).max(7).optional(),
+    change: z.object({
+      rate: money.nullable().optional(),
+      minStayArrival: z.number().int().min(1).max(365).nullable().optional(),
+      minStayThrough: z.number().int().min(1).max(365).nullable().optional(),
+      maxStay: z.number().int().min(1).max(365).nullable().optional(),
+      closedToArrival: z.boolean().optional(),
+      closedToDeparture: z.boolean().optional(),
+      stopSell: z.boolean().optional(),
+    }),
+  });
+
+  r.post(
+    '/properties/:propertyId/rates/batch',
+    {
+      schema: {
+        tags: ['rates'],
+        summary:
+          'Save several rate and restriction changes as one: all or none, and the booking sites are told once',
+        params: propertyParams,
+        body: z.object({ changes: z.array(rateChange).min(1).max(200) }),
+      },
+    },
+    async (req) => {
+      const actor = await authorizeProperty(app.db, req, req.params.propertyId, 'rates.write');
+      return setRatesBatch(app.db, actor, {
+        propertyId: req.params.propertyId,
+        changes: req.body.changes.map(({ from, to, ...rest }) => ({
+          ...rest,
+          range: { from, to },
+        })),
+      });
+    },
+  );
+
   r.post(
     '/properties/:propertyId/rates',
     {
@@ -340,21 +380,7 @@ export async function propertyRoutes(app: FastifyInstance): Promise<void> {
         tags: ['rates'],
         summary: 'Set rates and restrictions across a date range',
         params: propertyParams,
-        body: z.object({
-          ratePlanId: uuid,
-          from: dateString,
-          to: dateString,
-          daysOfWeek: z.array(z.number().int().min(0).max(6)).max(7).optional(),
-          change: z.object({
-            rate: money.nullable().optional(),
-            minStayArrival: z.number().int().min(1).max(365).nullable().optional(),
-            minStayThrough: z.number().int().min(1).max(365).nullable().optional(),
-            maxStay: z.number().int().min(1).max(365).nullable().optional(),
-            closedToArrival: z.boolean().optional(),
-            closedToDeparture: z.boolean().optional(),
-            stopSell: z.boolean().optional(),
-          }),
-        }),
+        body: rateChange,
       },
     },
     async (req) => {
