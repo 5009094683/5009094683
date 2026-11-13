@@ -28,6 +28,10 @@ export function registerErrorHandling(app: FastifyInstance): void {
 
   app.setErrorHandler((err: FastifyError | DomainError | Error, req, reply) => {
     if (err instanceof DomainError) {
+      const wait = err.details?.retryAfterSeconds;
+      if (err.code === 'rate_limited' && typeof wait === 'number') {
+        void reply.header('retry-after', String(wait));
+      }
       return reply.status(err.httpStatus).send({
         error: { code: err.code, message: err.message, details: err.details, requestId: req.id },
       } satisfies ErrorBody);

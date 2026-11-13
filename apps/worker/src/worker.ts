@@ -38,13 +38,16 @@ import {
   completeJob,
   createGateway,
   createMailer,
+  deliverDueWebhooks,
   enqueueJob,
   enqueueRecurring,
   expireHolds,
   failJob,
+  httpWebhookSender,
   isDomainError,
   LocalFileStore,
   paymentOrdersToCheck,
+  queueWebhookDeliveries,
   runAutomations,
   runDueNightAudits,
   runDueReportSchedules,
@@ -54,6 +57,7 @@ import {
   type JobRow,
   type Mailer,
   type PaymentGateway,
+  type WebhookSender,
 } from '@pms/domain';
 import { jobHandler, jobKinds, JOBS, type JobContext } from './jobs';
 import { Loop } from './loop';
@@ -64,8 +68,10 @@ export interface WorkerOptions {
   env: Env;
   log: Logger;
   id?: string;
-  /** Extra work done in the transaction that takes events off the outbox (outbound webhooks). */
+  /** Extra work done in the transaction that takes events off the outbox, besides queueing webhooks. */
   route?: RouteOptions;
+  /** How outbound webhooks are sent. Replaced in tests. */
+  webhookSender?: WebhookSender;
   /** Stand-ins for the mail server, the file store and the payment gateway, for tests. */
   mailer?: Mailer;
   files?: FileStore;
@@ -85,6 +91,8 @@ interface Timings {
   jobIdleMs: number;
   /** How often recurring work is scheduled and health is checked. */
   scheduleMs: number;
+  /** How often outbound webhooks waiting to be retried are looked for. */
+  webhookIdleMs: number;
   heartbeatMs: number;
 }
 
@@ -93,6 +101,7 @@ const DEFAULT_TIMINGS: Timings = {
   syncDebounceMs: 50,
   jobIdleMs: 2_000,
   scheduleMs: 20_000,
+  webhookIdleMs: 5_000,
   heartbeatMs: 10_000,
 };
 
@@ -109,6 +118,8 @@ const DAY_MS = 24 * 3600_000;
  *   commits (LISTEN/NOTIFY) and by a short timer as a safety net.
  * - jobs: runs queued background work (fetching bookings, drift checks).
  * - schedule: queues the recurring work and watches for trouble.
+ * - webhooks: tells other systems what changed. On its own loop, so a slow
+ *   receiver never holds up the channels.
  *
  * Any number of workers may run side by side: every piece of work is taken
  * under a lock or a unique key, so they share it rather than repeat it.
@@ -124,6 +135,9 @@ export class Worker {
   private readonly syncLoop: Loop;
   private readonly jobLoop: Loop;
   private readonly scheduleLoop: Loop;
+  private readonly webhookLoop: Loop;
+  private readonly webhookSender: WebhookSender;
+  private readonly route: RouteOptions;
   private readonly active = new Set<Promise<void>>();
   private listener: NotificationListener | null = null;
   private heartbeatTimer: NodeJS.Timeout | null = null;
@@ -174,6 +188,22 @@ export class Worker {
       idleMs: this.timings.scheduleMs,
       onError: onError('schedule'),
     });
+    this.webhookLoop = new Loop(() => this.webhookTick(), {
+      name: 'webhooks',
+      idleMs: this.timings.webhookIdleMs,
+      onError: onError('webhooks'),
+    });
+    this.webhookSender =
+      options.webhookSender ??
+      httpWebhookSender({ allowPrivate: this.env.WEBHOOKS_ALLOW_PRIVATE_HOSTS });
+    this.route = {
+      // Deliveries are written in the transaction that takes the changes off the outbox.
+      onEntityEvents: async (tx, events) => {
+        const queued = await queueWebhookDeliveries(tx, events);
+        await options.route?.onEntityEvents?.(tx, events);
+        if (queued > 0) this.webhookLoop.wake();
+      },
+    };
   }
 
   async start(): Promise<void> {
@@ -200,6 +230,7 @@ export class Worker {
     this.syncLoop.start();
     this.jobLoop.start();
     this.scheduleLoop.start();
+    this.webhookLoop.start();
     this.log.info({ workerId: this.id }, 'worker started');
   }
 
@@ -209,7 +240,12 @@ export class Worker {
     this.heartbeatTimer = null;
     await this.listener?.stop();
     this.listener = null;
-    await Promise.all([this.scheduleLoop.stop(), this.jobLoop.stop(), this.syncLoop.stop()]);
+    await Promise.all([
+      this.scheduleLoop.stop(),
+      this.jobLoop.stop(),
+      this.syncLoop.stop(),
+      this.webhookLoop.stop(),
+    ]);
     await Promise.allSettled([...this.active]);
     await removeHeartbeat(this.db, this.id).catch(() => {});
     this.log.info({ workerId: this.id }, 'worker stopped');
@@ -228,6 +264,7 @@ export class Worker {
       await Promise.all(jobs.map((job) => this.runJob(job)));
     }
     await this.syncTick();
+    await this.webhookTick();
   }
 
   private async heartbeat(): Promise<void> {
@@ -246,7 +283,7 @@ export class Worker {
   // Sync: outbox -> work lists -> channels
 
   private async syncTick(): Promise<number> {
-    const routed = await routeOutbox(this.db, this.options.route);
+    const routed = await routeOutbox(this.db, this.route);
     if (routed.queued > 0)
       this.log.debug({ routed: routed.routed, queued: routed.queued }, 'routed changes');
     const results = await dispatchDue(this.db, new Date(), this.env.WORKER_CONCURRENCY);
@@ -267,6 +304,19 @@ export class Worker {
     if (!next) return this.timings.syncIdleMs;
     // A connection held by another worker shows as overdue; do not spin on it.
     return Math.max(100, next.getTime() - Date.now());
+  }
+
+  // -------------------------------------------------------------------------
+  // Outbound webhooks
+
+  private async webhookTick(): Promise<number> {
+    const batch = 50;
+    const run = await deliverDueWebhooks(this.db, this.webhookSender, { limit: batch });
+    const handled = run.delivered + run.retrying + run.failed;
+    if (run.retrying + run.failed > 0) this.log.warn({ ...run }, 'outbound webhooks failed');
+    else if (handled > 0) this.log.debug({ ...run }, 'outbound webhooks delivered');
+    // A full batch may mean more are waiting.
+    return handled >= batch ? 0 : this.timings.webhookIdleMs;
   }
 
   // -------------------------------------------------------------------------

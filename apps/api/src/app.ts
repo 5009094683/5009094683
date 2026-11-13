@@ -38,6 +38,7 @@ import { calendarRoutes } from './routes/calendar';
 import { channelRoutes, channelWebhookRoutes, icalRoutes, mailboxRoutes } from './routes/channels';
 import { engagementRoutes } from './routes/engagement';
 import { guestRoutes } from './routes/guests';
+import { integrationRoutes } from './routes/integrations';
 import { operationsRoutes } from './routes/operations';
 import { ownerRoutes } from './routes/owners';
 import { orgRoutes } from './routes/org';
@@ -179,6 +180,7 @@ export async function buildApp(deps: AppDeps): Promise<App> {
   await typed.register(aiRoutes);
   await typed.register(reportRoutes);
   await typed.register(ownerRoutes);
+  await typed.register(integrationRoutes);
   await typed.register(publicRoutes);
   await typed.register(channelRoutes);
   await typed.register(icalRoutes);

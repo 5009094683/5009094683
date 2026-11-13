@@ -1,11 +1,14 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
+  API_KEY_PREFIX,
   DomainError,
   can,
   forbidden,
+  resolveApiKey,
   resolveSession,
   type Actor,
   type Permission,
+  type ResolvedApiKey,
   type SessionContext,
 } from '@pms/domain';
 
@@ -15,6 +18,30 @@ declare module 'fastify' {
   interface FastifyRequest {
     session: SessionContext | null;
     sessionToken: string | null;
+    /** Set when the request came with an API key instead of a signed-in session. */
+    apiKey: ResolvedApiKey | null;
+  }
+}
+
+/**
+ * Counts requests per API key in one-minute windows, in this process. With
+ * several API servers each keeps its own count, so the limit is per server.
+ */
+class KeyLimiter {
+  private readonly windows = new Map<string, { start: number; count: number }>();
+
+  constructor(private readonly perMinute: number) {}
+
+  /** Seconds until the key may call again, or 0 when the request is within the limit. */
+  take(keyId: string, now: number = Date.now()): number {
+    const window = this.windows.get(keyId);
+    if (!window || now - window.start >= 60_000) {
+      if (this.windows.size > 10_000) this.windows.clear();
+      this.windows.set(keyId, { start: now, count: 1 });
+      return 0;
+    }
+    window.count++;
+    return window.count > this.perMinute ? Math.ceil((window.start + 60_000 - now) / 1000) : 0;
   }
 }
 
@@ -28,6 +55,8 @@ function isMachineRoute(url: string): boolean {
 export function registerAuth(app: FastifyInstance): void {
   app.decorateRequest('session', null);
   app.decorateRequest('sessionToken', null);
+  app.decorateRequest('apiKey', null);
+  const limiter = new KeyLimiter(app.env.API_KEY_RATE_LIMIT_PER_MINUTE);
 
   const allowedOrigins = new Set(
     [app.env.WEB_URL, app.env.BOOKING_URL, app.env.API_PUBLIC_URL].map((u) => new URL(u).origin),
@@ -42,6 +71,25 @@ export function registerAuth(app: FastifyInstance): void {
       if (origin && !allowedOrigins.has(origin)) {
         throw forbidden('Cross-site requests are not allowed');
       }
+    }
+
+    // A key in the Authorization header is used instead of a session, never alongside one.
+    const bearer = /^Bearer\s+(\S+)$/i.exec(req.headers.authorization ?? '')?.[1];
+    if (bearer?.startsWith(API_KEY_PREFIX) && !isMachineRoute(req.url)) {
+      const key = await resolveApiKey(app.db, bearer);
+      if (!key) {
+        throw new DomainError('unauthenticated', 'This API key is not valid, or no longer valid');
+      }
+      const wait = limiter.take(key.id);
+      if (wait > 0) {
+        throw new DomainError(
+          'rate_limited',
+          `This API key has made too many requests. Try again in ${wait} seconds.`,
+          { retryAfterSeconds: wait },
+        );
+      }
+      req.apiKey = key;
+      return;
     }
 
     const token = req.cookies[SESSION_COOKIE];
@@ -115,6 +163,18 @@ export function authorize(
   permission?: Permission,
   propertyId?: string | null,
 ): Actor {
+  if (req.apiKey) {
+    const key = req.apiKey;
+    if (permission && !can(key.grants, permission, propertyId)) throw forbidden();
+    return {
+      type: 'api_key',
+      orgId: key.orgId,
+      label: `api-key:${key.name}`,
+      grants: key.grants,
+      ip: req.ip,
+      requestId: req.id,
+    };
+  }
   const session = fullSession(req);
   if (permission && !can(session.grants, permission, propertyId)) throw forbidden();
   return actorFromSession(req, session);

@@ -17,6 +17,7 @@ import {
   draftDueOwnerStatements,
   MESSAGE_JOBS,
   pruneJobs,
+  pruneWebhookDeliveries,
   purgeExpiredFiles,
   type FileStore,
   type JobRow,
@@ -153,5 +154,6 @@ registerJobHandler(JOBS.prune, async (_payload, { db, files }) => {
   const jobs = await pruneJobs(db);
   const history = await pruneSyncHistory(db);
   const removedFiles = await purgeExpiredFiles(db, files);
-  return { jobs, history, removedFiles };
+  const webhookDeliveries = await pruneWebhookDeliveries(db);
+  return { jobs, history, removedFiles, webhookDeliveries };
 });

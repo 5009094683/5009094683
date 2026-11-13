@@ -9,6 +9,6 @@ export const perUser = (max: number) => ({
   rateLimit: {
     max,
     timeWindow: '1 minute',
-    keyGenerator: (req: FastifyRequest): string => req.session?.user.id ?? req.ip,
+    keyGenerator: (req: FastifyRequest): string => req.session?.user.id ?? req.apiKey?.id ?? req.ip,
   },
 });
