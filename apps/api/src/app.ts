@@ -39,9 +39,11 @@ import { channelRoutes, channelWebhookRoutes, icalRoutes, mailboxRoutes } from '
 import { engagementRoutes } from './routes/engagement';
 import { guestRoutes } from './routes/guests';
 import { operationsRoutes } from './routes/operations';
+import { ownerRoutes } from './routes/owners';
 import { orgRoutes } from './routes/org';
 import { propertyRoutes } from './routes/properties';
 import { publicRoutes } from './routes/public';
+import { reportRoutes } from './routes/reports';
 import { reservationRoutes } from './routes/reservations';
 import { ssoRoutes } from './routes/sso';
 import { userRoutes } from './routes/users';
@@ -175,6 +177,8 @@ export async function buildApp(deps: AppDeps): Promise<App> {
   await typed.register(operationsRoutes);
   await typed.register(engagementRoutes);
   await typed.register(aiRoutes);
+  await typed.register(reportRoutes);
+  await typed.register(ownerRoutes);
   await typed.register(publicRoutes);
   await typed.register(channelRoutes);
   await typed.register(icalRoutes);

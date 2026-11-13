@@ -14,6 +14,7 @@ import {
 } from '@pms/channels';
 import {
   deliverMessage,
+  draftDueOwnerStatements,
   MESSAGE_JOBS,
   pruneJobs,
   purgeExpiredFiles,
@@ -65,6 +66,7 @@ export const JOBS = {
   pullReviews: CHANNEL_JOBS.pullReviews,
   replyReview: CHANNEL_JOBS.replyReview,
   pricing: 'pricing.recommend',
+  ownerStatements: 'owners.draft_statements',
   prune: 'maintenance.prune',
 } as const;
 
@@ -119,6 +121,10 @@ registerJobHandler(JOBS.pricing, async (_payload, { db }) => {
     created: runs.reduce((sum, r) => sum + r.created, 0),
     autoApplied: runs.reduce((sum, r) => sum + r.autoApplied, 0),
   };
+});
+
+registerJobHandler(JOBS.ownerStatements, async (_payload, { db }) => {
+  return draftDueOwnerStatements(db);
 });
 
 registerJobHandler(JOBS.sendMessage, async (payload, { db }, job) => {

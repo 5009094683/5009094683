@@ -47,6 +47,7 @@ import {
   paymentOrdersToCheck,
   runAutomations,
   runDueNightAudits,
+  runDueReportSchedules,
   syncPaymentOrder,
   systemActor,
   type FileStore,
@@ -119,6 +120,7 @@ export class Worker {
   private readonly log: Logger;
   private readonly timings: Timings;
   private readonly context: JobContext;
+  private readonly mailer: Mailer;
   private readonly syncLoop: Loop;
   private readonly jobLoop: Loop;
   private readonly scheduleLoop: Loop;
@@ -141,7 +143,8 @@ export class Worker {
       files: options.files ?? new LocalFileStore(this.env.STORAGE_DIR),
       ai,
     };
-    registerMessageTransports(this.db, this.env, options.mailer ?? createMailer(this.env));
+    this.mailer = options.mailer ?? createMailer(this.env);
+    registerMessageTransports(this.db, this.env, this.mailer);
     setEmailFallbackReader(
       ai
         ? (message, context) =>
@@ -381,6 +384,13 @@ export class Worker {
       if (raised > 0) this.log.warn({ raised }, 'unusual cancellations');
     });
     await step('assistant proposals', () => expireActions(this.db, now));
+    await step('scheduled reports', async () => {
+      const run = await runDueReportSchedules(this.db, this.mailer, now);
+      if (run.sent + run.failed > 0) this.log.info({ ...run }, 'scheduled reports');
+    });
+    await step('owner statements', () =>
+      enqueueRecurring(this.db, JOBS.ownerStatements, DAY_MS, {}, { now }),
+    );
     await step('pruning', () => enqueueRecurring(this.db, JOBS.prune, DAY_MS, {}, { now }));
     return this.timings.scheduleMs;
   }

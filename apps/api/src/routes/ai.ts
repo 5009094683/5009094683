@@ -27,18 +27,10 @@ import {
 } from '@pms/ai';
 import { CHANNEL_JOBS, queueReviewReply } from '@pms/channels';
 import { DomainError, enqueueJob, notFound, validationError, type Actor } from '@pms/domain';
+import { perUser } from '../lib/limits';
 import { dateString, idParams, propertyParams, uuid, uuidList } from '../lib/schemas';
 import { authorizeProperty, authorizeReservation, scopedProperties } from '../lib/scope';
 import { authorize } from '../plugins/auth';
-
-/** A limit counted per signed-in person, not per address: the staff of one hotel share an address. */
-const perUser = (max: number) => ({
-  rateLimit: {
-    max,
-    timeWindow: '1 minute',
-    keyGenerator: (req: FastifyRequest): string => req.session?.user.id ?? req.ip,
-  },
-});
 
 export async function aiRoutes(app: FastifyInstance): Promise<void> {
   const r = app.withTypeProvider<ZodTypeProvider>();

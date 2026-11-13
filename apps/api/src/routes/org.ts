@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { getOrganization, updateOrganization } from '@pms/domain';
+import { can, getOrganization, updateOrganization } from '@pms/domain';
 import { authorize } from '../plugins/auth';
 
 export async function orgRoutes(app: FastifyInstance): Promise<void> {
@@ -9,7 +9,10 @@ export async function orgRoutes(app: FastifyInstance): Promise<void> {
 
   r.get('/org', { schema: { tags: ['organisation'] } }, async (req) => {
     const actor = authorize(req);
-    return getOrganization(app.db, actor.orgId);
+    const org = await getOrganization(app.db, actor.orgId);
+    if (can(actor.grants, 'org.manage')) return org;
+    // Who is told about alerts and how long guest data is kept are for administrators.
+    return { ...org, settings: { requireTwoFactor: org.settings.requireTwoFactor } };
   });
 
   r.patch(
