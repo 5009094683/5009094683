@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
+import { Assistant } from '@/components/assistant/assistant';
+import { InboxUnread } from '@/components/inbox/unread-badge';
 import {
   Badge,
   Menu,
@@ -50,6 +52,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
               aria-hidden
             />
             {item.label}
+            {item.badge === 'inbox' && <InboxUnread />}
           </Link>
         );
       })}
@@ -295,6 +298,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <div className="flex min-w-0 flex-1 items-center">
             {auth.can('reservations.read') && <GlobalSearch />}
           </div>
+          {auth.can('ai.use') && <Assistant />}
           <LiveDot />
           {auth.can('property.read') && <AlertsBell />}
           <UserMenu />

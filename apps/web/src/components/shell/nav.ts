@@ -3,9 +3,11 @@ import {
   CalendarDays,
   ClipboardList,
   ConciergeBell,
+  MessagesSquare,
   Network,
   ReceiptText,
   Settings,
+  Star,
   Tags,
   Users,
   Wrench,
@@ -19,6 +21,8 @@ export interface NavItem {
   icon: LucideIcon;
   /** Shown when the user holds any of these. */
   permissions: Permission[];
+  /** A count shown beside the label. */
+  badge?: 'inbox';
 }
 
 export const NAV: NavItem[] = [
@@ -33,6 +37,13 @@ export const NAV: NavItem[] = [
   { href: '/rates', label: 'Rates', icon: Tags, permissions: ['rates.read'] },
   { href: '/guests', label: 'Guests', icon: Users, permissions: ['guests.read'] },
   {
+    href: '/inbox',
+    label: 'Inbox',
+    icon: MessagesSquare,
+    permissions: ['inbox.read'],
+    badge: 'inbox',
+  },
+  {
     href: '/housekeeping',
     label: 'Housekeeping',
     icon: BrushCleaning,
@@ -40,6 +51,7 @@ export const NAV: NavItem[] = [
   },
   { href: '/maintenance', label: 'Maintenance', icon: Wrench, permissions: ['housekeeping.read'] },
   { href: '/accounts', label: 'Accounts', icon: ReceiptText, permissions: ['folio.read'] },
+  { href: '/reviews', label: 'Reviews', icon: Star, permissions: ['reports.read'] },
   { href: '/channels', label: 'Channels', icon: Network, permissions: ['channels.read'] },
   {
     href: '/settings',
