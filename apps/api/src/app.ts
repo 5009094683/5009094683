@@ -13,6 +13,7 @@ import {
 import { sql } from 'drizzle-orm';
 import type { Env } from '@pms/config';
 import type { Database, DbHandle } from '@pms/db';
+import { checkWorkerLiveness, registerDefaultAdapters } from '@pms/channels';
 import { createMailer, type Mailer } from '@pms/domain';
 import { registerAuth } from './plugins/auth';
 import { registerErrorHandling } from './plugins/errors';
@@ -20,6 +21,7 @@ import { registerLive } from './plugins/live';
 import { auditRoutes } from './routes/audit';
 import { authRoutes } from './routes/auth';
 import { calendarRoutes } from './routes/calendar';
+import { channelRoutes, channelWebhookRoutes } from './routes/channels';
 import { guestRoutes } from './routes/guests';
 import { orgRoutes } from './routes/org';
 import { propertyRoutes } from './routes/properties';
@@ -46,6 +48,8 @@ export interface AppDeps {
 
 export type App = FastifyInstance;
 
+const WORKER_WATCH_INTERVAL_MS = 60_000;
+
 export async function buildApp(deps: AppDeps): Promise<App> {
   const app = Fastify({
     logger: deps.logger ?? false,
@@ -55,6 +59,7 @@ export async function buildApp(deps: AppDeps): Promise<App> {
     routerOptions: { ignoreTrailingSlash: true },
   });
 
+  registerDefaultAdapters();
   app.decorate('db', deps.handle.db);
   app.decorate('handle', deps.handle);
   app.decorate('env', deps.env);
@@ -122,6 +127,19 @@ export async function buildApp(deps: AppDeps): Promise<App> {
   await typed.register(reservationRoutes);
   await typed.register(calendarRoutes);
   await typed.register(guestRoutes);
+  await typed.register(channelRoutes);
+  await app.register(channelWebhookRoutes);
+
+  // The API is still up when the sync worker is not, so it is the one to say so.
+  if (!deps.env.isTest) {
+    const watch = setInterval(() => {
+      void checkWorkerLiveness(app.db).catch((err: unknown) =>
+        app.log.warn({ err }, 'could not check on the sync worker'),
+      );
+    }, WORKER_WATCH_INTERVAL_MS);
+    watch.unref();
+    app.addHook('onClose', async () => clearInterval(watch));
+  }
 
   return app;
 }
