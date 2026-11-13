@@ -178,6 +178,29 @@ export async function controlApi(
     return { id: booking.id, revisionId: booking.revisionIds[booking.revisionIds.length - 1] };
   });
 
+  /** The guest of a booking writes to the property in the booking site's message box. */
+  app.post('/bookings/:id/messages', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = (req.body ?? {}) as { text?: string; silent?: boolean };
+    if (!body.text?.trim()) throw new SimError(400, 'A message needs some text');
+    const message = state.guestMessage(id, body.text, { silent: body.silent });
+    return reply.status(201).send({ id: message.id, threadId: message.threadId });
+  });
+
+  /** Every conversation, with what each side wrote, oldest first. */
+  app.get('/threads', async () => ({ threads: [...state.threads.values()] }));
+
+  /** Switch the paid messages add-on off or on for a property. */
+  app.post('/messaging', async (req) => {
+    const body = (req.body ?? {}) as { propertyId?: string; enabled?: boolean };
+    if (!body.propertyId || !state.properties.has(body.propertyId)) {
+      throw new SimError(404, 'Property not found');
+    }
+    if (body.enabled === false) state.messagingDisabled.add(body.propertyId);
+    else state.messagingDisabled.delete(body.propertyId);
+    return { propertyId: body.propertyId, enabled: body.enabled !== false };
+  });
+
   /** Announce again every revision still waiting, as the real service does until it is acknowledged. */
   app.post('/redeliver', async () => {
     const waiting = state.feed();

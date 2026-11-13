@@ -1,7 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { addDays, decimalToMinor, eachDate, isValidDate, minorToDecimal } from '@pms/domain/shared';
-import { CHANNELS, SimError, type SimState, type SimWebhook } from './state';
+import {
+  CHANNELS,
+  SimError,
+  type SimMessage,
+  type SimState,
+  type SimThread,
+  type SimWebhook,
+} from './state';
 
 /** Events a webhook may subscribe to, as the real service lists them. */
 const WEBHOOK_EVENTS = new Set([
@@ -521,6 +528,127 @@ export async function channexApi(
     }
     return problems;
   }
+
+  // -------------------------------------------------------------------------
+  // Guest messages (the paid messages add-on)
+
+  const forbidden = { errors: { code: 'forbidden', title: 'Forbidden' } };
+
+  const messageResource = (m: SimMessage) => ({
+    type: 'message',
+    id: m.id,
+    attributes: {
+      message: m.message,
+      attachments: [],
+      sender: m.sender,
+      inserted_at: m.insertedAt,
+      updated_at: m.insertedAt,
+    },
+    relationships: { message_thread: { data: { id: m.threadId, type: 'message_thread' } } },
+  });
+
+  const threadResource = (t: SimThread) => {
+    const last = t.messages[t.messages.length - 1];
+    return {
+      type: 'message_thread',
+      id: t.id,
+      attributes: {
+        title: t.title,
+        is_closed: t.isClosed,
+        provider: t.provider,
+        message_count: t.messages.length,
+        last_message: last
+          ? {
+              attachments: [],
+              inserted_at: last.insertedAt,
+              message: last.message,
+              sender: last.sender,
+            }
+          : null,
+        last_message_received_at: last?.insertedAt ?? null,
+        inserted_at: t.insertedAt,
+        updated_at: last?.insertedAt ?? t.insertedAt,
+      },
+      relationships: {
+        booking: { data: { id: t.bookingId, type: 'booking' } },
+        property: { data: { id: t.propertyId, type: 'property' } },
+      },
+    };
+  };
+
+  const newestFirst = (messages: SimMessage[]) =>
+    [...messages].sort((a, b) => b.insertedAt.localeCompare(a.insertedAt));
+
+  app.get('/message_threads', async (req, reply) => {
+    const query = req.query as Query;
+    const propertyId = query['filter[property_id]'];
+    if (propertyId && state.messagingDisabled.has(propertyId)) {
+      return reply.status(403).send(forbidden);
+    }
+    const all = [...state.threads.values()]
+      .filter((t) => !propertyId || t.propertyId === propertyId)
+      .filter((t) => !state.messagingDisabled.has(t.propertyId))
+      .sort((a, b) =>
+        (b.messages[b.messages.length - 1]?.insertedAt ?? b.insertedAt).localeCompare(
+          a.messages[a.messages.length - 1]?.insertedAt ?? a.insertedAt,
+        ),
+      );
+    const page = paginate(all, query);
+    return { data: page.data.map(threadResource), meta: page.meta };
+  });
+
+  app.get('/message_threads/:id', async (req, reply) => {
+    const thread = state.threads.get((req.params as { id: string }).id);
+    if (!thread) return reply.status(404).send(notFound);
+    if (state.messagingDisabled.has(thread.propertyId)) return reply.status(403).send(forbidden);
+    return { data: threadResource(thread) };
+  });
+
+  app.get('/message_threads/:id/messages', async (req, reply) => {
+    const thread = state.threads.get((req.params as { id: string }).id);
+    if (!thread) return reply.status(404).send(notFound);
+    if (state.messagingDisabled.has(thread.propertyId)) return reply.status(403).send(forbidden);
+    const page = paginate(newestFirst(thread.messages), req.query as Query);
+    return { data: page.data.map(messageResource), meta: page.meta };
+  });
+
+  const textOf = (body: unknown): string | null => {
+    const text = (body as { message?: { message?: unknown } } | undefined)?.message?.message;
+    return typeof text === 'string' && text.trim() ? text : null;
+  };
+
+  app.post('/message_threads/:id/messages', async (req, reply) => {
+    const thread = state.threads.get((req.params as { id: string }).id);
+    if (!thread) return reply.status(404).send(notFound);
+    if (state.messagingDisabled.has(thread.propertyId)) return reply.status(403).send(forbidden);
+    const text = textOf(req.body);
+    if (!text) return reply.status(422).send(validationError({ message: ["can't be blank"] }));
+    return { data: messageResource(state.propertyMessage({ threadId: thread.id }, text)) };
+  });
+
+  app.get('/bookings/:id/messages', async (req, reply) => {
+    const booking = state.bookings.get((req.params as { id: string }).id);
+    if (!booking) return reply.status(404).send(notFound);
+    if (state.messagingDisabled.has(booking.propertyId)) return reply.status(403).send(forbidden);
+    const thread = [...state.threads.values()].find((t) => t.bookingId === booking.id);
+    const page = paginate(newestFirst(thread?.messages ?? []), req.query as Query);
+    return { data: page.data.map(messageResource), meta: page.meta };
+  });
+
+  app.post('/bookings/:id/messages', async (req, reply) => {
+    const booking = state.bookings.get((req.params as { id: string }).id);
+    if (!booking) return reply.status(404).send(notFound);
+    if (state.messagingDisabled.has(booking.propertyId)) return reply.status(403).send(forbidden);
+    // As on the real service: only some booking sites have a message box.
+    if (!['BDC', 'ABB', 'EXP'].includes(booking.channel)) {
+      return reply
+        .status(422)
+        .send({ errors: { code: 'not_supported', title: 'Method not supported' } });
+    }
+    const text = textOf(req.body);
+    if (!text) return reply.status(422).send(validationError({ message: ["can't be blank"] }));
+    return { data: messageResource(state.propertyMessage({ bookingId: booking.id }, text)) };
+  });
 
   app.get('/webhooks', async (req) => {
     const page = paginate([...state.webhooks.values()], req.query as Query);

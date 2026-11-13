@@ -136,6 +136,26 @@ export interface SimRevision {
   nonAckedWarned: boolean;
 }
 
+export interface SimMessage {
+  id: string;
+  threadId: string;
+  sender: 'guest' | 'property';
+  message: string;
+  insertedAt: string;
+}
+
+/** A guest's conversation with the property in a booking site's message box. */
+export interface SimThread {
+  id: string;
+  propertyId: string;
+  bookingId: string;
+  title: string;
+  provider: string;
+  isClosed: boolean;
+  messages: SimMessage[];
+  insertedAt: string;
+}
+
 export interface SimWebhook {
   id: string;
   callbackUrl: string;
@@ -199,6 +219,9 @@ export class SimState {
   bookings = new Map<string, SimBooking>();
   revisions = new Map<string, SimRevision>();
   webhooks = new Map<string, SimWebhook>();
+  threads = new Map<string, SimThread>();
+  /** Properties with the paid messages add-on. Others answer 403, as the real service does. */
+  messagingDisabled = new Set<string>();
   oneTimeTokens = new Map<string, { propertyId: string; username: string; expiresAt: number }>();
   requestLog: RequestLogEntry[] = [];
   deliveries: DeliveryLogEntry[] = [];
@@ -238,6 +261,8 @@ export class SimState {
     this.bookings.clear();
     this.revisions.clear();
     this.webhooks.clear();
+    this.threads.clear();
+    this.messagingDisabled.clear();
     this.oneTimeTokens.clear();
     this.requestLog = [];
     this.deliveries = [];
@@ -942,6 +967,137 @@ export class SimState {
     }
     return warned;
   }
+
+  // -------------------------------------------------------------------------
+  // Guest messages
+
+  private threadOf(bookingId: string): SimThread {
+    const booking = this.bookings.get(bookingId);
+    if (!booking) throw new SimError(404, 'Booking not found');
+    let thread = [...this.threads.values()].find((t) => t.bookingId === bookingId);
+    if (!thread) {
+      thread = {
+        id: randomUUID(),
+        propertyId: booking.propertyId,
+        bookingId,
+        title: `${booking.customer.surname} ${booking.customer.name}`.trim(),
+        provider: CHANNELS[booking.channel].otaName,
+        isClosed: false,
+        messages: [],
+        insertedAt: new Date().toISOString(),
+      };
+      this.threads.set(thread.id, thread);
+    }
+    return thread;
+  }
+
+  /** The guest of a booking writes in the booking site's message box. Announced to the PMS as a `message` event. */
+  guestMessage(bookingId: string, text: string, options: { silent?: boolean } = {}): SimMessage {
+    const thread = this.threadOf(bookingId);
+    const message: SimMessage = {
+      id: randomUUID(),
+      threadId: thread.id,
+      sender: 'guest',
+      message: text,
+      insertedAt: new Date().toISOString(),
+    };
+    thread.messages.push(message);
+    thread.isClosed = false;
+    if (!options.silent && !this.messagingDisabled.has(thread.propertyId)) {
+      this.onEvent('message', thread.propertyId, {
+        id: message.id,
+        message: text,
+        sender: 'guest',
+        property_id: thread.propertyId,
+        booking_id: bookingId,
+        message_thread_id: thread.id,
+        attachments: [],
+        have_attachment: false,
+        ota_message_id: randomUUID(),
+      });
+    }
+    return message;
+  }
+
+  /** The property answers, by thread or by booking. */
+  propertyMessage(target: { threadId?: string; bookingId?: string }, text: string): SimMessage {
+    const thread = target.threadId
+      ? this.threads.get(target.threadId)
+      : target.bookingId
+        ? this.threadOf(target.bookingId)
+        : undefined;
+    if (!thread) throw new SimError(404, 'Message thread not found');
+    const message: SimMessage = {
+      id: randomUUID(),
+      threadId: thread.id,
+      sender: 'property',
+      message: text,
+      insertedAt: new Date().toISOString(),
+    };
+    thread.messages.push(message);
+    return message;
+  }
+
+  // -------------------------------------------------------------------------
+  // Keeping the state across a restart
+
+  snapshot(): SimSnapshot {
+    const nested = <V>(map: Map<string, Map<string, V>>): [string, [string, V][]][] =>
+      [...map].map(([key, inner]) => [key, [...inner]]);
+    return {
+      version: 1,
+      properties: [...this.properties.values()],
+      roomTypes: [...this.roomTypes.values()],
+      ratePlans: [...this.ratePlans.values()],
+      availability: nested(this.availability),
+      restrictions: nested(this.restrictions),
+      channels: [...this.channels.values()].map((c) => ({ ...c, view: nested(c.view) })),
+      bookings: [...this.bookings.values()],
+      revisions: [...this.revisions.values()],
+      webhooks: [...this.webhooks.values()],
+      threads: [...this.threads.values()],
+      messagingDisabled: [...this.messagingDisabled],
+      reservationSeq: this.reservationSeq,
+    };
+  }
+
+  restore(snapshot: SimSnapshot): void {
+    if (snapshot.version !== 1) throw new Error('Unknown simulator snapshot version');
+    const byId = <T extends { id: string }>(items: T[]): Map<string, T> =>
+      new Map(items.map((item) => [item.id, item]));
+    const nested = <V>(entries: [string, [string, V][]][]): Map<string, Map<string, V>> =>
+      new Map(entries.map(([key, inner]) => [key, new Map(inner)]));
+    this.reset();
+    this.properties = byId(snapshot.properties);
+    this.roomTypes = byId(snapshot.roomTypes);
+    this.ratePlans = byId(snapshot.ratePlans);
+    this.availability = nested(snapshot.availability);
+    this.restrictions = nested(snapshot.restrictions);
+    this.channels = byId(snapshot.channels.map((c) => ({ ...c, view: nested(c.view) })));
+    this.bookings = byId(snapshot.bookings);
+    this.revisions = byId(snapshot.revisions);
+    this.webhooks = byId(snapshot.webhooks);
+    this.threads = byId(snapshot.threads ?? []);
+    this.messagingDisabled = new Set(snapshot.messagingDisabled ?? []);
+    this.reservationSeq = snapshot.reservationSeq;
+  }
+}
+
+/** The parts of the state worth keeping across a restart, as plain JSON. */
+export interface SimSnapshot {
+  version: 1;
+  properties: SimProperty[];
+  roomTypes: SimRoomType[];
+  ratePlans: SimRatePlan[];
+  availability: [string, [string, number][]][];
+  restrictions: [string, [string, RestrictionState][]][];
+  channels: (Omit<SimChannel, 'view'> & { view: [string, [string, number][]][] })[];
+  bookings: SimBooking[];
+  revisions: SimRevision[];
+  webhooks: SimWebhook[];
+  threads: SimThread[];
+  messagingDisabled: string[];
+  reservationSeq: number;
 }
 
 export class SimError extends Error {
