@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
-import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import useSWR from 'swr';
 import { can, canAcrossOrganisation, propertyScope, type Permission } from '@pms/domain/shared';
 import { PageLoading, ErrorState } from '@/components/ui/misc';
@@ -29,8 +29,17 @@ export function useAuth(): AuthContextValue {
  * Renders its children only for a fully signed-in user. Anyone else is sent
  * to the sign-in page, which also handles the second-factor step. This is a
  * convenience for navigation: the API enforces access on every request.
+ *
+ * `enrollment` is the forced two-step set-up; it calls `done` when the user has
+ * finished it.
  */
-export function AuthGate({ children, enrollment }: { children: ReactNode; enrollment: ReactNode }) {
+export function AuthGate({
+  children,
+  enrollment,
+}: {
+  children: ReactNode;
+  enrollment: (done: () => void) => ReactNode;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const {
@@ -46,6 +55,16 @@ export function AuthGate({ children, enrollment }: { children: ReactNode; enroll
   const refused = error instanceof ApiError && error.status === 401;
   const unauthenticated = refused && !isValidating;
   const needsSecondFactor = me?.mfaPending === true;
+
+  // The forced set-up stays on screen until the user finishes it. Confirming the code clears
+  // `mustEnrollTwoFactor` on the next session refresh (any window focus), and that must not
+  // take away the recovery codes, which are shown only once.
+  const [enrolling, setEnrolling] = useState(false);
+  if (me?.mustEnrollTwoFactor && !enrolling) setEnrolling(true);
+  const finishEnrollment = async () => {
+    const fresh = await mutate();
+    if (fresh && !fresh.mustEnrollTwoFactor) setEnrolling(false);
+  };
 
   useEffect(() => {
     if (unauthenticated || needsSecondFactor) {
@@ -82,7 +101,7 @@ export function AuthGate({ children, enrollment }: { children: ReactNode; enroll
   }
   return (
     <AuthContext.Provider value={value}>
-      {value.me.mustEnrollTwoFactor ? enrollment : children}
+      {enrolling ? enrollment(() => void finishEnrollment()) : children}
     </AuthContext.Provider>
   );
 }

@@ -296,7 +296,7 @@ export function Shell({ children }: { children: ReactNode }) {
             {auth.can('reservations.read') && <GlobalSearch />}
           </div>
           <LiveDot />
-          <AlertsBell />
+          {auth.can('property.read') && <AlertsBell />}
           <UserMenu />
         </header>
         <main className="scrollbar-thin min-h-0 flex-1 overflow-auto">{children}</main>

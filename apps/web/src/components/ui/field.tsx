@@ -52,7 +52,7 @@ export function Field({ label, hint, error, optional, className, children }: Fie
     <div className={cn('flex flex-col gap-1', className)}>
       <label htmlFor={id} className="text-[13px] font-medium text-ink-soft">
         {label}
-        {optional && <span className="ml-1 font-normal text-ink-faint">optional</span>}
+        {optional && <span className="font-normal text-ink-faint"> (optional)</span>}
       </label>
       {children({ id, 'aria-invalid': error ? true : undefined, 'aria-describedby': describedBy })}
       {error ? (

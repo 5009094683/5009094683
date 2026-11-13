@@ -11,9 +11,18 @@ import { api, errorMessage } from '@/lib/api';
 
 /**
  * Walks a user through adding an authenticator app: scan the code, prove it
- * works, then save the recovery codes. `onDone` fires after the codes are shown.
+ * works, then save the recovery codes. `onConfirmed` fires once the code is
+ * accepted (two-step verification is on from then), `onDone` when the user
+ * says the recovery codes are saved. Keep this mounted between the two: the
+ * codes are shown only once.
  */
-export function TwoFactorEnrollment({ onDone }: { onDone: () => void }) {
+export function TwoFactorEnrollment({
+  onDone,
+  onConfirmed,
+}: {
+  onDone: () => void;
+  onConfirmed?: () => void;
+}) {
   const toast = useToast();
   const [enrollment, setEnrollment] = useState<{ secret: string; otpauthUrl: string } | null>(null);
   const [qr, setQr] = useState<string | null>(null);
@@ -46,6 +55,7 @@ export function TwoFactorEnrollment({ onDone }: { onDone: () => void }) {
         body: { code: code.trim() },
       });
       setRecoveryCodes(result.recoveryCodes);
+      onConfirmed?.();
     } catch (err) {
       setError(errorMessage(err));
     } finally {
