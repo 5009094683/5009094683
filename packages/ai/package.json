@@ -1,0 +1,20 @@
+{
+  "name": "@pms/ai",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@pms/config": "workspace:*",
+    "@pms/db": "workspace:*",
+    "@pms/domain": "workspace:*",
+    "drizzle-orm": "^0.45.4",
+    "zod": "^4.6.7"
+  }
+}

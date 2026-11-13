@@ -221,6 +221,25 @@ export type OnlineCheckinStatus = (typeof ONLINE_CHECKIN_STATUSES)[number];
 export const STORED_FILE_KINDS = ['id_document', 'message_attachment', 'other'] as const;
 export type StoredFileKind = (typeof STORED_FILE_KINDS)[number];
 
+/** A change the assistant proposed, waiting for the person who asked to confirm it. */
+export const AI_ACTION_STATUSES = [
+  'proposed',
+  'confirmed',
+  'rejected',
+  'expired',
+  'failed',
+] as const;
+export type AiActionStatus = (typeof AI_ACTION_STATUSES)[number];
+
+export const RECOMMENDATION_STATUSES = ['pending', 'applied', 'dismissed', 'superseded'] as const;
+export type RecommendationStatus = (typeof RECOMMENDATION_STATUSES)[number];
+
+export const SENTIMENTS = ['positive', 'neutral', 'negative'] as const;
+export type Sentiment = (typeof SENTIMENTS)[number];
+
+export const REVIEW_REPLY_STATUSES = ['none', 'queued', 'sent', 'failed'] as const;
+export type ReviewReplyStatus = (typeof REVIEW_REPLY_STATUSES)[number];
+
 /** SQL fragment helper: `'a','b','c'` for CHECK constraints. */
 export function sqlList(values: readonly string[]): string {
   return values.map((v) => `'${v}'`).join(',');

@@ -51,6 +51,20 @@ export interface PropertySettings {
   bookingTerms?: string;
   /** Sent to guests before arrival: directions, key collection, contact number. */
   arrivalInstructions?: string;
+  /**
+   * Room types whose suggested rates are applied without waiting for a
+   * person. Only ever inside the rate plan's floor and ceiling, and only for
+   * plans that have both.
+   */
+  pricingAutopilotRoomTypes?: string[];
+  /** The most a suggested rate may differ from the plan's base rate, in percent. Absent: 40. */
+  pricingMaxChangePercent?: number;
+  /** Suggested rates are rounded to a multiple of this many minor units. Absent: 5000 (fifty rupees). */
+  pricingRounding?: number;
+  /** Dates that sell like weekends whatever the weekday: festivals, long weekends, local events. */
+  pricingEvents?: { from: string; to: string; name: string; upliftPercent?: number }[];
+  /** Facts the assistant may use when drafting replies to guests: parking, Wi-Fi, pets, distances. */
+  knowledge?: string;
   /** Children at or below this age count as children for pricing. */
   childMaxAge?: number;
   /** Minutes of housekeeping work for a departure clean and a stay-over service. */
