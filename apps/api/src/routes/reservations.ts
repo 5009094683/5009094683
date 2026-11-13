@@ -146,6 +146,7 @@ export async function reservationRoutes(app: FastifyInstance): Promise<void> {
           commissionAmount: money.optional(),
           paymentCollect: z.enum(PAYMENT_COLLECT).optional(),
           needsReview: z.boolean().optional(),
+          companyId: uuid.nullable().optional(),
           expectedVersion: z.number().int().optional(),
         }),
       },

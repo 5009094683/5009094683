@@ -218,6 +218,12 @@ describe('who may do what', () => {
     expect((await rival.get(`/reservations/${r.id}/folios`)).statusCode).toBe(404);
     expect((await rival.get(`/properties/${hotel.property.id}/housekeeping`)).statusCode).toBe(404);
     expect((await rival.get('/companies')).json().companies).toEqual([]);
+
+    // A reservation cannot be tied to another organisation's company.
+    const theirs = await rival.post('/companies', { name: 'Rival Travel' });
+    expect(theirs.statusCode).toBe(201);
+    const linked = await frontDesk.patch(`/reservations/${r.id}`, { companyId: theirs.json().id });
+    expect(linked.statusCode).toBe(404);
   });
 });
 
@@ -298,8 +304,10 @@ describe('night audit, housekeeping and maintenance over the API', () => {
     const statement = await accountant.get(`/companies/${companyId}/statement`);
     expect(statement.json()).toMatchObject({ entries: [], company: { name: 'Zenith Pharma' } });
 
-    // A stay billed to the company shows on its account.
+    // A stay booked for the company, then billed to it, shows on its account.
     const r = await book(20, 22);
+    const linked = await frontDesk.patch(`/reservations/${r.id}`, { companyId });
+    expect(linked.json().company).toMatchObject({ id: companyId, name: 'Zenith Pharma' });
     const extra = { kind: 'extra', description: 'Airport transfer', unitAmount: 250_000 };
     expect((await frontDesk.post(`/reservations/${r.id}/charges`, extra)).statusCode).toBe(201);
     const [folio] = (await accountant.get(`/reservations/${r.id}/folios`)).json().folios;

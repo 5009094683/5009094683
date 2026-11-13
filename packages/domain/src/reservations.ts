@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, gte, ilike, inArray, lt, lte, or, sql, type SQL } from 'drizzle-orm';
 import {
+  companies,
   guests,
   ratePlans,
   reservationNights,
@@ -130,8 +131,20 @@ export interface ReservationRoomView {
 
 export interface ReservationDetail extends Omit<ReservationRow, 'orgId'> {
   guest: ReturnType<typeof guestView> | null;
+  /** The company or travel agent the stay is booked for, if any. */
+  company: { id: string; name: string; kind: string } | null;
   rooms: ReservationRoomView[];
   nights: number;
+}
+
+/** A reservation may only be linked to an active company of the same organisation. */
+async function requireCompany(tx: DbOrTx, orgId: string, companyId: string): Promise<void> {
+  const [company] = await tx
+    .select({ active: companies.active })
+    .from(companies)
+    .where(and(eq(companies.id, companyId), eq(companies.orgId, orgId)));
+  if (!company) throw notFound('Company', companyId);
+  if (!company.active) throw validationError('This company is no longer in use');
 }
 
 // ---------------------------------------------------------------------------
@@ -186,6 +199,16 @@ async function loadDetails(db: DbOrTx, rows: ReservationRow[]): Promise<Reservat
     ? await db.select().from(guests).where(inArray(guests.id, guestIds))
     : [];
   const guestsById = new Map(guestRows.map((g) => [g.id, g]));
+  const companyIds = [
+    ...new Set(rows.map((r) => r.companyId).filter((id): id is string => id !== null)),
+  ];
+  const companyRows = companyIds.length
+    ? await db
+        .select({ id: companies.id, name: companies.name, kind: companies.kind })
+        .from(companies)
+        .where(inArray(companies.id, companyIds))
+    : [];
+  const companiesById = new Map(companyRows.map((c) => [c.id, c]));
 
   return rows.map((row) => {
     const { orgId: _orgId, ...rest } = row;
@@ -194,6 +217,7 @@ async function loadDetails(db: DbOrTx, rows: ReservationRow[]): Promise<Reservat
       ...rest,
       nights: diffDays(row.checkIn, row.checkOut),
       guest: guest ? guestView(guest) : null,
+      company: (row.companyId && companiesById.get(row.companyId)) || null,
       rooms: roomRows
         .filter((r) => r.room.reservationId === row.id)
         .map(({ room, roomTypeName, ratePlanName, unitName }) => ({
@@ -602,6 +626,7 @@ export async function createReservation(
       }
     }
 
+    if (input.companyId) await requireCompany(tx, actor.orgId, input.companyId);
     const guest = await findOrCreateGuest(tx, actor.orgId, input.guest);
     // The name as given for this booking; the profile may spell it differently.
     const guestName = input.guest.firstName?.trim()
@@ -796,6 +821,9 @@ export async function updateReservation(
     const { guest: guestInput, ...fields } = patch;
     const set: Partial<typeof reservations.$inferInsert> = { ...fields };
     if (patch.needsReview === false) set.reviewReason = null;
+    if (patch.companyId && patch.companyId !== before.companyId) {
+      await requireCompany(tx, actor.orgId, patch.companyId);
+    }
     if (guestInput) {
       const guest = await findOrCreateGuest(tx, actor.orgId, guestInput);
       set.guestId = guest.id;
