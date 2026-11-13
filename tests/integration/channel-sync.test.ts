@@ -160,6 +160,12 @@ describe('a change in the PMS reaches every site', () => {
   });
 
   it('closes blocked dates everywhere', async () => {
+    await waitFor(
+      'the queue to empty',
+      async () => (await connectionOf(stack, live.connectionId)).pendingChanges === 0,
+    );
+    await sleep(150);
+    const before = stack.sim.state.requestLog.length;
     const res = await stack.admin.post('/blocks', {
       propertyId: hotel.property.id,
       roomTypeId: dlx(hotel),
@@ -174,6 +180,10 @@ describe('a change in the PMS reaches every site', () => {
       shownEverywhere(stack, live, dlx(hotel), day(20)).every((v) => v === 0),
     );
     expect(shownEverywhere(stack, live, dlx(hotel), day(22))).toEqual([2, 2, 2, 2, 2]);
+    // Two rooms over two nights, taken off sale in one go, is one request with one run of dates.
+    expect(ariRequests(stack, before).map((r) => [r.path, r.values])).toEqual([
+      ['/availability', 1],
+    ]);
 
     await stack.admin.post(`/blocks/${(res.json() as { id: string }).id}/release`);
     await waitFor('the dates to reopen', () =>
