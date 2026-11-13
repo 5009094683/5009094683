@@ -37,8 +37,11 @@ export type AutomationRuleRow = typeof automationRules.$inferSelect;
 type ReservationRow = typeof reservations.$inferSelect;
 type GuestRow = typeof guests.$inferSelect;
 
-/** Reasons a reservation is cancelled without the guest ever having had a booking; no message is due for those. */
-const SILENT_CANCELLATIONS = [
+/**
+ * Reasons a reservation is cancelled without the guest ever having had a booking: no message is
+ * due for those, and reports do not count them as cancellations.
+ */
+export const SILENT_CANCELLATIONS = [
   'Hold expired before the booking was completed',
   'The payment page could not be opened',
 ];

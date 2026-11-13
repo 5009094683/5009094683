@@ -220,13 +220,15 @@ export async function updateProperty(
 }
 
 /** Properties the actor may see, in name order. */
+/**
+ * The properties a member of staff may see. A villa owner is not staff: the
+ * owner portal shows them their own units, and a property's settings are not
+ * for them.
+ */
 export async function listProperties(db: DbOrTx, actor: Actor): Promise<PropertyRow[]> {
-  const scopes = [
-    propertyScope(actor.grants, 'property.read'),
-    propertyScope(actor.grants, 'owner.portal'),
-  ];
-  const all = actor.type === 'system' || scopes.includes('all');
-  const ids = [...new Set(scopes.flatMap((s) => (s === 'all' ? [] : s)))];
+  const scope = propertyScope(actor.grants, 'property.read');
+  const all = actor.type === 'system' || scope === 'all';
+  const ids = scope === 'all' ? [] : scope;
   if (!all && ids.length === 0) return [];
   return db
     .select()

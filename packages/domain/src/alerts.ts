@@ -21,7 +21,8 @@ export type AlertKind =
   | 'refund_pending'
   | 'message_failed'
   | 'night_audit'
-  | 'ledger_mismatch';
+  | 'ledger_mismatch'
+  | 'owner_statements';
 
 export interface RaiseAlertInput {
   orgId: string;

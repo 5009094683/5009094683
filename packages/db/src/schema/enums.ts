@@ -240,6 +240,53 @@ export type Sentiment = (typeof SENTIMENTS)[number];
 export const REVIEW_REPLY_STATUSES = ['none', 'queued', 'sent', 'failed'] as const;
 export type ReviewReplyStatus = (typeof REVIEW_REPLY_STATUSES)[number];
 
+export const REPORT_KINDS = [
+  'performance',
+  'channel_mix',
+  'pace',
+  'revenue',
+  'agent_commission',
+] as const;
+export type ReportKind = (typeof REPORT_KINDS)[number];
+
+/** The dates a scheduled report covers, counted from the day it runs. */
+export const REPORT_PERIODS = [
+  'yesterday',
+  'last_7_days',
+  'last_30_days',
+  'month_to_date',
+  'last_month',
+  'next_30_days',
+  'next_90_days',
+] as const;
+export type ReportPeriod = (typeof REPORT_PERIODS)[number];
+
+export const REPORT_FREQUENCIES = ['daily', 'weekly', 'monthly'] as const;
+export type ReportFrequency = (typeof REPORT_FREQUENCIES)[number];
+
+/**
+ * How a villa owner is paid. `revenue_share`: what the villa earned, less
+ * what the contract takes off. `fixed_rent`: an agreed amount a month.
+ */
+export const OWNER_CONTRACT_MODELS = ['revenue_share', 'fixed_rent'] as const;
+export type OwnerContractModel = (typeof OWNER_CONTRACT_MODELS)[number];
+
+/** What the management fee is a share of: room revenue as sold, or after booking sites' commission. */
+export const OWNER_FEE_BASES = ['gross', 'net'] as const;
+export type OwnerFeeBasis = (typeof OWNER_FEE_BASES)[number];
+
+export const OWNER_EXPENSE_CATEGORIES = [
+  'maintenance',
+  'utilities',
+  'supplies',
+  'cleaning',
+  'other',
+] as const;
+export type OwnerExpenseCategory = (typeof OWNER_EXPENSE_CATEGORIES)[number];
+
+export const OWNER_STATEMENT_STATUSES = ['draft', 'issued', 'paid'] as const;
+export type OwnerStatementStatus = (typeof OWNER_STATEMENT_STATUSES)[number];
+
 /** SQL fragment helper: `'a','b','c'` for CHECK constraints. */
 export function sqlList(values: readonly string[]): string {
   return values.map((v) => `'${v}'`).join(',');

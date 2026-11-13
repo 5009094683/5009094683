@@ -159,3 +159,22 @@ export function parseDateRangeLiteral(literal: string): DateRange {
   if (!m || !m[1] || !m[2]) throw validationError(`Invalid date range "${literal}"`);
   return { from: m[1], to: m[2] };
 }
+
+/** The month a date falls in, as its first day and the first day of the next. */
+export function monthOf(date: DateString): { start: DateString; end: DateString } {
+  const [year, month] = [Number(date.slice(0, 4)), Number(date.slice(5, 7))];
+  const start = `${date.slice(0, 7)}-01`;
+  const end =
+    month === 12
+      ? `${year + 1}-01-01`
+      : `${String(year).padStart(4, '0')}-${String(month + 1).padStart(2, '0')}-01`;
+  return { start, end };
+}
+
+/** Reads `YYYY-MM`. */
+export function monthRange(month: string): { start: DateString; end: DateString } {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+    throw validationError('Give the month as YYYY-MM, for example 2026-11');
+  }
+  return monthOf(`${month}-01`);
+}
