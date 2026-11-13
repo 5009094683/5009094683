@@ -447,7 +447,10 @@ export async function seedDemoHistory(
     summary.stays++;
     // Booked some days before arrival, not all at once this minute: the pace report reads this.
     await db.execute(sql`
-      UPDATE reservations SET created_at = (${arrival}::date - ${lead}::int)::timestamp + interval '10 hours' + (${rnd(600)}::int * interval '1 minute')
+      UPDATE reservations SET created_at = made.at, confirmed_at = made.at
+      FROM (
+        SELECT (${arrival}::date - ${lead}::int)::timestamp + interval '10 hours' + (${rnd(600)}::int * interval '1 minute') AS at
+      ) made
       WHERE id = ${made.id}
     `);
   };
@@ -480,8 +483,12 @@ export async function seedDemoHistory(
   }
   // The bookings the base demo made for the days ahead were not all made today either.
   await db.execute(sql`
-    UPDATE reservations r SET created_at = now() - ((abs(hashtext(r.id::text)) % 28) + 1) * interval '1 day'
-    WHERE r.org_id = ${orgId} AND r.check_in >= ${addDays(today, -4)}::date
+    UPDATE reservations r
+    SET created_at = made.at, confirmed_at = CASE WHEN r.status = 'tentative' THEN NULL ELSE made.at END
+    FROM (
+      SELECT id, now() - ((abs(hashtext(id::text)) % 28) + 1) * interval '1 day' AS at FROM reservations
+    ) made
+    WHERE made.id = r.id AND r.org_id = ${orgId} AND r.check_in >= ${addDays(today, -4)}::date
       AND r.created_at > now() - interval '1 hour'
   `);
 
