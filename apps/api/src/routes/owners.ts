@@ -91,6 +91,23 @@ export async function ownerRoutes(app: FastifyInstance): Promise<void> {
     return authorize(req, 'accounting.manage', row.propertyId);
   };
 
+  type Scope = ReturnType<typeof propertyScope>;
+  const inScope = (owner: { contracts: { propertyId: string }[] }, scope: Scope): boolean =>
+    scope === 'all' || owner.contracts.some((c) => scope.includes(c.propertyId));
+
+  /**
+   * Authorises work on an owner. Someone who keeps the accounts of particular properties may
+   * see and change the owners of those properties, and an owner with no contract at all; an
+   * owner whose contracts are all elsewhere does not exist for them.
+   */
+  const forOwner = async (req: FastifyRequest, ownerId: string) => {
+    const actor = authorize(req, 'accounting.manage');
+    const scope = propertyScope(actor.grants, 'accounting.manage');
+    const owner = await getOwner(app.db, actor.orgId, ownerId);
+    if (owner.contracts.length > 0 && !inScope(owner, scope)) throw notFound('Owner', ownerId);
+    return { actor, owner, scope };
+  };
+
   const forStatement = async (req: FastifyRequest, statementId: string): Promise<Actor> => {
     const session = authorize(req);
     const [row] = await app.db
@@ -106,11 +123,12 @@ export async function ownerRoutes(app: FastifyInstance): Promise<void> {
     const scope = propertyScope(actor.grants, 'accounting.manage');
     const owners = await listOwners(app.db, actor.orgId);
     if (scope === 'all') return { owners };
-    // Someone who keeps the accounts of particular properties sees the owners of those.
+    // Someone who keeps the accounts of particular properties sees the owners of those, and
+    // owners who have no contract yet: one they have just added, about to be given one.
     return {
       owners: owners
-        .map((o) => ({ ...o, contracts: o.contracts.filter((c) => scope.includes(c.propertyId)) }))
-        .filter((o) => o.contracts.length > 0),
+        .filter((o) => o.contracts.length === 0 || inScope(o, scope))
+        .map((o) => ({ ...o, contracts: o.contracts.filter((c) => scope.includes(c.propertyId)) })),
     };
   });
 
@@ -120,22 +138,21 @@ export async function ownerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   r.get('/owners/:id', { schema: { tags: ['owners'], params: idParams } }, async (req) => {
-    const actor = authorize(req, 'accounting.manage');
-    const scope = propertyScope(actor.grants, 'accounting.manage');
-    const owner = await getOwner(app.db, actor.orgId, req.params.id);
+    const { owner, scope } = await forOwner(req, req.params.id);
     if (scope === 'all') return owner;
-    const contracts = owner.contracts.filter((c) => scope.includes(c.propertyId));
-    if (contracts.length === 0 && owner.contracts.length > 0) {
-      throw notFound('Owner', req.params.id);
-    }
-    return { ...owner, contracts };
+    return { ...owner, contracts: owner.contracts.filter((c) => scope.includes(c.propertyId)) };
   });
 
   r.patch(
     '/owners/:id',
     { schema: { tags: ['owners'], params: idParams, body: ownerBody.partial() } },
     async (req) => {
-      const actor = authorize(req, 'accounting.manage');
+      const { actor, owner } = await forOwner(req, req.params.id);
+      // Which sign-in is an owner's decides what that person can see: that is for those who
+      // manage users, as inviting an owner is.
+      if (req.body.userId !== undefined && req.body.userId !== (owner.user?.id ?? null)) {
+        authorize(req, 'org.manage');
+      }
       return updateOwner(app.db, actor, req.params.id, req.body);
     },
   );
@@ -311,6 +328,11 @@ export async function ownerRoutes(app: FastifyInstance): Promise<void> {
         querystring: z.object({
           ownerId: uuid.optional(),
           contractId: uuid.optional(),
+          propertyId: uuid.optional(),
+          month: z
+            .string()
+            .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Expected a month as YYYY-MM')
+            .optional(),
           status: z.enum(OWNER_STATEMENT_STATUSES).optional(),
         }),
       },
@@ -436,12 +458,25 @@ export async function ownerRoutes(app: FastifyInstance): Promise<void> {
         tags: ['owners'],
         summary: 'Record that the owner has been paid',
         params: idParams,
-        body: z.object({ reference: z.string().max(120).nullable().optional() }),
+        body: z.object({
+          reference: z.string().max(120).nullable().optional(),
+          paidOn: dateString
+            .optional()
+            .describe('The day the money left, when that was not today. Not in the future.'),
+        }),
       },
     },
     async (req) => {
       const actor = await forStatement(req, req.params.id);
-      await markOwnerStatementPaid(app.db, actor, req.params.id, req.body);
+      const { paidOn, reference } = req.body;
+      if (paidOn && paidOn > new Date(Date.now() + 14 * 3600_000).toISOString().slice(0, 10)) {
+        throw validationError('The payment date cannot be in the future');
+      }
+      await markOwnerStatementPaid(app.db, actor, req.params.id, {
+        reference,
+        // Noon, so that the day reads the same wherever it is looked at from.
+        paidAt: paidOn ? new Date(`${paidOn}T12:00:00Z`) : undefined,
+      });
       return getOwnerStatement(app.db, actor.orgId, req.params.id);
     },
   );

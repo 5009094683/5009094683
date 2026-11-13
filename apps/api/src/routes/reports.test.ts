@@ -381,6 +381,39 @@ describe('villa owners', () => {
     expect((await rival.get(`/owners/${ownerId}`)).statusCode).toBe(404);
     expect((await rival.get('/owners')).json().owners).toEqual([]);
     expect((await rival.patch(`/owner-contracts/${contractId}`, {})).statusCode).toBe(404);
+
+    // Someone who keeps the hotel's accounts has nothing to do with the villa's owner:
+    // neither to read her, nor to change her.
+    const hotelBooks = await ctx.login(
+      (
+        await createTestUser(ctx.t.db, ctx.org.orgId, {
+          role: 'accountant',
+          propertyId: hotel.property.id,
+        })
+      ).email,
+    );
+    expect((await hotelBooks.get(`/owners/${ownerId}`)).statusCode).toBe(404);
+    expect((await hotelBooks.patch(`/owners/${ownerId}`, { name: 'Changed' })).statusCode).toBe(
+      404,
+    );
+    expect((await hotelBooks.get('/owners')).json().owners).toEqual([]);
+    // An owner they add shows for them at once, before any contract exists.
+    const fresh = await hotelBooks.post('/owners', { name: 'Not yet under contract' });
+    expect((await hotelBooks.get('/owners')).json().owners).toMatchObject([
+      { id: fresh.json().id, contracts: [] },
+    ]);
+    // The villa's accountant changes her details, but not which sign-in is hers.
+    const noted = await accountant.patch(`/owners/${ownerId}`, { notes: 'Prefers email' });
+    expect(noted.statusCode).toBe(200);
+    expect(noted.json()).toMatchObject({ name: 'Rohini Desai', notes: 'Prefers email' });
+    const someone = await createTestUser(ctx.t.db, ctx.org.orgId, { role: 'villa_owner' });
+    expect((await accountant.patch(`/owners/${ownerId}`, { userId: someone.id })).statusCode).toBe(
+      403,
+    );
+    expect((await accountant.patch(`/owners/${ownerId}`, { userId: null })).statusCode).toBe(200);
+    expect((await admin.patch(`/owners/${ownerId}`, { userId: someone.id })).statusCode).toBe(200);
+    expect((await admin.patch(`/owners/${ownerId}`, { userId: null })).statusCode).toBe(200);
+    await admin.patch(`/owners/${fresh.json().id}`, { active: false });
   });
 
   it('get a statement each month, which the accounts team checks and issues', async () => {

@@ -103,8 +103,7 @@ function OwnNights({
           Your next stay is{' '}
           <span className="whitespace-nowrap">{formatStay(next.from, next.to)}</span>,{' '}
           {nightsText(diffDays(next.from, next.to))}
-          {/* Only the stays an owner takes here count towards the year: the server's rule. */}
-          {next.own ? '' : ', arranged by the office and not counted here'}.{' '}
+          {next.own ? '' : ', arranged by the office'}.{' '}
         </>
       )}
       <Link

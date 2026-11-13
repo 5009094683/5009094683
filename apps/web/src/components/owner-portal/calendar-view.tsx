@@ -206,7 +206,7 @@ function OwnStays({
                     <p className="text-[13px] text-ink-soft">
                       {nightsText(diffDays(block.startDate, block.endDate))}
                       {!block.own
-                        ? ' · arranged by the office, which can change it for you. Not counted in your nights for the year.'
+                        ? ' · arranged by the office, which can change it for you'
                         : begun
                           ? ' · already begun: ask the office to change it'
                           : ''}

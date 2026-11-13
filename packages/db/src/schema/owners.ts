@@ -158,6 +158,21 @@ export interface StatementLines {
   adjustments: StatementAdjustment[];
 }
 
+/**
+ * The terms a statement was worked out on. Kept with the statement, so that changing a
+ * contract later does not change what an issued statement says about itself.
+ */
+export interface StatementTerms {
+  model: OwnerContractModel;
+  managementFeeBp: number;
+  feeTaxBp: number;
+  feeBasis: OwnerFeeBasis;
+  /** A month's rent, for a fixed-rent contract. */
+  fixedRent: number | null;
+  /** Whether what the booking sites and agents kept was taken off the owner's share. */
+  commissionOnOwner: boolean;
+}
+
 /** What an owner is due for a month, with the stays and costs it was worked out from. */
 export const ownerStatements = pgTable(
   'owner_statements',
@@ -193,6 +208,8 @@ export const ownerStatements = pgTable(
     /** What the owner receives. Negative when costs exceeded earnings. */
     payout: money('payout').notNull().default(0),
     lines: jsonb('lines').$type<StatementLines>().notNull(),
+    /** Null on statements made before terms were kept; the contract's terms are used then. */
+    terms: jsonb('terms').$type<StatementTerms>(),
     notes: text('notes'),
     issuedAt: timestamptz('issued_at'),
     issuedBy: uuid('issued_by').references(() => users.id, { onDelete: 'set null' }),

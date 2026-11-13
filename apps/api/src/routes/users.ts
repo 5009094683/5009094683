@@ -118,11 +118,15 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       if (!user || user.orgId !== actor.orgId) throw notFound('User', req.params.id);
       const reset = await requestPasswordReset(app.db, user.email, actor.userId);
       if (!reset) throw notFound('User', req.params.id);
-      const link = `${app.env.WEB_URL}/reset-password?token=${encodeURIComponent(reset.token)}`;
+      // Someone who has not yet accepted their invitation is still being invited, not reset.
+      const invited = user.status === 'invited';
+      const link = `${app.env.WEB_URL}/reset-password?token=${encodeURIComponent(reset.token)}${invited ? '&invite=1' : ''}`;
       const result = await app.mailer.send({
         to: reset.email,
-        subject: 'Choose a new password',
-        text: `Hello ${reset.name},\n\nAn administrator created a link for you to choose a new password. It works once.\n\n${link}`,
+        subject: invited ? 'You have been invited' : 'Choose a new password',
+        text: invited
+          ? `Hello ${reset.name},\n\nAn account has been created for you. Use this link to choose your password. It works once and expires in three days.\n\n${link}`
+          : `Hello ${reset.name},\n\nAn administrator created a link for you to choose a new password. It works once.\n\n${link}`,
       });
       return { link, emailed: result.delivered };
     },

@@ -18,6 +18,7 @@ import {
   type StatementExpense,
   type StatementLines,
   type StatementStay,
+  type StatementTerms,
   type Transaction,
 } from '@pms/db';
 import { raiseAlert } from './alerts';
@@ -36,7 +37,7 @@ import {
   todayIn,
   type DateString,
 } from './dates';
-import { DomainError, invalidState, notFound, validationError } from './errors';
+import { DomainError, invalidState, isDomainError, notFound, validationError } from './errors';
 import { minorToDecimal } from './money';
 import { requireProperty, type PropertyRow } from './properties';
 import { sourceName } from './source-labels';
@@ -540,6 +541,15 @@ export interface ExpenseInput {
   maintenanceIssueId?: string | null;
 }
 
+/** `27 December 2026`: a date as an owner reads it. */
+const longDate = (date: DateString): string =>
+  new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+
 const monthName = (start: DateString): string =>
   new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(
     new Date(`${start}T00:00:00Z`),
@@ -669,6 +679,7 @@ interface Figures {
   adjustments: number;
   payout: number;
   lines: StatementLines;
+  terms: StatementTerms;
 }
 
 /**
@@ -707,10 +718,13 @@ async function figuresFor(
     FROM reservation_nights n
     JOIN reservation_rooms rr ON rr.id = n.reservation_room_id
     JOIN reservations r ON r.id = rr.reservation_id
+    JOIN properties p ON p.id = rr.property_id
     LEFT JOIN units u ON u.id = rr.unit_id
     LEFT JOIN companies c ON c.id = r.company_id
     WHERE rr.property_id = ${contract.propertyId} AND n.date >= ${from}::date AND n.date < ${to}::date
       AND rr.status IN ('in_house', 'checked_out')
+      -- A guest in house has stayed the nights behind them, not the ones still to come.
+      AND n.date < coalesce(p.business_date, (now() AT TIME ZONE p.timezone)::date)
       AND ${unitIds === null ? sql`true` : sql`rr.unit_id = ANY(${uuidArray(unitIds)})`}
     GROUP BY r.id, rr.id, u.name, c.kind, c.commission_bp
     ORDER BY rr.check_in, r.code
@@ -777,6 +791,14 @@ async function figuresFor(
     adjustments: adjustmentsTotal,
     payout: earned - expensesTotal + adjustmentsTotal,
     lines: { stays, expenses, adjustments },
+    terms: {
+      model: contract.model,
+      managementFeeBp: contract.managementFeeBp,
+      feeTaxBp: contract.feeTaxBp,
+      feeBasis: contract.feeBasis,
+      fixedRent: contract.fixedRent,
+      commissionOnOwner: contract.commissionOnOwner,
+    },
   };
 }
 
@@ -792,14 +814,10 @@ function cleanAdjustments(list: StatementAdjustment[]): StatementAdjustment[] {
   });
 }
 
-export interface StatementView extends OwnerStatementRow {
+export interface StatementView extends Omit<OwnerStatementRow, 'terms'>, StatementTerms {
   ownerName: string;
   propertyName: string;
   unitName: string | null;
-  model: OwnerContractModel;
-  managementFeeBp: number;
-  feeTaxBp: number;
-  feeBasis: OwnerFeeBasis;
 }
 
 async function statementViews(
@@ -814,10 +832,7 @@ async function statementViews(
       ownerName: owners.name,
       propertyName: properties.name,
       unitName: units.name,
-      model: ownerContracts.model,
-      managementFeeBp: ownerContracts.managementFeeBp,
-      feeTaxBp: ownerContracts.feeTaxBp,
-      feeBasis: ownerContracts.feeBasis,
+      contract: ownerContracts,
     })
     .from(ownerStatements)
     .innerJoin(owners, eq(owners.id, ownerStatements.ownerId))
@@ -827,7 +842,17 @@ async function statementViews(
     .where(and(eq(ownerStatements.orgId, orgId), where))
     .orderBy(desc(ownerStatements.periodStart), asc(properties.name))
     .limit(limit);
-  return rows.map(({ statement, ...rest }) => ({ ...statement, ...rest }));
+  return rows.map(({ statement: { terms, ...statement }, contract, ...rest }) => ({
+    ...statement,
+    ...rest,
+    // The terms it was worked out on; for a statement older than that record, today's.
+    model: terms?.model ?? contract.model,
+    managementFeeBp: terms?.managementFeeBp ?? contract.managementFeeBp,
+    feeTaxBp: terms?.feeTaxBp ?? contract.feeTaxBp,
+    feeBasis: terms?.feeBasis ?? contract.feeBasis,
+    fixedRent: terms ? terms.fixedRent : contract.fixedRent,
+    commissionOnOwner: terms?.commissionOnOwner ?? contract.commissionOnOwner,
+  }));
 }
 
 export async function getOwnerStatement(
@@ -843,7 +868,14 @@ export async function getOwnerStatement(
 export async function listOwnerStatements(
   db: DbOrTx,
   orgId: string,
-  filter: { ownerId?: string; contractId?: string; status?: OwnerStatementRow['status'] } = {},
+  filter: {
+    ownerId?: string;
+    contractId?: string;
+    propertyId?: string;
+    /** `YYYY-MM`. */
+    month?: string;
+    status?: OwnerStatementRow['status'];
+  } = {},
 ): Promise<StatementView[]> {
   return statementViews(
     db,
@@ -851,6 +883,8 @@ export async function listOwnerStatements(
     and(
       filter.ownerId ? eq(ownerStatements.ownerId, filter.ownerId) : undefined,
       filter.contractId ? eq(ownerStatements.contractId, filter.contractId) : undefined,
+      filter.propertyId ? eq(ownerStatements.propertyId, filter.propertyId) : undefined,
+      filter.month ? eq(ownerStatements.periodStart, `${filter.month}-01`) : undefined,
       filter.status ? eq(ownerStatements.status, filter.status) : undefined,
     ),
   );
@@ -1285,6 +1319,9 @@ export interface OwnerCalendar {
   blocks: OwnerBlock[];
 }
 
+/** A contract as its owner may see it: the office's own notes about it stay in the office. */
+const forOwnerEyes = (contract: ContractView): ContractView => ({ ...contract, notes: null });
+
 /** Guest stays and closed dates on the owner's units between two dates. */
 export async function ownerCalendar(
   db: DbOrTx,
@@ -1370,10 +1407,13 @@ export async function ownerCalendar(
       });
     }
   }
-  return { from: range.from, to: range.to, contracts, stays, blocks };
+  return { from: range.from, to: range.to, contracts: contracts.map(forOwnerEyes), stays, blocks };
 }
 
-/** Nights of this owner's own stays on a contract's units that fall in a calendar year. */
+/**
+ * Nights of owner stays on a contract's units that fall in a calendar year, within the
+ * contract: the ones the owner took in the portal and the ones the office entered for them.
+ */
 async function ownerNightsUsed(
   db: DbOrTx,
   owner: OwnerRow,
@@ -1381,12 +1421,17 @@ async function ownerNightsUsed(
   year: number,
 ): Promise<number> {
   const unitIds = await unitsOf(db, contract);
-  const start = `${year}-01-01`;
-  const end = `${year + 1}-01-01`;
+  // A stay before the contract began, or after it ended, was somebody else's.
+  const start = maxDate(`${year}-01-01`, contract.startsOn);
+  const end = contract.endsOn
+    ? minDate(`${year + 1}-01-01`, addDays(contract.endsOn, 1))
+    : `${year + 1}-01-01`;
+  if (end <= start) return 0;
   const { rows } = await db.execute<{ nights: number }>(sql`
     SELECT coalesce(sum(least(end_date, ${end}::date) - greatest(start_date, ${start}::date)), 0)::int AS nights
     FROM inventory_blocks
-    WHERE property_id = ${contract.propertyId} AND owner_id = ${owner.id} AND kind = 'owner_stay'
+    WHERE property_id = ${contract.propertyId} AND kind = 'owner_stay'
+      AND (owner_id = ${owner.id} OR owner_id IS NULL)
       AND released_at IS NULL AND start_date < ${end}::date AND end_date > ${start}::date
       AND ${unitIds === null ? sql`true` : sql`unit_id = ANY(${uuidArray(unitIds)})`}
   `);
@@ -1432,7 +1477,7 @@ export async function ownerOverview(
       return { nights: rows[0]?.nights ?? 0, revenue: Number(rows[0]?.revenue ?? 0) };
     };
     out.push({
-      ...contract,
+      ...forOwnerEyes(contract),
       ownerNightsUsed: await ownerNightsUsed(db, owner, contract, Number(today.slice(0, 4))),
       thisMonth: await booked(thisMonth),
       nextMonth: await booked(nextMonth),
@@ -1539,15 +1584,29 @@ export async function requestOwnerStay(
       }
     }
   }
-  return createBlock(db, actor, {
-    propertyId: property.id,
-    unitId,
-    kind: 'owner_stay',
-    startDate: input.from,
-    endDate: input.to,
-    reason: `Owner stay: ${owner.name}`,
-    ownerId: owner.id,
-  });
+  try {
+    return await createBlock(db, actor, {
+      propertyId: property.id,
+      unitId,
+      kind: 'owner_stay',
+      startDate: input.from,
+      endDate: input.to,
+      reason: `Owner stay: ${owner.name}`,
+      ownerId: owner.id,
+    });
+  } catch (err) {
+    // What is in the way may be a guest's booking: the owner is told when, never who.
+    if (isDomainError(err) && (err.code === 'unit_occupied' || err.code === 'no_availability')) {
+      const taken = (err.details?.conflicts as { from: string; to: string }[] | undefined)?.[0];
+      throw new DomainError(
+        err.code,
+        taken
+          ? `Those dates are not free: the villa is taken from ${longDate(taken.from)} to ${longDate(taken.to)}.`
+          : 'Those dates are not free.',
+      );
+    }
+    throw err;
+  }
 }
 
 /** The owner gives back dates they had taken, as long as the stay has not begun. */

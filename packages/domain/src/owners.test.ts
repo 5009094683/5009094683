@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { alerts, inventoryBlocks, outbox, ownerContracts, ownerExpenses } from '@pms/db';
 import { createTestDatabase, type TestDatabase } from '@pms/db/testing';
+import { createBlock, releaseBlock } from './blocks';
 import type { Actor } from './context';
 import { addDays, diffDays, monthOf, todayIn } from './dates';
 import { getAvailability } from './inventory';
@@ -397,9 +398,76 @@ describe('the monthly statement', () => {
     );
     const paid = await markOwnerStatementPaid(t.db, org.admin, issued.id, {
       reference: 'NEFT 4417',
+      paidAt: new Date(`${thisMonth}T12:00:00Z`),
     });
     expect(paid).toMatchObject({ status: 'paid', paymentReference: 'NEFT 4417' });
-    expect(paid.paidAt).toBeInstanceOf(Date);
+    expect(paid.paidAt).toEqual(new Date(`${thisMonth}T12:00:00Z`));
+
+    // The terms change afterwards. The issued statement still says what it was worked out
+    // on; a draft follows the contract as it now stands.
+    const before = await getOwnerStatement(t.db, org.orgId, issued.id);
+    expect(before).toMatchObject({
+      model: 'revenue_share',
+      managementFeeBp: 2_000,
+      commissionOnOwner: true,
+      fixedRent: null,
+    });
+    await updateContract(t.db, org.admin, contract.id, { managementFeeBp: 2_500 });
+    expect(await getOwnerStatement(t.db, org.orgId, issued.id)).toMatchObject({
+      managementFeeBp: 2_000,
+      payout: 9_433_700,
+    });
+    const redone = await draftOwnerStatement(t.db, org.admin, contract.id, thisMonth.slice(0, 7));
+    expect(await getOwnerStatement(t.db, org.orgId, redone.id)).toMatchObject({
+      managementFeeBp: 2_500,
+    });
+    await updateContract(t.db, org.admin, contract.id, { managementFeeBp: 2_000 });
+    await draftOwnerStatement(t.db, org.admin, contract.id, thisMonth.slice(0, 7));
+    // Statements can be asked for by month and by property.
+    expect(
+      (await listOwnerStatements(t.db, org.orgId, { month: lastMonthName })).map((x) => x.id),
+    ).toEqual([issued.id]);
+    expect(
+      await listOwnerStatements(t.db, org.orgId, {
+        month: lastMonthName,
+        propertyId: '00000000-0000-4000-8000-000000000000',
+      }),
+    ).toEqual([]);
+  });
+
+  it('counts the nights a guest in house has stayed, not the ones still to come', async () => {
+    const place = await createTestVilla(t.db, org);
+    const landlord = await createOwner(t.db, org.admin, { name: 'Halfway Owner' });
+    const terms = await createContract(t.db, org.admin, {
+      ownerId: landlord.id,
+      propertyId: place.property.id,
+      unitId: place.whole.units[0]!.id,
+      startsOn: addDays(today, -90),
+      managementFeeBp: 0,
+    });
+    // Arrived yesterday, leaving in three days.
+    const stay = await createReservation(t.db, org.admin, {
+      propertyId: place.property.id,
+      source: 'phone',
+      guest: { firstName: 'Still', lastName: 'Here' },
+      rooms: [
+        {
+          roomTypeId: place.whole.roomType.id,
+          ratePlanId: place.whole.ratePlan.id,
+          checkIn: addDays(today, -1),
+          checkOut: addDays(today, 3),
+          adults: 2,
+        },
+      ],
+    });
+    await t.db.execute(
+      `UPDATE reservation_rooms SET status = 'in_house' WHERE reservation_id = '${stay.id}';
+       UPDATE reservations SET status = 'in_house' WHERE id = '${stay.id}'`,
+    );
+    const month = monthOf(addDays(today, -1)).start.slice(0, 7);
+    const draft = await draftOwnerStatement(t.db, org.admin, terms.id, month);
+    expect(draft).toMatchObject({ roomNights: 1, grossRevenue: 2_500_000 });
+    expect(draft.lines.stays).toMatchObject([{ nights: 1, revenue: 2_500_000 }]);
   });
 
   it('reads as a spreadsheet', async () => {
@@ -477,6 +545,16 @@ describe('the owner portal', () => {
       ownerNightsUsed: 0,
       thisMonth: { nights: 1, revenue: 2_500_000 },
     });
+    // What the office noted about the contract is not sent to the owner's browser.
+    await updateContract(t.db, org.admin, contract.id, { notes: 'Wants the fee cut next year' });
+    const seen = await ownerOverview(t.db, ownerActor);
+    expect(seen.contracts[0]!.notes).toBeNull();
+    expect(
+      JSON.stringify([
+        seen,
+        await ownerCalendar(t.db, ownerActor, { from: today, to: addDays(today, 30) }),
+      ]),
+    ).not.toContain('fee cut');
     // Issued statements only: a draft is the office's working paper.
     expect(overview.statements.map((s) => s.status)).toEqual(['paid']);
     const mine = await ownerStatementsFor(t.db, ownerActor);
@@ -572,7 +650,29 @@ describe('the owner portal', () => {
         from: `${nextYear}-05-11`,
         to: `${nextYear}-05-13`,
       }),
-    ).rejects.toMatchObject({ code: 'unit_occupied' });
+    ).rejects.toMatchObject({
+      code: 'unit_occupied',
+      // When, but never who: no booking code and no guest.
+      message: `Those dates are not free: the villa is taken from 10 May ${nextYear} to 12 May ${nextYear}.`,
+    });
+
+    // Dates the office enters for the owner count against the same allowance.
+    const arranged = await createBlock(t.db, org.admin, {
+      propertyId: villa.property.id,
+      unitId: villa.whole.units[0]!.id,
+      kind: 'owner_stay',
+      startDate: `${nextYear}-06-01`,
+      endDate: `${nextYear}-06-06`,
+      reason: 'Owner visit, arranged by phone',
+    });
+    await expect(
+      requestOwnerStay(t.db, ownerActor, {
+        contractId: contract.id,
+        from: `${nextYear}-07-01`,
+        to: `${nextYear}-07-03`,
+      }),
+    ).rejects.toThrow(new RegExp(`10 nights a year.*1 is left for ${nextYear}`));
+    await releaseBlock(t.db, org.admin, arranged.id);
 
     const calendar = await ownerCalendar(t.db, ownerActor, {
       from: `${nextYear}-03-01`,

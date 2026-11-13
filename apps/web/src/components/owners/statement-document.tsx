@@ -363,6 +363,9 @@ function Summary({ statement }: { statement: Statement }) {
   const less = (amount: number) => money(-amount, currency);
   const share = statement.model === 'revenue_share';
   // Commission shown against bookings but not taken off here is borne by the management company.
+  // The rent for the month is what is payable before costs and adjustments: the server keeps
+  // the three it is made of, and this puts them back together.
+  const rent = statement.payout + statement.expenses - statement.adjustments;
   const commissionNotCharged =
     share &&
     statement.channelCommission === 0 &&
@@ -400,6 +403,15 @@ function Summary({ statement }: { statement: Statement }) {
                 />
               )}
             </>
+          )}
+          {!share && statement.fixedRent !== null && (
+            <SumRow
+              label="Rent"
+              detail={`${money(statement.fixedRent, currency)} a month${
+                rent === statement.fixedRent ? '' : ', for the days the contract covers'
+              }`}
+              amount={money(rent, currency)}
+            />
           )}
           {(statement.expenses !== 0 || statement.lines.expenses.length > 0) && (
             <SumRow label="Costs" amount={less(statement.expenses)} />
@@ -444,7 +456,9 @@ export function StatementDocument({ statement }: { statement: Statement }) {
     ? `${MODEL_LABELS.revenue_share}. Management fee: ${percentText(statement.managementFeeBp)}% ${basisWords(statement.feeBasis)}${
         statement.feeTaxBp !== 0 ? `, plus ${percentText(statement.feeTaxBp)}% tax on the fee` : ''
       }.`
-    : `${MODEL_LABELS.fixed_rent}.`;
+    : statement.fixedRent === null
+      ? `${MODEL_LABELS.fixed_rent}.`
+      : `${MODEL_LABELS.fixed_rent} of ${money(statement.fixedRent, statement.currency)} a month.`;
 
   return (
     <>

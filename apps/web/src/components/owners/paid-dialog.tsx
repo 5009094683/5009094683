@@ -23,10 +23,16 @@ export function PaidDialog({
 }) {
   const toast = useToast();
   const [reference, setReference] = useState('');
+  // The day in the browser: the office and its bank are, near enough, in the same place.
+  const [today] = useState(() => {
+    const now = new Date();
+    return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+  });
+  const [paidOn, setPaidOn] = useState(today);
 
   const save = useAction(async () => {
     const saved = await api<Statement>(`/owner-statements/${statement.id}/paid`, {
-      body: { reference: reference.trim() || null },
+      body: { reference: reference.trim() || null, paidOn },
     });
     toast.success('Marked as paid');
     onSaved(saved);
@@ -69,8 +75,21 @@ export function PaidDialog({
           ) : (
             <>Nothing is payable on statement {statement.number}, so this simply closes it.</>
           )}{' '}
-          Today is kept as the day of payment, and it cannot be undone here.
+          It cannot be undone here.
         </p>
+        <Field label="Paid on" hint="The day the money left. The owner sees it on the statement.">
+          {(props) => (
+            <Input
+              {...props}
+              type="date"
+              value={paidOn}
+              max={today}
+              onChange={(event) => setPaidOn(event.target.value)}
+              className="sm:w-48"
+              required
+            />
+          )}
+        </Field>
         <Field
           label="Payment reference"
           optional
