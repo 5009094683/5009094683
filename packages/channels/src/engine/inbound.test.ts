@@ -774,11 +774,19 @@ describe('bookings that cannot be placed', () => {
         { roomTypeId: c.hotel.deluxe.roomType.id, externalId: 'ext-suite' },
       ],
     });
+    // Saving the mapping is enough: the held booking is tried again by itself.
+    expect(await retryPendingRevisions(t.db)).toMatchObject({ applied: 1, failed: 0 });
     const applied = await reprocessRevision(t.db, org.admin, result.id);
-    expect(applied.status).toBe('applied');
+    expect(applied).toMatchObject({ status: 'applied', changed: false });
     const reservation = await loadReservation(t.db, org.orgId, applied.reservationId!);
     expect(reservation.rooms[0]!.roomTypeId).toBe(c.hotel.deluxe.roomType.id);
     expect(await openAlerts(key)).toHaveLength(0);
+    // A calendar or mailbox connection sends nothing, so saving never asks it to send everything.
+    const [after] = await t.db
+      .select()
+      .from(channelConnections)
+      .where(eq(channelConnections.id, c.connection.id));
+    expect(after!.fullSyncRequestedAt).not.toBeNull();
     // Applying it again does nothing.
     expect(await reprocessRevision(t.db, org.admin, result.id)).toMatchObject({ changed: false });
   });

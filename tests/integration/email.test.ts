@@ -349,9 +349,13 @@ describe('the reservations mailbox', () => {
       roomTypes: [{ roomTypeId: hotel.deluxe.roomType.id, externalId: '  PREMIUM  Ocean Suite ' }],
     });
     expect(put.statusCode).toBe(200);
-    const applied = await stack.admin.post(`/channels/revisions/${held!.id}/reprocess`);
-    expect(applied.json()).toMatchObject({ status: 'applied' });
-    const reservation = await byReference('7001000004');
+    // Nobody has to press anything: the worker places the held booking within moments.
+    const reservation = await waitFor('the held booking to be placed', () =>
+      byReference('7001000004'),
+    );
+    expect((await revisions()).find((r) => r.id === held!.id)).toMatchObject({
+      status: 'applied',
+    });
     const detail = (await stack.admin.get(`/reservations/${reservation!.id}`)).json() as {
       rooms: { roomTypeId: string }[];
     };

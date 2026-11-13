@@ -10,6 +10,17 @@ export const CHANNEL_NAMES: Record<string, string> = {
   VRB: 'Vrbo',
   GHA: 'Google',
   YTR: 'Yatra',
+  // The codes the mailbox reader and the calendar connections give the same sites, and
+  // the sites only they know.
+  GIB: 'Goibibo',
+  YAT: 'Yatra',
+  TRA: 'Tripadvisor',
+  HWL: 'Hostelworld',
+  CLT: 'Cleartrip',
+  EMT: 'EaseMyTrip',
+  HBD: 'Hotelbeds',
+  TVL: 'Traveloka',
+  DDC: 'Despegar',
 };
 
 /** How a booking came when it did not come through a booking site. */

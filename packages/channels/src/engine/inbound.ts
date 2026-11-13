@@ -1289,7 +1289,7 @@ export async function retryPendingRevisions(
   const { rows: due } = await db.execute<{ id: string }>(sql`
     SELECT id FROM booking_revisions
     WHERE (status = 'received' AND received_at < ${now.toISOString()}::timestamptz - interval '1 minute')
-       OR (status = 'failed' AND next_attempt_at <= ${now.toISOString()}::timestamptz)
+       OR (status IN ('failed', 'unmapped') AND next_attempt_at <= ${now.toISOString()}::timestamptz)
     ORDER BY revision_at
     LIMIT 200
   `);

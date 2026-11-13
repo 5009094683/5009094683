@@ -69,6 +69,31 @@ const FETCH_LIMIT = 50;
 /** On a first run, how far back to look. */
 const FIRST_RUN_LOOKBACK_MS = 24 * 3600_000;
 
+/**
+ * What went wrong, from an error of the mail library. Its own message is often just "Command
+ * failed"; what the server said, and whether it was the sign-in that was refused, are in
+ * fields beside it.
+ */
+export function imapFailure(err: unknown): { refused: boolean; detail: string } {
+  const e = (typeof err === 'object' && err !== null ? err : {}) as {
+    message?: unknown;
+    authenticationFailed?: unknown;
+    serverResponseCode?: unknown;
+    responseText?: unknown;
+  };
+  const said = typeof e.responseText === 'string' ? e.responseText.trim() : '';
+  const message = typeof e.message === 'string' ? e.message : String(err);
+  const detail = said || message;
+  const code = typeof e.serverResponseCode === 'string' ? e.serverResponseCode : '';
+  return {
+    refused:
+      e.authenticationFailed === true ||
+      /AUTHENTICATIONFAILED|AUTHORIZATIONFAILED/i.test(code) ||
+      /auth|credential|login|password/i.test(detail),
+    detail,
+  };
+}
+
 /** Reads a mailbox over IMAP, without changing it: nothing is marked read, moved or deleted. */
 export function imapMailbox(settings: MailboxSettings): MailboxReader {
   return {
@@ -84,17 +109,25 @@ export function imapMailbox(settings: MailboxSettings): MailboxReader {
       try {
         await client.connect();
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        const refused = /auth|credential|login|password/i.test(message);
+        const { refused, detail } = imapFailure(err);
         throw new ChannelError(
           refused
-            ? `The mailbox refused the sign-in for ${settings.user}`
-            : `The mailbox at ${settings.host} could not be reached: ${message}`,
+            ? `The mail server at ${settings.host} refused the sign-in for ${settings.user}. Check the user name and the password.`
+            : `The mailbox at ${settings.host} could not be reached: ${detail}`,
           { retryable: !refused, cause: err },
         );
       }
       try {
-        const lock = await client.getMailboxLock(settings.folder, { readOnly: true });
+        let lock: Awaited<ReturnType<typeof client.getMailboxLock>>;
+        try {
+          lock = await client.getMailboxLock(settings.folder, { readOnly: true });
+        } catch (err) {
+          // Signed in, but the folder is not there or may not be opened: a setting to put right.
+          throw new ChannelError(
+            `The folder "${settings.folder}" could not be opened in the mailbox of ${settings.user}: ${imapFailure(err).detail}`,
+            { retryable: false, cause: err },
+          );
+        }
         try {
           const mailbox = client.mailbox;
           const uidValidity = mailbox ? String(mailbox.uidValidity) : '';
