@@ -178,6 +178,44 @@ function toBookingEvent(
 }
 
 /**
+ * Entries known from earlier reads that the calendar no longer lists. One absence may be a
+ * hiccup on the channel's side; after the second in a row the booking is taken as cancelled.
+ */
+function vanished(
+  feed: IcalFeedConfig,
+  seen: IcalFeedState,
+  listed: (uid: string) => boolean,
+  today: DateString,
+  now: Date,
+): BookingEvent[] {
+  const out: BookingEvent[] = [];
+  for (const [uid, before] of Object.entries(seen.events)) {
+    if (listed(uid)) continue;
+    if (before.end <= today) {
+      // It ended; channels drop past stays from their calendars.
+      delete seen.events[uid];
+      continue;
+    }
+    const missing = (before.missing ?? 0) + 1;
+    if (missing < MISSING_READS_BEFORE_CANCEL) {
+      before.missing = missing;
+      continue;
+    }
+    out.push(
+      toBookingEvent(
+        feed,
+        { uid, start: before.start, end: before.end },
+        'cancelled',
+        before.kind,
+        now,
+      ),
+    );
+    delete seen.events[uid];
+  }
+  return out;
+}
+
+/**
  * Calendar feeds: the route for a single-unit listing on a channel that is
  * not connected through the channel manager. Each read of the channel's
  * calendar is compared with the previous one; what appeared, moved or
@@ -228,6 +266,9 @@ export function icalAdapter(context: AdapterContext): ChannelAdapter {
             },
           });
           if (response.status === 304) {
+            // Unchanged since the last read: what was in it then is in it now, and what had
+            // gone from it then is gone still. That second absence is what cancels.
+            out.push(...vanished(feed, seen, (uid) => !seen.events[uid]?.missing, today, now));
             seen.fetchedAt = now.toISOString();
             seen.error = null;
             seen.failedSince = null;
@@ -256,29 +297,7 @@ export function icalAdapter(context: AdapterContext): ChannelAdapter {
             }
             seen.events[uid] = { start: event.start, end: event.end, kind: before?.kind ?? kind };
           }
-          for (const [uid, before] of Object.entries(seen.events)) {
-            if (current.has(uid)) continue;
-            if (before.end <= today) {
-              // It ended; channels drop past stays from their calendars.
-              delete seen.events[uid];
-              continue;
-            }
-            const missing = (before.missing ?? 0) + 1;
-            if (missing < MISSING_READS_BEFORE_CANCEL) {
-              before.missing = missing;
-              continue;
-            }
-            out.push(
-              toBookingEvent(
-                feed,
-                { uid, start: before.start, end: before.end },
-                'cancelled',
-                before.kind,
-                now,
-              ),
-            );
-            delete seen.events[uid];
-          }
+          out.push(...vanished(feed, seen, (uid) => current.has(uid), today, now));
           seen.etag = response.headers.etag;
           seen.lastModified = response.headers['last-modified'];
           seen.fetchedAt = now.toISOString();

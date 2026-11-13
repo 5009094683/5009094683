@@ -1,7 +1,7 @@
 import { lookup as dnsLookup } from 'node:dns/promises';
 import http from 'node:http';
 import https from 'node:https';
-import { isIP } from 'node:net';
+import { isIP, type LookupFunction } from 'node:net';
 import { isPrivateAddress } from '@pms/domain';
 import { ChannelError } from './adapter';
 
@@ -29,10 +29,13 @@ export interface SafeResponse {
   url: string;
 }
 
-async function resolvePublic(
-  hostname: string,
-  allowPrivate: boolean,
-): Promise<{ address: string; family: number }> {
+interface Resolved {
+  address: string;
+  family: number;
+}
+
+/** Every address the name stands for, all of them checked. */
+async function resolvePublic(hostname: string, allowPrivate: boolean): Promise<Resolved[]> {
   const literal = isIP(hostname);
   const candidates = literal
     ? [{ address: hostname, family: literal }]
@@ -41,12 +44,35 @@ async function resolvePublic(
   if (!allowPrivate && candidates.some((c) => isPrivateAddress(c.address))) {
     throw new ChannelError(`${hostname} is not a public address`, { retryable: false });
   }
-  return candidates[0]!;
+  return candidates;
+}
+
+/**
+ * Answers the connection's question "where is this host?" with the addresses that were
+ * checked, so that a second DNS answer cannot send the request somewhere else. Node asks
+ * either for one address or for all of them, and takes the answer in a different shape for
+ * each; given all, it tries them in turn, which is what gets through from a machine that
+ * has no route over IPv6 to a host that publishes an IPv6 address first.
+ */
+function pinnedLookup(pinned: Resolved[]): LookupFunction {
+  return (_hostname, lookupOptions, callback) => {
+    const wantsAll = typeof lookupOptions === 'object' && lookupOptions.all === true;
+    if (wantsAll) {
+      (callback as (err: Error | null, addresses: Resolved[]) => void)(null, pinned);
+      return;
+    }
+    const first = pinned.find((p) => p.family === 4) ?? pinned[0]!;
+    (callback as (err: Error | null, address: string, family: number) => void)(
+      null,
+      first.address,
+      first.family,
+    );
+  };
 }
 
 function once(
   url: URL,
-  pinned: { address: string; family: number },
+  pinned: Resolved[],
   options: SafeFetchOptions,
 ): Promise<{ status: number; headers: http.IncomingHttpHeaders; body: string }> {
   const maxBytes = options.maxBytes ?? 2 * 1024 * 1024;
@@ -65,14 +91,7 @@ function once(
         method: 'GET',
         headers: { 'user-agent': 'PMS-calendar-sync/1.0', accept: '*/*', ...options.headers },
         timeout: options.timeoutMs ?? 15_000,
-        // Connect to the address that was checked, so a second DNS answer cannot redirect the request.
-        lookup: (_host, _opts, callback) => {
-          (callback as (err: Error | null, address: string, family: number) => void)(
-            null,
-            pinned.address,
-            pinned.family,
-          );
-        },
+        lookup: pinnedLookup(pinned),
       },
       (response) => {
         const chunks: Buffer[] = [];

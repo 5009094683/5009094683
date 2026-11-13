@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -44,7 +45,15 @@ beforeAll(async () => {
       res.end();
       return;
     }
-    res.writeHead(entry.status, { 'content-type': 'text/calendar' });
+    // As the booking sites' servers do: a calendar that has not changed since the caller
+    // last read it is answered with "not modified" and no content.
+    const etag = `"${createHash('sha1').update(entry.body).digest('hex')}"`;
+    if (entry.status === 200 && req.headers['if-none-match'] === etag) {
+      res.writeHead(304, { etag });
+      res.end();
+      return;
+    }
+    res.writeHead(entry.status, { 'content-type': 'text/calendar', etag });
     res.end(entry.body);
   });
   await new Promise<void>((resolve) => host.listen(0, '127.0.0.1', resolve));

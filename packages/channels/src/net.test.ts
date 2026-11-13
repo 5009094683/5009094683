@@ -88,6 +88,21 @@ describe('safeFetch', () => {
     expect((await safeFetch(`${base}/missing`, { allowPrivate: true })).status).toBe(404);
   });
 
+  it('reaches a host by its name, which is how every real calendar is addressed', async () => {
+    // By name the connection asks where the host is, and is answered with the addresses
+    // that were checked. `localhost` may be answered with ::1 first, where nothing listens
+    // here: the next address is tried.
+    const port = (server.address() as AddressInfo).port;
+    const named = await safeFetch(`http://localhost:${port}/calendar`, { allowPrivate: true });
+    expect(named).toMatchObject({ status: 200, body: 'BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n' });
+    // A redirect that names the host is followed the same way.
+    const moved = await safeFetch(`http://localhost:${port}/moved`, { allowPrivate: true });
+    expect(moved).toMatchObject({ status: 200, url: `http://localhost:${port}/calendar` });
+    // A name that stands for this machine is still refused when told to stay public.
+    const err = await refusal(safeFetch('https://localhost/cal.ics', { allowPrivate: false }));
+    expect(err.message).toBe('localhost is not a public address');
+  });
+
   it('refuses addresses on this machine or a private network when told to stay public', async () => {
     for (const url of [
       `${base}/calendar`.replace('http:', 'https:'),
