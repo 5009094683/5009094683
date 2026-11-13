@@ -29,6 +29,9 @@ import {
   STATUS_TONES,
 } from '@/components/ui/misc';
 import { useToast } from '@/components/ui/toast';
+import { CompanyRow } from '@/components/folio/company-row';
+import { FolioSection } from '@/components/folio/folio-section';
+import { StayActions } from '@/components/frontdesk/stay-actions';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import {
@@ -528,6 +531,7 @@ export function ReservationPanel({
             </span>
           )}
         </div>
+        <StayActions reservation={reservation} onChanged={apply} />
         {reservation.status === 'tentative' && (
           <Notice tone="warning" className="mt-3" title="Held, not yet confirmed">
             <div className="flex items-center justify-between gap-3">
@@ -626,6 +630,7 @@ export function ReservationPanel({
             <span className="font-mono text-ink">{reservation.channelReservationCode}</span>
           </p>
         )}
+        <CompanyRow reservation={reservation} canEdit={canWrite} onChanged={apply} />
       </Section>
 
       <Section title={reservation.rooms.length > 1 ? `Rooms (${liveRooms.length})` : 'Room'}>
@@ -705,6 +710,12 @@ export function ReservationPanel({
           </p>
         )}
       </Section>
+
+      <FolioSection
+        reservation={reservation}
+        frame={(bill) => <Section title="Bill">{bill}</Section>}
+        onChanged={apply}
+      />
 
       <Section title="Requests and notes">
         {reservation.specialRequests && (
