@@ -10,7 +10,7 @@ import { Notice } from '@/components/ui/notice';
 import { ApiError, errorMessage, fieldIssues } from '@/lib/api-error';
 import { api } from '@/lib/browser-api';
 import type { Country } from '@/lib/countries';
-import { clearDraft, readDraft, rememberForm, writeDraft } from '@/lib/draft';
+import { attemptId, clearDraft, readDraft, rememberForm, writeDraft } from '@/lib/draft';
 import { formatMoney } from '@/lib/format';
 import { useEarlyInput } from '@/lib/hooks';
 import type { Booked, BookingBody } from '@/lib/types';
@@ -111,13 +111,25 @@ interface Failure {
 
 /**
  * What to say when no answer came back, or a fault on the way to one. The request may have
- * arrived all the same. Where a booking is paid for on the next page that leaves a hold which
- * lapses by itself, and trying again is right. Where it is confirmed at once, trying again
- * could book the same stay twice, and the confirmation email is how the guest can tell.
+ * arrived all the same. An attempt that carries a name can simply be sent again. Without
+ * one: where a booking is paid for on the next page that leaves a hold which lapses by
+ * itself, and trying again is right; where it is confirmed at once, trying again could book
+ * the same stay twice, and the confirmation email is how the guest can tell.
  */
-function unanswered(err: unknown, confirmedAtOnce: boolean): Failure | null {
-  if (!confirmedAtOnce || !(err instanceof ApiError)) return null;
+function unanswered(err: unknown, confirmedAtOnce: boolean, named: boolean): Failure | null {
+  if (!(err instanceof ApiError)) return null;
   if (err.status !== 0 && err.status < 500) return null;
+  // An attempt sent with a name is one booking however often it is sent: trying again is safe.
+  if (named) {
+    return {
+      title: 'We did not get an answer',
+      message:
+        err.status === 0
+          ? 'We could not reach the server. Check your connection and press the button again: sending this a second time does not book twice.'
+          : 'Something went wrong on our side. Please press the button again in a moment: sending this a second time does not book twice.',
+    };
+  }
+  if (!confirmedAtOnce) return null;
   return {
     title: 'We are not sure your booking was made',
     message:
@@ -215,10 +227,13 @@ export function BookingForm(props: BookingFormProps) {
       acceptTerms: true,
       marketingConsent: values.marketingConsent,
     };
+    const requestId = attemptId(body);
 
     setSubmitting(true);
     try {
-      const booked = await api<Booked>('/bookings', { body });
+      const booked = await api<Booked>('/bookings', {
+        body: requestId ? { ...body, requestId } : body,
+      });
       const page = `/booking/${booked.token}`;
       if (booked.payment) {
         // Kept until the booking is paid for: if the payment does not go through, the guest
@@ -252,7 +267,7 @@ export function BookingForm(props: BookingFormProps) {
         err instanceof ApiError &&
         (err.code === 'restriction_violated' || (err.code === 'validation' && err.status === 400));
       setFailure(
-        unanswered(err, payNow === 0) ?? {
+        unanswered(err, payNow === 0, requestId !== null) ?? {
           title: 'Your booking was not made',
           message: errorMessage(err),
           way: elsewhere ? { href: resultsHref, label: 'Choose again' } : undefined,

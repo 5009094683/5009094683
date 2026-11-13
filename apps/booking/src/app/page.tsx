@@ -8,6 +8,8 @@ import { LinkPending } from '@/components/ui/link-pending';
 import { cn } from '@/lib/cn';
 import { kindLabel, placeOf } from '@/lib/format';
 import { usablePhotos } from '@/lib/photos';
+import { TooManyTries } from '@/components/too-many-tries';
+import { BUSY, forPublicPage, NOT_SET_UP } from '@/lib/guest-page';
 import { getProperties } from '@/lib/server-api';
 import { propertyPath } from '@/lib/stay';
 import type { Property } from '@/lib/types';
@@ -55,7 +57,22 @@ function PropertyCard({ property }: { property: Property }) {
 }
 
 export default async function HomePage() {
-  const { organisation, properties } = await getProperties();
+  const listed = await forPublicPage(getProperties());
+  if (listed === BUSY) return <TooManyTries browsing />;
+  if (listed === NOT_SET_UP) {
+    return (
+      <div className={cn(pageClass, 'py-8 sm:py-12')}>
+        <h1 className="font-display text-3xl leading-tight sm:text-4xl">
+          Nothing can be booked here yet
+        </h1>
+        <p className="mt-4 max-w-prose text-ink-soft">
+          This booking website has not been set up. If a hotel gave you this address, please get in
+          touch with them directly.
+        </p>
+      </div>
+    );
+  }
+  const { organisation, properties } = listed;
   const only = properties.length === 1 ? properties[0] : undefined;
   if (only) redirect(propertyPath(only.code));
 

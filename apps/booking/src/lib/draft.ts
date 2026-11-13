@@ -7,6 +7,7 @@
 
 const DRAFT_KEY = 'booking-form';
 const FORM_KEY = 'booking-form-address';
+const ATTEMPT_KEY = 'booking-attempt';
 
 export interface Draft {
   firstName: string;
@@ -65,6 +66,26 @@ export function writeDraft(values: Draft): void {
 export function clearDraft(): void {
   write(DRAFT_KEY, null);
   write(FORM_KEY, null);
+  write(ATTEMPT_KEY, null);
+}
+
+/**
+ * A name for one attempt to book, sent with it and with every retry of it, so that the server
+ * makes one booking however many times the attempt arrives. Anything different about the
+ * booking makes it a new attempt with a new name. Null where the browser cannot make one;
+ * the attempt is then sent without, as before.
+ */
+export function attemptId(booking: unknown): string | null {
+  if (typeof crypto === 'undefined' || typeof crypto.randomUUID !== 'function') return null;
+  const key = JSON.stringify(booking);
+  const saved = read(ATTEMPT_KEY);
+  if (typeof saved === 'object' && saved !== null) {
+    const { key: savedKey, id } = saved as Record<string, unknown>;
+    if (savedKey === key && typeof id === 'string') return id;
+  }
+  const id = crypto.randomUUID();
+  write(ATTEMPT_KEY, { key, id });
+  return id;
 }
 
 /** Notes which booking form a booking was made from, so the guest can be sent back to it. */

@@ -9,6 +9,7 @@ import { RateSelection } from '@/components/property/rate-selection';
 import { fits, OfferCard, RatesSkeleton, RoomCard } from '@/components/property/rooms';
 import { ARRIVAL_FIELD, RESULTS_SECTION, SearchBar } from '@/components/property/search-bar';
 import { pageClass } from '@/components/site-chrome';
+import { TooManyTries } from '@/components/too-many-tries';
 import { buttonClass } from '@/components/ui/button';
 import { Notice } from '@/components/ui/notice';
 import { errorMessage } from '@/lib/api-error';
@@ -16,6 +17,7 @@ import { brandStyle } from '@/lib/brand';
 import { cn } from '@/lib/cn';
 import { dateIn, formatDate, formatDay } from '@/lib/dates';
 import { count, kindLabel, party, placeOf, sentence } from '@/lib/format';
+import { BUSY, forPublicPage, NOT_SET_UP } from '@/lib/guest-page';
 import { getProperty, searchStay } from '@/lib/server-api';
 import {
   hasDates,
@@ -261,7 +263,9 @@ function About({ property }: { property: PropertyDetail }) {
 
 export default async function PropertyPage({ params, searchParams }: Props) {
   const [{ property: slug }, query] = await Promise.all([params, searchParams]);
-  const property = await getProperty(slug);
+  const property = await forPublicPage(getProperty(slug));
+  if (property === BUSY) return <TooManyTries browsing />;
+  if (property === NOT_SET_UP) notFound();
   if (!property) notFound();
 
   const path = propertyPath(property.code);

@@ -21,6 +21,26 @@ export async function forGuestPage<T>(reading: Promise<T>): Promise<T | typeof B
   }
 }
 
+/** Stands for there being nothing to book here: the website has not been set up for a chain. */
+export const NOT_SET_UP: unique symbol = Symbol('not set up');
+
+/**
+ * Waits for what a page anyone can open needs from the API. Being asked too often comes
+ * back as `BUSY`, and a chain the API does not know as `NOT_SET_UP`, for the page to say so
+ * plainly. Anything else is a fault, and is thrown.
+ */
+export async function forPublicPage<T>(
+  reading: Promise<T>,
+): Promise<T | typeof BUSY | typeof NOT_SET_UP> {
+  try {
+    return await reading;
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 429) return BUSY;
+    if (err instanceof ApiError && err.status === 404) return NOT_SET_UP;
+    throw err;
+  }
+}
+
 /**
  * The same wait, for the title of such a page: a link the API does not know takes the title
  * of the page that says so. Any other fault is left to the page itself, which asks for the

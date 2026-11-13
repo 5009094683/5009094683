@@ -70,9 +70,6 @@ export function fieldIssues(err: unknown): FieldIssue[] {
   );
 }
 
-/** The rate limiter answers in its own words; guests get ours. */
-const LIMITER_MESSAGE = /^rate limit exceeded/i;
-
 /**
  * What to tell the guest about a failure. The server's sentences for things a
  * guest can act on are written for guests and shown as they are; schema
@@ -80,7 +77,9 @@ const LIMITER_MESSAGE = /^rate limit exceeded/i;
  */
 export function errorMessage(err: unknown): string {
   if (!(err instanceof ApiError)) return 'Something went wrong. Please try again.';
-  if (err.status === 429 && LIMITER_MESSAGE.test(err.message)) {
+  // The limiter answers in its own words; guests get ours. Other refusals with the same
+  // status, such as holding too many unpaid bookings, come with a sentence written for guests.
+  if (err.status === 429 && err.code === 'rate_limited') {
     return 'That was a lot of tries in a short time. Please wait a minute and try again.';
   }
   if (err.status >= 500) return OUR_FAULT;
@@ -92,5 +91,9 @@ export function errorMessage(err: unknown): string {
 
 /** A guest link the server does not recognise: wrong, revoked, expired, or not a link at all. */
 export function isDeadLink(err: unknown): boolean {
-  return err instanceof ApiError && (err.status === 404 || err.code === 'validation');
+  // 414: something far longer than a link was put where the link goes.
+  return (
+    err instanceof ApiError &&
+    (err.status === 404 || err.status === 414 || err.code === 'validation')
+  );
 }

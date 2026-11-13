@@ -24,6 +24,8 @@ import {
   type SearchParams,
 } from '@/lib/stay';
 import type { Offer, Plan, Promo, PropertyDetail, Stay } from '@/lib/types';
+import { TooManyTries } from '@/components/too-many-tries';
+import { BUSY, forPublicPage, NOT_SET_UP } from '@/lib/guest-page';
 
 interface Props {
   params: Promise<{ property: string }>;
@@ -215,7 +217,9 @@ function Summary({ property, stay, offer, plan, rooms, promo }: SummaryProps) {
 
 export default async function BookPage({ params, searchParams }: Props) {
   const [{ property: slug }, query] = await Promise.all([params, searchParams]);
-  const property = await getProperty(slug);
+  const property = await forPublicPage(getProperty(slug));
+  if (property === BUSY) return <TooManyTries browsing />;
+  if (property === NOT_SET_UP) notFound();
   if (!property) notFound();
 
   const path = propertyPath(property.code);

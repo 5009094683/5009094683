@@ -5,9 +5,10 @@ import { cn } from '@/lib/cn';
 
 /**
  * Shown in place of a page when the API has been asked too often from the
- * guest's address and wants a pause before it answers again.
+ * guest's address and wants a pause before it answers again. `browsing` is for
+ * pages that are not about a booking.
  */
-export function TooManyTries() {
+export function TooManyTries({ browsing = false }: { browsing?: boolean }) {
   return (
     <div className={cn(pageClass, 'py-12 sm:py-20')}>
       <div className="mx-auto max-w-xl rounded-2xl border border-line/70 bg-surface p-6 text-center shadow-card sm:p-10">
@@ -19,7 +20,7 @@ export function TooManyTries() {
         </h1>
         <p className="mt-3 text-base text-ink-soft">
           There were too many attempts in a short time, so this page is taking a short break.
-          Nothing about your booking has changed.
+          {browsing ? '' : ' Nothing about your booking has changed.'}
         </p>
         <div className="mt-7">
           {/* An empty address is the page's own: this loads it again, with or without scripts. */}

@@ -425,16 +425,36 @@ test('a guest who comes back without having paid finds the room held, and can st
   await expect(fact(price, 'Paid')).toHaveText(inr(total));
 });
 
-test('a guest who cancels on the payment page is told so, and can book again', async ({ page }) => {
+test('a guest who cancels on the payment page can pay after all while the room is held', async ({
+  page,
+}) => {
+  const total = await bookAsFarAsPaying(
+    page,
+    { checkIn: addDays(today, 26), nights: 2 },
+    newGuest(),
+  );
+  await page.getByRole('button', { name: 'Cancel' }).click();
+
+  // That payment page is closed for good, but the room is still held: a new one can be had.
+  await expect(headline(page)).toHaveText('This booking is not confirmed', SLOW);
+  await expect(page.getByText('Your payment was not completed.')).toBeVisible();
+  await expect(page.getByText(/Your room is still held for you until \d\d:\d\d\./)).toBeVisible();
+  const booking = page.url();
+  await page.getByRole('button', { name: 'Pay now' }).click();
+  await page.getByRole('button', { name: /^Pay / }).click();
+  await expect(headline(page)).toHaveText('Your booking is confirmed', SLOW);
+  await expect(page).toHaveURL(booking);
+  await expect(fact(page.getByRole('region', { name: 'Price' }), 'Paid')).toHaveText(inr(total));
+});
+
+test('a guest who cancels on the payment page can instead book again', async ({ page }) => {
   const guest = newGuest();
   const total = await bookAsFarAsPaying(page, { checkIn: addDays(today, 30), nights: 2 }, guest);
   await page.getByRole('button', { name: 'Cancel' }).click();
 
-  // The stand-in gateway closes a cancelled payment for good, so this booking can no longer be
-  // paid for: the site gives its hold up and takes the guest back to the form they filled in.
+  // Booking again gives the hold up and takes the guest back to the form they filled in.
   await expect(headline(page)).toHaveText('This booking is not confirmed', SLOW);
-  await expect(page.getByText('Your payment was not completed.')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Pay now' })).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Pay now' })).toBeVisible();
   await page.getByRole('button', { name: 'Book again' }).click();
 
   await expect(page.getByRole('heading', { name: 'Complete your booking' })).toBeVisible(SLOW);

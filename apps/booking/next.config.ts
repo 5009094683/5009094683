@@ -12,6 +12,9 @@ const config: NextConfig = {
   reactStrictMode: true,
   // Do not write a generated AGENTS.md into the project.
   agentRules: false,
+  // A guest's booking link is a key to the booking. The development server would otherwise
+  // write every address it is asked for, link and all, to its log.
+  logging: { incomingRequests: { ignore: [/^\/booking\//, /^\/api\/public\/bookings\//] } },
   // Only the API's public routes are reachable through the booking site. Staff
   // routes are not proxied here, so this origin can never carry a staff session.
   async rewrites() {

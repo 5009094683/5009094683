@@ -119,6 +119,7 @@ export async function createTestProperty(api: Api, kind: 'villa' | 'hotel'): Pro
     baseRate: 0,
     parentRatePlanId: flexible.id,
     derivedPercentBp: -1000,
+    cancellationPolicy: { nonRefundable: true },
   });
   const detail = await api.get<{ roomTypes: TestProperty['roomTypes'] }>(base);
   return { id: property.id, name, roomTypes: detail.roomTypes };

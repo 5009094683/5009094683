@@ -80,7 +80,8 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex justify-between gap-6 py-2">
       <dt className="text-ink-soft">{label}</dt>
-      <dd className="text-right font-medium">{children}</dd>
+      {/* An amount is one word: on a narrow screen the label wraps, never the figure. */}
+      <dd className="shrink-0 text-right font-medium whitespace-nowrap">{children}</dd>
     </div>
   );
 }
@@ -89,7 +90,7 @@ function Total({ label, amount }: { label: string; amount: string }) {
   return (
     <div className="mt-1 flex justify-between gap-6 border-t border-line pt-3 text-base font-semibold">
       <dt>{label}</dt>
-      <dd className="tabular-nums">{amount}</dd>
+      <dd className="shrink-0 whitespace-nowrap tabular-nums">{amount}</dd>
     </div>
   );
 }
@@ -190,6 +191,8 @@ export function BookingView({
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [cancelled, setCancelled] = useState<Cancelled | null>(null);
   const [startingAgain, setStartingAgain] = useState(false);
+  const [openingPayment, setOpeningPayment] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
   const asked = useRef(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
@@ -203,7 +206,7 @@ export function BookingView({
     headingRef.current?.focus({ preventScroll: true });
   }, [booking.status]);
 
-  const { property, pendingPayment } = booking;
+  const { property, pendingPayment, payAgain } = booking;
   const money = (amount: number) => formatMoney(amount, booking.currency);
   // The API counts as paid what is left after refunds. A guest counts what left their account.
   const paidIn = booking.paid + booking.refunded;
@@ -214,10 +217,14 @@ export function BookingView({
     booking.refunded,
     booking.balance,
     pendingPayment?.amount ?? 0,
+    booking.tax,
   ]);
   const clockOffset = useClockOffset(serverTime);
-  const timeLeft = useTimeLeft(pendingPayment?.expiresAt, clockOffset);
+  // The rooms are held until the same moment whether a payment page is open or was left.
+  const timeLeft = useTimeLeft(pendingPayment?.expiresAt ?? payAgain?.until, clockOffset);
   const payable = pendingPayment !== null && timeLeft !== 0;
+  // The payment page was left without paying, and the rooms are still held: it can be reopened.
+  const reopenable = pendingPayment === null && payAgain !== null && timeLeft !== 0;
 
   const reload = useCallback(async (): Promise<Booking | null> => {
     try {
@@ -290,8 +297,28 @@ export function BookingView({
     }
   };
 
-  // A booking that was not paid for cannot be paid for later. Its hold is given up, so that
-  // the same room is free to book again, and the guest goes back to where they booked.
+  // Asks for a new payment page for the rooms still held, and goes to it.
+  const payAfterAll = async () => {
+    if (openingPayment) return;
+    setOpeningPayment(true);
+    setPaymentError(null);
+    try {
+      const { checkoutUrl } = await api<{ checkoutUrl: string }>(bookingPath(token, '/pay'), {
+        method: 'POST',
+      });
+      window.location.assign(checkoutUrl);
+      // Still busy on purpose: the browser is on its way to the payment page.
+    } catch (err) {
+      setPaymentError(errorMessage(err));
+      setOpeningPayment(false);
+      // The hold may have run out meanwhile: show the booking as it now stands.
+      await reload();
+    }
+  };
+
+  // Once the hold has run out, a booking that was not paid for cannot be paid for any more.
+  // Its hold is given up, so that the same room is free to book again, and the guest goes
+  // back to where they booked.
   const startAgain = async () => {
     if (startingAgain) return;
     setStartingAgain(true);
@@ -341,13 +368,23 @@ export function BookingView({
         Your booking is confirmed once you have paid {money(pendingPayment?.amount ?? 0)}.
       </>
     ),
-    unpaid: (
-      <>
-        {cameBack ? 'Your payment was not completed. ' : null}
-        We have not received a payment for this booking, and it can no longer be paid for. To stay
-        with us on these dates, please book again.
-      </>
-    ),
+    unpaid:
+      reopenable && payAgain ? (
+        <>
+          {cameBack ? 'Your payment was not completed. ' : null}
+          {booking.rooms.length === 1 ? 'Your room is' : 'Your rooms are'} still held for you
+          {clockOffset !== null
+            ? ` until ${formatLocalTime(new Date(payAgain.until).getTime() - clockOffset)}`
+            : ' for a short while'}
+          . Pay {money(payAgain.amount)} before then and the booking is confirmed.
+        </>
+      ) : (
+        <>
+          {cameBack ? 'Your payment was not completed. ' : null}
+          We have not received a payment for this booking, and it can no longer be paid for. To stay
+          with us on these dates, please book again.
+        </>
+      ),
     confirmed: (
       <>
         {cameBack ? 'Thank you, we have received your payment. ' : null}
@@ -463,13 +500,37 @@ export function BookingView({
               </div>
             ) : null}
 
+            {state === 'unpaid' && paymentError ? (
+              <Notice
+                tone="warning"
+                role="alert"
+                className="mt-5"
+                title="The payment page did not open"
+              >
+                {paymentError}
+              </Notice>
+            ) : null}
+
             {state === 'unpaid' ? (
-              <div className="mt-5">
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                {reopenable ? (
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    loading={openingPayment}
+                    disabled={openingPayment || startingAgain}
+                    onClick={payAfterAll}
+                    className="w-full sm:w-auto"
+                  >
+                    Pay now
+                    <ArrowRight className="size-4" aria-hidden />
+                  </Button>
+                ) : null}
                 <Button
-                  variant="primary"
+                  variant={reopenable ? 'secondary' : 'primary'}
                   size="lg"
                   loading={startingAgain}
-                  disabled={startingAgain}
+                  disabled={startingAgain || openingPayment}
                   onClick={startAgain}
                   className="w-full sm:w-auto"
                 >
@@ -643,6 +704,13 @@ export function BookingView({
                 >
                   <span className="tabular-nums">{priceLine(booking.total)}</span>
                 </Row>
+                {booking.tax > 0 ? (
+                  <Row label="Of which taxes">
+                    <span className="font-normal text-ink-soft tabular-nums">
+                      {priceLine(booking.tax)}
+                    </span>
+                  </Row>
+                ) : null}
                 <Row label="Paid">
                   <span className="tabular-nums">{priceLine(paidIn)}</span>
                 </Row>
