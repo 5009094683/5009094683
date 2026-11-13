@@ -120,6 +120,15 @@ const schema = z.object({
   STORAGE_DIR: z.string().default('./var/files'),
 
   BACKUP_DIR: z.string().default('./var/backups'),
+
+  /** Requests one API key may make in a minute, on each API server. */
+  API_KEY_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).max(100_000).default(600),
+  /**
+   * Let outbound webhooks call addresses on private networks. Off in
+   * production unless set: a webhook must not be a way to reach internal
+   * services. On elsewhere, so a receiver on localhost can be tried out.
+   */
+  WEBHOOKS_ALLOW_PRIVATE_HOSTS: z.enum(['true', 'false']).optional(),
 });
 
 type Parsed = z.infer<typeof schema>;
@@ -129,8 +138,13 @@ export const SIMULATOR_API_KEY = 'sim-api-key';
 
 export type Env = Omit<
   Parsed,
-  'APP_ENCRYPTION_KEY' | 'AI_PROVIDER' | 'PAYMENT_PROVIDER' | 'CHANNEX_BASE_URL'
+  | 'APP_ENCRYPTION_KEY'
+  | 'AI_PROVIDER'
+  | 'PAYMENT_PROVIDER'
+  | 'CHANNEX_BASE_URL'
+  | 'WEBHOOKS_ALLOW_PRIVATE_HOSTS'
 > & {
+  WEBHOOKS_ALLOW_PRIVATE_HOSTS: boolean;
   APP_ENCRYPTION_KEY: string;
   CHANNEX_BASE_URL: string;
   /** True when channel sync talks to the bundled simulator instead of a real channel manager. */
@@ -227,6 +241,9 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     APP_ENCRYPTION_KEY: encryptionKey,
     AI_PROVIDER: aiProvider,
     PAYMENT_PROVIDER: paymentProvider,
+    WEBHOOKS_ALLOW_PRIVATE_HOSTS: parsed.WEBHOOKS_ALLOW_PRIVATE_HOSTS
+      ? parsed.WEBHOOKS_ALLOW_PRIVATE_HOSTS === 'true'
+      : !isProduction,
     isProduction,
     isTest: parsed.NODE_ENV === 'test',
     usingDevEncryptionKey: encryptionKey === DEV_ENCRYPTION_KEY,

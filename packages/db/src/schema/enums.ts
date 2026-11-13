@@ -287,6 +287,21 @@ export type OwnerExpenseCategory = (typeof OWNER_EXPENSE_CATEGORIES)[number];
 export const OWNER_STATEMENT_STATUSES = ['draft', 'issued', 'paid'] as const;
 export type OwnerStatementStatus = (typeof OWNER_STATEMENT_STATUSES)[number];
 
+/** Roles an API key may carry. Managing users, sign-in and keys themselves stays with people. */
+export const API_KEY_ROLES = [
+  'general_manager',
+  'revenue_manager',
+  'front_desk',
+  'housekeeping',
+  'maintenance',
+  'accountant',
+  'read_only',
+] as const satisfies readonly Role[];
+export type ApiKeyRole = (typeof API_KEY_ROLES)[number];
+
+export const WEBHOOK_DELIVERY_STATUSES = ['pending', 'delivered', 'failed'] as const;
+export type WebhookDeliveryStatus = (typeof WEBHOOK_DELIVERY_STATUSES)[number];
+
 /** SQL fragment helper: `'a','b','c'` for CHECK constraints. */
 export function sqlList(values: readonly string[]): string {
   return values.map((v) => `'${v}'`).join(',');

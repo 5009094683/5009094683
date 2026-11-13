@@ -22,7 +22,8 @@ export type AlertKind =
   | 'message_failed'
   | 'night_audit'
   | 'ledger_mismatch'
-  | 'owner_statements';
+  | 'owner_statements'
+  | 'webhook_failing';
 
 export interface RaiseAlertInput {
   orgId: string;
