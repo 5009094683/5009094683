@@ -320,6 +320,19 @@ export async function updateBlock(
     if (patch.quantity !== undefined && before.unitId && patch.quantity !== 1) {
       throw validationError('A block on a single unit always has quantity 1');
     }
+    if (patch.quantity !== undefined && !before.unitId) {
+      const active = await tx
+        .select({ id: units.id })
+        .from(units)
+        .where(and(eq(units.roomTypeId, before.roomTypeId), eq(units.active, true)));
+      if (
+        !Number.isInteger(patch.quantity) ||
+        patch.quantity < 1 ||
+        patch.quantity > active.length
+      ) {
+        throw validationError(`Quantity must be between 1 and ${active.length}`);
+      }
+    }
 
     const candidates =
       options.relocateStays && before.unitId ? await movableStays(tx, before.unitId, range) : [];

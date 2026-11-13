@@ -43,6 +43,7 @@ import {
   enqueueJob,
   enqueueRecurring,
   expireHolds,
+  releaseDueGroupRooms,
   failJob,
   httpWebhookSender,
   isDomainError,
@@ -406,6 +407,10 @@ export class Worker {
     });
     await step('sync lag', () => checkSyncLag(this.db, now));
     await step('expired holds', () => this.expireHolds(now));
+    await step('group cut-offs', async () => {
+      const released = await releaseDueGroupRooms(this.db, now);
+      if (released.length > 0) this.log.info({ groups: released }, 'released unbooked group rooms');
+    });
     await step('night audit', async () => {
       const closed = await runDueNightAudits(
         this.db,

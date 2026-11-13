@@ -42,6 +42,13 @@ export const RESERVATION_STATUSES = [
 ] as const;
 export type ReservationStatus = (typeof RESERVATION_STATUSES)[number];
 
+/**
+ * A group booking: `open` while it holds rooms, `closed` once the rooms nobody
+ * booked have gone back on sale, `cancelled` when the event is off.
+ */
+export const GROUP_STATUSES = ['open', 'closed', 'cancelled'] as const;
+export type GroupStatus = (typeof GROUP_STATUSES)[number];
+
 /** Statuses in which a reservation room consumes inventory for its nights. */
 export const INVENTORY_HOLDING_STATUSES = [
   'tentative',

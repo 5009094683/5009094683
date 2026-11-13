@@ -208,6 +208,9 @@ function nightRows(segments: Segment[]): SQL {
   return sql`(${sql.join(parts, sql` UNION ALL `)}) AS d`;
 }
 
+/** A block that holds a number of rooms of a type for a group. `b` is the block. */
+const GROUP_HOLD = sql.raw(`(b.kind = 'hold' AND b.group_id IS NOT NULL AND b.unit_id IS NULL)`);
+
 /**
  * The counts the ledger should hold for every night in `segments`, derived
  * from reservations, blocks and occupancy. `linkedTypes` limits the linked-
@@ -233,7 +236,7 @@ function computedLedger(segments: Segment[], linkedTypes: string[]): SQL {
        AND rr.status IN (${sql.raw(HOLDING)})
       GROUP BY 1, 2
     ),
-    blk AS (
+    plain_blk AS (
       SELECT d.room_type_id, d.date,
              coalesce(sum(b.quantity) FILTER (WHERE b.kind <> 'maintenance'), 0)::int AS blocked,
              coalesce(sum(b.quantity) FILTER (WHERE b.kind = 'maintenance'), 0)::int AS ooo
@@ -242,6 +245,42 @@ function computedLedger(segments: Segment[], linkedTypes: string[]): SQL {
         ON b.room_type_id = d.room_type_id
        AND b.start_date <= d.date AND b.end_date > d.date
        AND b.released_at IS NULL
+       AND NOT ${GROUP_HOLD}
+      GROUP BY 1, 2
+    ),
+    -- Rooms held for a group are taken out of general sale, less the rooms the
+    -- group has booked so far: each of its bookings uses one held room, and
+    -- gives it back to the hold if it is cancelled.
+    group_blk AS (
+      SELECT h.room_type_id, h.date,
+             sum(greatest(h.held - (
+               SELECT count(*)
+               FROM reservation_rooms rr
+               JOIN reservations r ON r.id = rr.reservation_id
+               WHERE r.group_id = h.group_id
+                 AND rr.room_type_id = h.room_type_id
+                 AND rr.check_in <= h.date AND rr.check_out > h.date
+                 AND rr.status IN (${sql.raw(HOLDING)})
+             ), 0))::int AS blocked
+      FROM (
+        SELECT d.room_type_id, d.date, b.group_id, sum(b.quantity) AS held
+        FROM days d
+        JOIN inventory_blocks b
+          ON b.room_type_id = d.room_type_id
+         AND b.start_date <= d.date AND b.end_date > d.date
+         AND b.released_at IS NULL
+         AND ${GROUP_HOLD}
+        GROUP BY 1, 2, 3
+      ) h
+      GROUP BY 1, 2
+    ),
+    blk AS (
+      SELECT room_type_id, date, sum(blocked)::int AS blocked, sum(ooo)::int AS ooo
+      FROM (
+        SELECT room_type_id, date, blocked, ooo FROM plain_blk
+        UNION ALL
+        SELECT room_type_id, date, blocked, 0 FROM group_blk
+      ) x
       GROUP BY 1, 2
     ),
     linked AS (

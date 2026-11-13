@@ -16,6 +16,7 @@ export * from './rates';
 export * from './guests';
 export * from './reservations';
 export * from './blocks';
+export * from './groups';
 export * from './calendar';
 export * from './jobs';
 export * from './taxes';

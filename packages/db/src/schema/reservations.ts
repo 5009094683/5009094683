@@ -16,12 +16,14 @@ import { citext, createdAt, daterange, id, money, timestamptz, updatedAt } from 
 import {
   BLOCK_KINDS,
   BLOCK_SOURCES,
+  GROUP_STATUSES,
   PAYMENT_COLLECT,
   RESERVATION_SOURCES,
   RESERVATION_STATUSES,
   sqlList,
   type BlockKind,
   type BlockSource,
+  type GroupStatus,
   type PaymentCollect,
   type ReservationSource,
   type ReservationStatus,
@@ -93,13 +95,21 @@ export const reservationGroups = pgTable(
     contactPhone: text('contact_phone'),
     /** Held rooms not picked up by this date are released back to general sale. */
     cutoffDate: date('cutoff_date', { mode: 'string' }),
-    status: text('status').$type<'open' | 'closed' | 'cancelled'>().notNull().default('open'),
+    status: text('status').$type<GroupStatus>().notNull().default('open'),
+    /** The company or travel agent the group's bookings are made for, unless a booking says otherwise. */
+    companyId: uuid('company_id'),
     notes: text('notes'),
+    /** When the rooms nobody had booked went back on general sale. */
+    releasedAt: timestamptz('released_at'),
     createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [uniqueIndex('reservation_groups_property_code_key').on(t.propertyId, t.code)],
+  (t) => [
+    uniqueIndex('reservation_groups_property_code_key').on(t.propertyId, t.code),
+    index('reservation_groups_property_status_idx').on(t.propertyId, t.status),
+    check('reservation_groups_status_check', sql.raw(`status IN (${sqlList(GROUP_STATUSES)})`)),
+  ],
 );
 
 export const reservations = pgTable(
@@ -180,6 +190,9 @@ export const reservations = pgTable(
     index('reservations_promo_idx')
       .on(t.promoCodeId)
       .where(sql`promo_code_id IS NOT NULL`),
+    index('reservations_group_idx')
+      .on(t.groupId)
+      .where(sql`group_id IS NOT NULL`),
     check('reservations_dates_check', sql`check_out > check_in`),
     check('reservations_status_check', sql.raw(`status IN (${sqlList(RESERVATION_STATUSES)})`)),
     check('reservations_source_check', sql.raw(`source IN (${sqlList(RESERVATION_SOURCES)})`)),
@@ -288,6 +301,9 @@ export const inventoryBlocks = pgTable(
     index('inventory_blocks_type_dates_idx').on(t.roomTypeId, t.startDate, t.endDate),
     index('inventory_blocks_property_dates_idx').on(t.propertyId, t.startDate, t.endDate),
     index('inventory_blocks_unit_idx').on(t.unitId),
+    index('inventory_blocks_group_idx')
+      .on(t.groupId)
+      .where(sql`group_id IS NOT NULL AND released_at IS NULL`),
     uniqueIndex('inventory_blocks_external_key')
       .on(t.connectionId, t.externalRef)
       .where(sql`external_ref IS NOT NULL AND released_at IS NULL`),

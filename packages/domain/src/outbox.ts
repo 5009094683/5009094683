@@ -29,7 +29,8 @@ export type EntityEvent = {
     | 'message.received'
     | 'folio.updated'
     | 'task.updated'
-    | 'review.updated';
+    | 'review.updated'
+    | 'group.updated';
   propertyId: string | null;
   payload: Record<string, unknown>;
 };

@@ -4,6 +4,7 @@ import {
   guests,
   ratePlans,
   reservationNights,
+  reservationGroups,
   reservationRooms,
   reservations,
   roomTypes,
@@ -19,6 +20,7 @@ import { raiseAlert } from './alerts';
 import { writeAudit } from './audit';
 import type { Actor } from './context';
 import { randomCode } from './crypto';
+import { requireOpenGroup } from './group-access';
 import { addDays, assertRange, diffDays, eachDate, type DateRange, type DateString } from './dates';
 import { DomainError, invalidState, notFound, validationError } from './errors';
 import {
@@ -134,6 +136,8 @@ export interface ReservationDetail extends Omit<ReservationRow, 'orgId'> {
   guest: ReturnType<typeof guestView> | null;
   /** The company or travel agent the stay is booked for, if any. */
   company: { id: string; name: string; kind: string } | null;
+  /** The group booking this stay is part of, if any. */
+  group: { id: string; code: string; name: string } | null;
   rooms: ReservationRoomView[];
   nights: number;
 }
@@ -210,6 +214,20 @@ async function loadDetails(db: DbOrTx, rows: ReservationRow[]): Promise<Reservat
         .where(inArray(companies.id, companyIds))
     : [];
   const companiesById = new Map(companyRows.map((c) => [c.id, c]));
+  const groupIds = [
+    ...new Set(rows.map((r) => r.groupId).filter((id): id is string => id !== null)),
+  ];
+  const groupRows = groupIds.length
+    ? await db
+        .select({
+          id: reservationGroups.id,
+          code: reservationGroups.code,
+          name: reservationGroups.name,
+        })
+        .from(reservationGroups)
+        .where(inArray(reservationGroups.id, groupIds))
+    : [];
+  const groupsById = new Map(groupRows.map((g) => [g.id, g]));
 
   return rows.map((row) => {
     const { orgId: _orgId, ...rest } = row;
@@ -219,6 +237,7 @@ async function loadDetails(db: DbOrTx, rows: ReservationRow[]): Promise<Reservat
       nights: diffDays(row.checkIn, row.checkOut),
       guest: guest ? guestView(guest) : null,
       company: (row.companyId && companiesById.get(row.companyId)) || null,
+      group: (row.groupId && groupsById.get(row.groupId)) || null,
       rooms: roomRows
         .filter((r) => r.room.reservationId === row.id)
         .map(({ room, roomTypeName, ratePlanName, unitName }) => ({
@@ -630,6 +649,7 @@ export async function createReservation(
     }
 
     if (input.companyId) await requireCompany(tx, actor.orgId, input.companyId);
+    if (input.groupId) await requireOpenGroup(tx, actor.orgId, input.groupId, property.id);
     const guest = await findOrCreateGuest(tx, actor.orgId, input.guest);
     // The name as given for this booking; the profile may spell it differently.
     const guestName = input.guest.firstName?.trim()

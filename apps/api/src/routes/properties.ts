@@ -10,6 +10,7 @@ import {
   createUnit,
   forbidden,
   getAvailability,
+  getGroupAvailability,
   getPropertyConfig,
   getRateCalendar,
   listProperties,
@@ -426,17 +427,30 @@ export async function propertyRoutes(app: FastifyInstance): Promise<void> {
         tags: ['inventory'],
         summary: 'Rooms left per room type per night',
         params: propertyParams,
-        querystring: dateRangeQuery.extend({ roomTypeIds: uuidList }),
+        querystring: dateRangeQuery.extend({
+          roomTypeIds: uuidList,
+          groupId: uuid
+            .optional()
+            .describe('Count the rooms still held for this group as available: it may book them.'),
+        }),
       },
     },
     async (req) => {
-      await authorizeProperty(app.db, req, req.params.propertyId, 'reservations.read');
+      const actor = await authorizeProperty(
+        app.db,
+        req,
+        req.params.propertyId,
+        'reservations.read',
+      );
+      const params = {
+        propertyId: req.params.propertyId,
+        range: { from: req.query.from, to: req.query.to },
+        roomTypeIds: req.query.roomTypeIds,
+      };
       return {
-        days: await getAvailability(app.db, {
-          propertyId: req.params.propertyId,
-          range: { from: req.query.from, to: req.query.to },
-          roomTypeIds: req.query.roomTypeIds,
-        }),
+        days: req.query.groupId
+          ? await getGroupAvailability(app.db, actor.orgId, req.query.groupId, params)
+          : await getAvailability(app.db, params),
       };
     },
   );

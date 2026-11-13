@@ -81,6 +81,8 @@ export interface CalendarBlock {
   quantity: number;
   reason: string | null;
   source: string;
+  /** Set when the rooms are held for a group booking; `reason` is then the group's name. */
+  groupId: string | null;
 }
 
 export interface CalendarProperty {
@@ -259,6 +261,7 @@ export async function getCalendar(
           quantity: b.quantity,
           reason: b.reason,
           source: b.source,
+          groupId: b.groupId,
         })),
     });
   }
