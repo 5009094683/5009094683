@@ -211,6 +211,12 @@ export function AssistantPanel({
                 <ReplyText text={item.text} />
               </div>
               {cards(item)}
+              {item.serviceDown && (
+                <p className="text-xs text-warning-700">
+                  The AI service did not answer, so this was understood as one of a fixed set of
+                  requests. What the service said: {item.serviceDown}
+                </p>
+              )}
               {item.rulesNote && (
                 <p className="text-xs text-ink-faint">
                   {RULES_NOTE}

@@ -164,7 +164,7 @@ not be sent back automatically.
    template approved, the site's message box is not switched on, the mail
    server refused it). Fix that, then "Retry" on the message.
 
-### The assistant or the suggestions say the AI service is not answering
+### The assistant or the suggestions say the AI service did not answer
 
 Nothing stops: every AI feature falls back to its built-in version and says
 so under the result.

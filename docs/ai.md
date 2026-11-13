@@ -138,6 +138,7 @@ account.
 ## When it is not working
 
 The AI routes answer with the built-in version when the service fails, and
-say so under the result. A bad key shows as "AI service is not answering" in
-the assistant, and as failed runs in the usage figures. See
+say so under the result. With a bad key the assistant goes on answering its
+fixed set of requests and adds what the service said ("The AI service refused
+the request: ..."); the failed calls show in the usage figures. See
 [Runbooks](runbooks.md) for what to check.

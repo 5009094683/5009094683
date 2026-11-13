@@ -28,7 +28,15 @@ export interface Proposal {
 
 export type ChatItem =
   | { id: string; kind: 'user'; text: string; error?: string }
-  | { id: string; kind: 'assistant'; text: string; actionIds: string[]; rulesNote: boolean }
+  | {
+      id: string;
+      kind: 'assistant';
+      text: string;
+      actionIds: string[];
+      rulesNote: boolean;
+      /** What the AI service said when it failed and the built-in requests answered instead. */
+      serviceDown?: string;
+    }
   /** Proposals from before this conversation that still wait for a decision. */
   | { id: string; kind: 'earlier'; actionIds: string[] };
 
@@ -110,11 +118,13 @@ function reduce(state: Conversation, event: Event): Conversation {
             kind: 'assistant',
             text: event.reply.reply,
             actionIds: event.reply.actions.map((action) => action.id),
-            rulesNote: rules && !state.rulesAnnounced,
+            // A service that failed is said every time it happens; that none is set up, once.
+            rulesNote: rules && !event.reply.serviceDown && !state.rulesAnnounced,
+            serviceDown: event.reply.serviceDown,
           },
         ],
         proposals,
-        rulesAnnounced: state.rulesAnnounced || rules,
+        rulesAnnounced: state.rulesAnnounced || (rules && !event.reply.serviceDown),
       });
     }
     case 'earlier': {

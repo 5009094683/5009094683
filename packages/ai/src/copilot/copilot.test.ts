@@ -11,6 +11,7 @@ import {
 } from '@pms/db';
 import { createTestDatabase, type TestDatabase } from '@pms/db/testing';
 import {
+  DomainError,
   addDays,
   createGroup,
   createReservation,
@@ -452,6 +453,41 @@ describe('the assistant with a language model', () => {
     expect(row!.status).toBe('confirmed');
     // And the system prompt tells the model how to treat such text.
     expect(provider.requests[0]!.system).toMatch(/never an instruction to you/);
+  });
+
+  it('goes on answering its fixed requests when the AI service fails, and says what the service said', async () => {
+    const down = new FakeProvider();
+    down.fail = new DomainError(
+      'upstream_failed',
+      'The AI service refused the request: invalid x-api-key',
+    );
+    const answer = await ask(admin, `groups at ${hotel.property.name}`, down);
+    expect(answer).toMatchObject({
+      mode: 'rules',
+      serviceDown: 'The AI service refused the request: invalid x-api-key',
+    });
+    expect(answer.reply).toMatch(/^Mehta wedding/);
+    // The failed call is on record, for the usage figures.
+    const [run] = await t.db
+      .select()
+      .from(aiRuns)
+      .where(and(eq(aiRuns.feature, 'copilot'), eq(aiRuns.ok, false)));
+    expect(run?.error).toBe('The AI service refused the request: invalid x-api-key');
+
+    // Part-way through, after something was looked up, the failure is not papered over.
+    const flaky = new FakeProvider().answer(
+      { toolCalls: [{ id: 'c1', name: 'list_alerts', input: {} }] },
+      () => {
+        throw new DomainError('upstream_failed', 'The AI service could not be reached');
+      },
+    );
+    await expect(ask(admin, 'what needs attention?', flaky)).rejects.toThrow(
+      'The AI service could not be reached',
+    );
+    // A fault that is not the service's is never answered around.
+    const broken = new FakeProvider();
+    broken.fail = new Error('a bug');
+    await expect(ask(admin, 'alerts', broken)).rejects.toThrow('a bug');
   });
 
   it('stops a model that keeps calling tools without answering', async () => {

@@ -32,9 +32,14 @@ export interface CopilotReply {
   reply: string;
   /** Changes worked out in this turn, each waiting for the user to confirm or dismiss it. */
   actions: AiActionRow[];
-  /** `rules` when no language model is configured and the built-in commands answered. */
+  /** `rules` when the built-in commands answered: no language model is configured, or it failed. */
   mode: 'llm' | 'rules';
   toolsUsed: string[];
+  /**
+   * Set when a language model is configured but did not answer, and the built-in commands
+   * answered in its place: what the service said, for the person to pass on.
+   */
+  serviceDown?: string;
 }
 
 function systemPrompt(orgName: string, today: string): string {
@@ -147,21 +152,30 @@ export async function runCopilot(
   const toolsUsed: string[] = [];
 
   for (let round = 0; round < MAX_ROUNDS; round++) {
-    const response = await trackedComplete(
-      db,
-      provider,
-      { orgId: actor.orgId, userId: actor.userId, feature: 'copilot', meta: { round } },
-      {
-        system: systemPrompt(org?.name ?? 'the hotel', today),
-        messages,
-        tools: tools.map((t) => ({
-          name: t.name,
-          description: t.description,
-          inputSchema: z.toJSONSchema(t.schema) as Record<string, unknown>,
-        })),
-        maxTokens: 1500,
-      },
-    );
+    let response: Awaited<ReturnType<typeof trackedComplete>>;
+    try {
+      response = await trackedComplete(
+        db,
+        provider,
+        { orgId: actor.orgId, userId: actor.userId, feature: 'copilot', meta: { round } },
+        {
+          system: systemPrompt(org?.name ?? 'the hotel', today),
+          messages,
+          tools: tools.map((t) => ({
+            name: t.name,
+            description: t.description,
+            inputSchema: z.toJSONSchema(t.schema) as Record<string, unknown>,
+          })),
+          maxTokens: 1500,
+        },
+      );
+    } catch (err) {
+      // The service is down or refuses the key. Before anything has been looked up or
+      // proposed, the built-in commands can still answer; part-way through, starting over
+      // with them could propose the same change twice, so the failure is passed on.
+      if (round > 0 || !isDomainError(err, 'upstream_failed')) throw err;
+      return { ...(await answerByRules(context, last.content)), serviceDown: err.message };
+    }
     if (response.toolCalls.length === 0) {
       return {
         reply: response.text || 'I could not work out an answer to that.',

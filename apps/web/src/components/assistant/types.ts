@@ -32,6 +32,8 @@ export interface CopilotReply {
   /** `rules` when no AI service is configured and the built-in commands answered. */
   mode: 'llm' | 'rules';
   toolsUsed: string[];
+  /** What the AI service said when it failed and the fixed requests answered in its place. */
+  serviceDown?: string;
 }
 
 /** Mirrors `CopilotTurn` in `packages/ai/src/copilot/copilot.ts`. */
