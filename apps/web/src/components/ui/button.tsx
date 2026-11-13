@@ -36,16 +36,28 @@ export function Button({
   children,
   disabled,
   type = 'button',
+  onClick,
   ...props
 }: ButtonProps) {
   return (
     <button
       type={type}
-      disabled={disabled || loading}
+      disabled={disabled}
+      // A busy button stays focusable (a disabled one drops keyboard focus to the page) but
+      // does nothing: no second click, no second submit.
+      aria-disabled={loading || undefined}
       aria-busy={loading || undefined}
+      onClick={(event) => {
+        if (loading) {
+          event.preventDefault();
+          return;
+        }
+        onClick?.(event);
+      }}
       className={cn(
         'inline-flex shrink-0 items-center justify-center rounded-md font-medium whitespace-nowrap transition-colors select-none',
         'disabled:cursor-not-allowed disabled:opacity-50',
+        'aria-disabled:cursor-progress aria-disabled:opacity-70',
         VARIANTS[variant],
         SIZES[size],
         className,
