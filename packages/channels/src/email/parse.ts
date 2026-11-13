@@ -31,8 +31,14 @@ export interface EmailMessage {
   /** Ids of the message this one answers and of the thread before it, without angle brackets. */
   inReplyTo?: string | null;
   references?: string[];
-  /** Names and sizes of attached files. Their contents are not kept. */
-  attachments?: { name: string; contentType: string | null; size: number | null }[];
+  /** Names and sizes of attached files. */
+  attachments?: {
+    name: string;
+    contentType: string | null;
+    size: number | null;
+    /** The file itself, for mail from a guest. Never part of what is stored about a booking email. */
+    content?: Buffer;
+  }[];
 }
 
 /** `pass`: the receiving server verified the sender's domain. `fail`: it tried and it did not match. `none`: nothing to go on. */

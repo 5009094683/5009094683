@@ -149,6 +149,8 @@ function addresses(value: AddressObject | AddressObject[] | undefined): string[]
     .filter(Boolean);
 }
 
+const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+
 /** Turns a raw message into the few things the reader needs. */
 export async function parseMime(source: Buffer | string): Promise<EmailMessage> {
   // The library's own HTML-to-text runs table cells together; ours keeps them apart.
@@ -192,6 +194,10 @@ export async function parseMime(source: Buffer | string): Promise<EmailMessage> 
       name: a.filename ?? 'attachment',
       contentType: a.contentType ?? null,
       size: a.size ?? null,
+      // Carried along so a guest's photo or PDF can be kept; larger files are a name only.
+      ...(Buffer.isBuffer(a.content) && a.content.length <= MAX_ATTACHMENT_BYTES
+        ? { content: a.content }
+        : {}),
     })),
   };
 }

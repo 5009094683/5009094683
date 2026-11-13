@@ -110,6 +110,9 @@ once a day:
   check-in, and the uploaded documents themselves.
 - **The whole profile**: erased so many days after the guest's last stay, in
   the way described under "Erasure" below.
+- **Files guests send with a message**: photos and PDFs are kept, encrypted,
+  for 180 days, or until the guest is erased if that is sooner. Anything else
+  a guest attaches is shown by name only and is not kept.
 - Zero means "keep until removed by hand". Set these to what your registration
   rules require and no longer.
 

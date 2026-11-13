@@ -8,21 +8,15 @@ import type { Conversation, ConversationPage, Filters } from './types';
 
 const PAGE_SIZE = 30;
 
-function listPath(filters: Filters, before?: string): string {
+function listPath(filters: Filters, cursor?: string): string {
   return `/inbox/conversations${query({
     status: filters.status === 'all' ? undefined : filters.status,
     channel: filters.channel,
     assignedTo: filters.assigned === 'all' ? undefined : filters.assigned,
     search: filters.search,
-    before,
+    cursor,
     limit: PAGE_SIZE,
   })}`;
-}
-
-/** The page after this one starts before its last conversation; null when this was the last page. */
-function olderThan(page: ConversationPage | null | undefined): string | null {
-  if (!page || page.conversations.length < PAGE_SIZE) return null;
-  return page.conversations.at(-1)?.lastMessageAt ?? null;
 }
 
 /**
@@ -34,8 +28,7 @@ export function useConversations(filters: Filters) {
   const { data, error, isLoading, size, setSize, mutate } = useSWRInfinite<ConversationPage>(
     (index: number, previous: ConversationPage | null) => {
       if (index === 0) return listPath(filters);
-      const before = olderThan(previous);
-      return before ? listPath(filters, before) : null;
+      return previous?.nextCursor ? listPath(filters, previous.nextCursor) : null;
     },
     // Asking for older conversations reads that page only. The live stream brings the rest up
     // to date, and that reads every page again.
@@ -55,7 +48,7 @@ export function useConversations(filters: Filters) {
     return all;
   }, [data]);
 
-  const hasMore = olderThan(data?.at(-1)) !== null;
+  const hasMore = Boolean(data?.at(-1)?.nextCursor);
   const loadingMore = data !== undefined && size > data.length;
   const loadMore = useCallback(() => void setSize((pages) => pages + 1), [setSize]);
 

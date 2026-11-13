@@ -1,10 +1,12 @@
-import { and, asc, desc, eq, ilike, inArray, lt, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import {
   conversations,
   guests,
   messages,
   properties,
   reservations,
+  roleAssignments,
+  storedFiles,
   users,
   type ConversationChannel,
   type ConversationStatus,
@@ -15,6 +17,7 @@ import {
 } from '@pms/db';
 import { raiseAlert } from './alerts';
 import { writeAudit } from './audit';
+import { ROLE_PERMISSIONS } from './auth/permissions';
 import type { Actor } from './context';
 import { DomainError, invalidState, notFound, validationError } from './errors';
 import { fullName, normalizePhone } from './guests';
@@ -244,7 +247,7 @@ export async function receiveMessage(db: DbOrTx, input: InboundMessage): Promise
         {
           kind: 'message.received',
           propertyId: updated!.propertyId,
-          payload: { conversationId: conversation.id, channel: input.channel },
+          payload: { conversationId: conversation.id, channel: input.channel, direction: 'in' },
         },
       ]);
     }
@@ -291,6 +294,19 @@ async function conversationForUpdate(
   return row;
 }
 
+/** The name a message from the property is shown under: the person's, not their sign-in address. */
+async function senderNameOf(tx: DbOrTx, actor: Actor): Promise<string> {
+  if (actor.userId) {
+    const [user] = await tx
+      .select({ name: users.name })
+      .from(users)
+      .where(eq(users.id, actor.userId));
+    if (user?.name) return user.name;
+  }
+  if (actor.type === 'api_key') return actor.label.replace(/^api-key:/, '');
+  return actor.type === 'user' ? actor.label : 'Automatic message';
+}
+
 /**
  * Adds a message from the property to a conversation and queues it for
  * sending. The worker delivers it; the message shows as queued, then sent,
@@ -331,7 +347,7 @@ export async function sendMessage(
         subject: input.subject?.trim().slice(0, 300) || null,
         status: kind === 'note' ? 'sent' : 'queued',
         sentBy: actor.userId ?? null,
-        senderName: actor.type === 'user' ? actor.label : 'Automatic message',
+        senderName: await senderNameOf(tx, actor),
         aiDrafted: input.aiDrafted ?? false,
         templateKey: input.templateKey ?? null,
         automationRuleId: input.automationRuleId ?? null,
@@ -582,6 +598,13 @@ export async function deliverMessage(
       .update(messages)
       .set({ attempts: message.attempts + 1, error: text.slice(0, 1000) })
       .where(eq(messages.id, message.id));
+    await emit(db, message.orgId, [
+      {
+        kind: 'message.received',
+        propertyId: conversation.propertyId,
+        payload: { conversationId: conversation.id, channel: conversation.channel, retrying: true },
+      },
+    ]);
     throw err;
   }
   await db
@@ -643,6 +666,21 @@ export async function retryMessage(
       { messageId },
       { uniqueKey: `${MESSAGE_JOBS.send}:${messageId}`, maxAttempts: MAX_SEND_ATTEMPTS },
     );
+    const [conversation] = await tx
+      .select({ propertyId: conversations.propertyId, channel: conversations.channel })
+      .from(conversations)
+      .where(eq(conversations.id, message.conversationId));
+    await emit(tx, actor.orgId, [
+      {
+        kind: 'message.received',
+        propertyId: conversation?.propertyId ?? null,
+        payload: {
+          conversationId: message.conversationId,
+          channel: conversation?.channel,
+          retried: true,
+        },
+      },
+    ]);
     return updated!;
   });
 }
@@ -673,16 +711,43 @@ export async function recordDeliveryReceipt(
     .orderBy(desc(messages.createdAt))
     .limit(1);
   if (!message) return false;
+  const [conversation] = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.id, message.conversationId));
+  const announce = (): Promise<void> =>
+    emit(db, message.orgId, [
+      {
+        kind: 'message.received',
+        propertyId: conversation?.propertyId ?? null,
+        payload: {
+          conversationId: message.conversationId,
+          channel: conversation?.channel,
+          receipt: input.status,
+        },
+      },
+    ]);
   const at = input.at ?? new Date();
   if (input.status === 'failed') {
-    if (message.status === 'delivered' || message.status === 'read') return false;
-    await db
-      .update(messages)
-      .set({
-        status: 'failed',
-        error: input.error?.slice(0, 1000) ?? 'The channel could not deliver it',
-      })
-      .where(eq(messages.id, message.id));
+    if (message.status === 'delivered' || message.status === 'read' || message.status === 'failed')
+      return false;
+    const error = input.error?.slice(0, 1000) ?? 'The channel could not deliver it.';
+    await db.update(messages).set({ status: 'failed', error }).where(eq(messages.id, message.id));
+    // The channel accepted it and only later gave up: nobody is looking at the thread any more.
+    if (conversation) {
+      await raiseAlert(db, {
+        orgId: message.orgId,
+        propertyId: conversation.propertyId,
+        kind: 'message_failed',
+        severity: 'warning',
+        title: `A message to ${conversation.contactName} could not be sent`,
+        body: `${error} Open the conversation in the inbox to send it again or reach the guest another way.`,
+        entityType: 'conversation',
+        entityId: conversation.id,
+        dedupeKey: `message_failed:${conversation.id}`,
+      });
+    }
+    await announce();
     return true;
   }
   const current = RECEIPT_ORDER.indexOf(message.status as (typeof RECEIPT_ORDER)[number]);
@@ -698,6 +763,7 @@ export async function recordDeliveryReceipt(
       ...(input.status === 'read' ? { readAt: at } : {}),
     })
     .where(eq(messages.id, message.id));
+  await announce();
   return true;
 }
 
@@ -708,6 +774,10 @@ export interface ConversationSummary extends ConversationRow {
   propertyName: string | null;
   assignedToName: string | null;
   reservationCode: string | null;
+  /** The booking site the linked booking came from, for a conversation in that site's message box. */
+  reservationChannelCode: string | null;
+  /** The latest reply from the property did not reach the guest and is waiting to be sent again. */
+  lastReplyFailed: boolean;
 }
 
 export interface InboxFilter {
@@ -719,9 +789,15 @@ export interface InboxFilter {
   reservationId?: string;
   guestId?: string;
   search?: string;
-  /** For paging: conversations whose last message is older than this. */
-  before?: Date;
+  /** For paging: `nextCursor` of the page before. */
+  cursor?: string;
   limit?: number;
+}
+
+export interface ConversationPage {
+  conversations: ConversationSummary[];
+  /** Pass as `cursor` for the conversations after these; null when there are none. */
+  nextCursor: string | null;
 }
 
 function visibleTo(propertyIds: 'all' | string[]): SQL | undefined {
@@ -733,20 +809,44 @@ function visibleTo(propertyIds: 'all' | string[]): SQL | undefined {
   );
 }
 
+/**
+ * When a conversation last had something happen, in microseconds: its last
+ * message, or its creation while it has none. Whole microseconds, so that a
+ * page boundary falls between two conversations and never inside one instant.
+ */
+const activityAt = sql<string>`(extract(epoch FROM coalesce(${conversations.lastMessageAt}, ${conversations.createdAt})) * 1000000)::bigint`;
+
+const summaryColumns = {
+  conversation: conversations,
+  propertyName: properties.name,
+  assignedToName: users.name,
+  reservationCode: reservations.code,
+  reservationChannelCode: reservations.channelCode,
+  lastReplyFailed: sql<boolean>`coalesce((
+    SELECT m.status = 'failed' FROM messages m
+    WHERE m.conversation_id = ${conversations.id} AND m.direction = 'out' AND m.kind = 'text'
+    ORDER BY m.created_at DESC, m.seq DESC LIMIT 1), false)`,
+};
+
+function parseCursor(cursor: string | undefined): { at: string; id: string } | null {
+  if (!cursor) return null;
+  const match = /^(\d{1,19})_([0-9a-f-]{36})$/i.exec(cursor);
+  if (!match) throw validationError('That page of the inbox no longer exists. Start from the top.');
+  return { at: match[1]!, id: match[2]! };
+}
+
+/** Conversations, the most recently active first, a page at a time. */
 export async function listConversations(
   db: DbOrTx,
   orgId: string,
   filter: InboxFilter,
-): Promise<ConversationSummary[]> {
+): Promise<ConversationPage> {
   const q = filter.search?.trim();
   const like = q ? `%${q.replace(/[%_\\]/g, '\\$&')}%` : null;
+  const after = parseCursor(filter.cursor);
+  const limit = Math.min(filter.limit ?? 50, 200);
   const rows = await db
-    .select({
-      conversation: conversations,
-      propertyName: properties.name,
-      assignedToName: users.name,
-      reservationCode: reservations.code,
-    })
+    .select({ ...summaryColumns, activityAt })
     .from(conversations)
     .leftJoin(properties, eq(properties.id, conversations.propertyId))
     .leftJoin(users, eq(users.id, conversations.assignedTo))
@@ -768,7 +868,9 @@ export async function listConversations(
             : undefined,
         filter.reservationId ? eq(conversations.reservationId, filter.reservationId) : undefined,
         filter.guestId ? eq(conversations.guestId, filter.guestId) : undefined,
-        filter.before ? lt(conversations.lastMessageAt, filter.before) : undefined,
+        after
+          ? sql`(${activityAt}, ${conversations.id}) < (${after.at}::bigint, ${after.id}::uuid)`
+          : undefined,
         like
           ? or(
               ilike(conversations.contactName, like),
@@ -779,14 +881,18 @@ export async function listConversations(
           : undefined,
       ),
     )
-    .orderBy(sql`${conversations.lastMessageAt} DESC NULLS LAST`, desc(conversations.createdAt))
-    .limit(Math.min(filter.limit ?? 50, 200));
-  return rows.map((r) => ({
-    ...r.conversation,
-    propertyName: r.propertyName,
-    assignedToName: r.assignedToName,
-    reservationCode: r.reservationCode,
-  }));
+    .orderBy(sql`${activityAt} DESC`, desc(conversations.id))
+    // One more than asked for tells whether there is another page.
+    .limit(limit + 1);
+  const page = rows.slice(0, limit);
+  const last = page.at(-1);
+  return {
+    conversations: page.map(({ conversation, activityAt: _at, ...joined }) => ({
+      ...conversation,
+      ...joined,
+    })),
+    nextCursor: rows.length > limit && last ? `${last.activityAt}_${last.conversation.id}` : null,
+  };
 }
 
 export interface ConversationDetail {
@@ -806,12 +912,7 @@ export async function getConversation(
 ): Promise<ConversationDetail> {
   const [summary] = (
     await db
-      .select({
-        conversation: conversations,
-        propertyName: properties.name,
-        assignedToName: users.name,
-        reservationCode: reservations.code,
-      })
+      .select(summaryColumns)
       .from(conversations)
       .leftJoin(properties, eq(properties.id, conversations.propertyId))
       .leftJoin(users, eq(users.id, conversations.assignedTo))
@@ -823,12 +924,7 @@ export async function getConversation(
           visibleTo(propertyIds),
         ),
       )
-  ).map((r) => ({
-    ...r.conversation,
-    propertyName: r.propertyName,
-    assignedToName: r.assignedToName,
-    reservationCode: r.reservationCode,
-  }));
+  ).map(({ conversation, ...joined }) => ({ ...conversation, ...joined }));
   if (!summary) throw notFound('Conversation', conversationId);
   const thread = await db
     .select()
@@ -839,12 +935,39 @@ export async function getConversation(
   const transport = transports.get(summary.channel);
   return {
     conversation: summary,
-    messages: thread,
+    messages: await withAttachmentState(db, thread),
     canWriteFreely: summary.channel !== 'whatsapp' || whatsappWindowOpen(summary),
     sendingUnavailable: transport
       ? transport.unavailable(summary)
       : `Sending by ${summary.channel} is not set up.`,
   };
+}
+
+/**
+ * Marks the attachments whose file is no longer kept, so the thread can say
+ * so instead of offering a link that leads nowhere.
+ */
+async function withAttachmentState(db: DbOrTx, thread: MessageRow[]): Promise<MessageRow[]> {
+  const ids = thread.flatMap((m) => m.attachments.flatMap((a) => (a.fileId ? [a.fileId] : [])));
+  if (ids.length === 0) return thread;
+  const kept = new Set(
+    (
+      await db
+        .select({ id: storedFiles.id })
+        .from(storedFiles)
+        .where(and(inArray(storedFiles.id, ids), isNull(storedFiles.deletedAt)))
+    ).map((f) => f.id),
+  );
+  return thread.map((m) =>
+    m.attachments.some((a) => a.fileId && !kept.has(a.fileId))
+      ? {
+          ...m,
+          attachments: m.attachments.map((a) =>
+            a.fileId && !kept.has(a.fileId) ? { ...a, fileId: null, expired: true } : a,
+          ),
+        }
+      : m,
+  );
 }
 
 export interface ConversationPatch {
@@ -952,6 +1075,37 @@ export async function markConversationRead(
       },
     ]);
   }
+}
+
+/**
+ * The people a conversation can be given to: those who may answer guests at
+ * its property, or anywhere for a conversation not yet tied to a property.
+ */
+export async function listAssignees(
+  db: DbOrTx,
+  orgId: string,
+  propertyId: string | null,
+): Promise<{ id: string; name: string }[]> {
+  const rows = await db
+    .select({ id: users.id, name: users.name, role: roleAssignments.role })
+    .from(users)
+    .innerJoin(roleAssignments, eq(roleAssignments.userId, users.id))
+    .where(
+      and(
+        eq(users.orgId, orgId),
+        eq(users.status, 'active'),
+        propertyId
+          ? or(eq(roleAssignments.propertyId, propertyId), isNull(roleAssignments.propertyId))
+          : undefined,
+      ),
+    );
+  const people = new Map<string, string>();
+  for (const row of rows) {
+    if (ROLE_PERMISSIONS[row.role].includes('inbox.write')) people.set(row.id, row.name);
+  }
+  return [...people]
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** Conversations with something unread, for the badge on the inbox. */

@@ -500,10 +500,8 @@ export interface WebhookSourceEvent {
 /** An inbox event is told to other systems only when a guest wrote, not when staff read or replied. */
 function isPublic(event: WebhookSourceEvent): boolean {
   if (!(WEBHOOK_EVENTS as readonly string[]).includes(event.kind)) return false;
-  if (event.kind === 'message.received') {
-    const p = event.payload;
-    return !('read' in p || 'updated' in p || 'sent' in p || 'failed' in p || 'direction' in p);
-  }
+  // The inbox announces replies, receipts and reading under the same name for the screens.
+  if (event.kind === 'message.received') return event.payload.direction === 'in';
   // A folio event with nothing to look up (the night audit's "everything may have changed") is of no use.
   if (event.kind === 'folio.updated') return Object.keys(event.payload).length > 0;
   return true;

@@ -111,7 +111,9 @@ describe('messages from booking sites', () => {
 
     const first = await pullThread(t.db, connection.id, thread.threadId);
     expect(first).toEqual({ outcome: 'ok', fresh: 1 });
-    const [conversation] = await listConversations(t.db, org.orgId, {
+    const {
+      conversations: [conversation],
+    } = await listConversations(t.db, org.orgId, {
       propertyIds: 'all',
       reservationId,
     });
@@ -142,7 +144,9 @@ describe('messages from booking sites', () => {
     const thread = channel.openThread(bookingId);
     channel.guestWrites(thread.threadId, 'Is breakfast included?');
     await pullThread(t.db, connection.id, thread.threadId);
-    const [conversation] = await listConversations(t.db, org.orgId, {
+    const {
+      conversations: [conversation],
+    } = await listConversations(t.db, org.orgId, {
       propertyIds: 'all',
       reservationId,
     });
@@ -208,7 +212,10 @@ describe('messages from booking sites', () => {
 
     channel.guestWrites(threadId, 'Around 3 pm.');
     await pullThread(t.db, connection.id, threadId);
-    const all = await listConversations(t.db, org.orgId, { propertyIds: 'all', reservationId });
+    const { conversations: all } = await listConversations(t.db, org.orgId, {
+      propertyIds: 'all',
+      reservationId,
+    });
     expect(all).toHaveLength(1);
     expect((await getConversation(t.db, org.orgId, conversation.id)).messages).toHaveLength(2);
 
@@ -227,7 +234,9 @@ describe('messages from booking sites', () => {
     const thread = channel.openThread(bookingId);
     channel.guestWrites(thread.threadId, 'Hello');
     await pullThread(t.db, connection.id, thread.threadId);
-    const [conversation] = await listConversations(t.db, org.orgId, {
+    const {
+      conversations: [conversation],
+    } = await listConversations(t.db, org.orgId, {
       propertyIds: 'all',
       reservationId,
     });

@@ -4,6 +4,8 @@ import { PermanentSendError, type MessageTransport } from '../inbox';
 
 const GRAPH = 'https://graph.facebook.com';
 const REQUEST_TIMEOUT_MS = 20_000;
+/** The largest file fetched from WhatsApp: what the file store accepts. */
+const MAX_MEDIA_BYTES = 8 * 1024 * 1024;
 
 /**
  * Error codes of the WhatsApp Cloud API that mean "try again later": rate
@@ -27,7 +29,7 @@ interface GraphError {
   };
 }
 
-/** The part of the WhatsApp Business Cloud API the inbox uses: sending text and template messages. */
+/** The part of the WhatsApp Business Cloud API the inbox uses: sending text and templates, and fetching what guests send. */
 export class WhatsAppClient {
   constructor(
     private readonly config: WhatsAppConfig,
@@ -80,6 +82,62 @@ export class WhatsAppClient {
       type: 'text',
       text: { preview_url: false, body },
     });
+  }
+
+  /**
+   * Fetches a photo or document a guest sent. WhatsApp gives a short-lived
+   * address for it, readable only with the access token.
+   */
+  async downloadMedia(mediaId: string): Promise<{ data: Buffer; mimeType: string | null }> {
+    const headers = { authorization: `Bearer ${this.config.accessToken}` };
+    const request = async (url: string): Promise<Response> => {
+      try {
+        return await this.fetchImpl(url, {
+          headers,
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        });
+      } catch (err) {
+        throw new Error(
+          `WhatsApp could not be reached: ${err instanceof Error ? err.message : String(err)}`,
+          { cause: err },
+        );
+      }
+    };
+    const lookup = await request(
+      `${GRAPH}/${this.config.apiVersion}/${encodeURIComponent(mediaId)}`,
+    );
+    const found = (await lookup.json().catch(() => ({}))) as GraphError & {
+      url?: string;
+      mime_type?: string;
+      file_size?: number;
+    };
+    if (!lookup.ok || !found.url) {
+      const text = `WhatsApp did not give the file: ${found.error?.message ?? `HTTP ${lookup.status}`}`;
+      throw lookup.status >= 500 || lookup.status === 429
+        ? new Error(text)
+        : new PermanentSendError(text);
+    }
+    if ((found.file_size ?? 0) > MAX_MEDIA_BYTES) {
+      throw new PermanentSendError('The file is larger than 8 MB');
+    }
+    // The token goes only to WhatsApp's own servers.
+    const address = new URL(found.url);
+    if (
+      address.protocol !== 'https:' ||
+      !/(^|\.)(fbsbx\.com|facebook\.com|fbcdn\.net|whatsapp\.net)$/i.test(address.hostname)
+    ) {
+      throw new PermanentSendError('WhatsApp gave an address for the file that is not its own');
+    }
+    const download = await request(address.toString());
+    if (!download.ok) {
+      const text = `WhatsApp did not give the file: HTTP ${download.status}`;
+      throw download.status >= 500 || download.status === 429
+        ? new Error(text)
+        : new PermanentSendError(text);
+    }
+    const data = Buffer.from(await download.arrayBuffer());
+    if (data.length > MAX_MEDIA_BYTES) throw new PermanentSendError('The file is larger than 8 MB');
+    return { data, mimeType: found.mime_type ?? null };
   }
 
   /** A template approved in WhatsApp Business Manager, with its variables in order. */
@@ -171,8 +229,10 @@ export interface WhatsAppInbound {
   id: string;
   at: Date;
   body: string;
-  /** For media: what kind it was. The file itself is not fetched. */
+  /** For media: what kind it was, in words. */
   attachment: string | null;
+  /** For a photo or a document: what is needed to fetch the file itself. */
+  media: { id: string; fileName: string | null; mimeType: string | null } | null;
 }
 
 export interface WhatsAppReceipt {
@@ -202,6 +262,15 @@ const MEDIA_LABELS: Record<string, string> = {
   sticker: 'Sticker',
   contacts: 'Contact card',
 };
+
+/** Photos and documents can be kept; the file store takes nothing else. */
+function mediaOf(message: WebhookMessage): WhatsAppInbound['media'] {
+  const type = message.type ?? '';
+  if (type !== 'image' && type !== 'document') return null;
+  const media = message[type] as { id?: string; filename?: string; mime_type?: string } | undefined;
+  if (!media?.id) return null;
+  return { id: media.id, fileName: media.filename ?? null, mimeType: media.mime_type ?? null };
+}
 
 function textOf(message: WebhookMessage): { body: string; attachment: string | null } {
   const type = message.type ?? 'unknown';
@@ -260,6 +329,7 @@ export function readWhatsAppWebhook(body: unknown): {
           at: new Date(Number(message.timestamp ?? 0) * 1000 || Date.now()),
           body: text,
           attachment,
+          media: mediaOf(message),
         });
       }
       for (const status of (value.statuses as {

@@ -8,6 +8,8 @@ import {
   type Received,
 } from '../inbox';
 import type { Mailer } from '../mailer';
+import { keepAttachments } from '../message-attachments';
+import type { FileStore } from '../storage';
 
 /**
  * Sends inbox messages as email. Replies are asked for at `replyAddress` when
@@ -77,7 +79,13 @@ export interface GuestEmail {
   inReplyTo?: string | null;
   references?: string[];
   date?: Date | null;
-  attachments?: { name: string; contentType?: string | null; size?: number | null }[];
+  attachments?: {
+    name: string;
+    contentType?: string | null;
+    size?: number | null;
+    /** The file itself, when it is to be kept. */
+    content?: Buffer;
+  }[];
 }
 
 /**
@@ -130,6 +138,8 @@ export async function receiveGuestEmail(
   db: DbOrTx,
   orgId: string,
   mail: GuestEmail,
+  /** Where to keep the photos and PDFs that came with it. Without one, only their names are kept. */
+  store?: FileStore,
 ): Promise<Received | null> {
   const from = threadKey('email', mail.from);
   if (!/^[^\s@]+@[^\s@]+$/.test(from)) return null;
@@ -177,7 +187,7 @@ export async function receiveGuestEmail(
     known = Boolean(ours);
   }
   if (!known) return null;
-  return receiveMessage(db, {
+  const received = await receiveMessage(db, {
     orgId,
     channel: 'email',
     externalThreadId: from,
@@ -194,4 +204,13 @@ export async function receiveGuestEmail(
     receivedAt: mail.date ?? undefined,
     meta: mail.messageId ? { messageId: mail.messageId } : {},
   });
+  if (store && received.message) {
+    const files = (mail.attachments ?? []).flatMap((a, index) =>
+      a.content ? [{ index, name: a.name, data: a.content }] : [],
+    );
+    if (files.length > 0) {
+      await keepAttachments(db, store, received.message, received.conversation, files);
+    }
+  }
+  return received;
 }

@@ -1,10 +1,10 @@
 import type {
   ConversationDetail,
+  ConversationPage as DomainConversationPage,
   ConversationRow,
   ConversationSummary,
-  GuestBooking,
   MessageRow,
-  MessageTemplateRow,
+  RenderedTemplate,
   TemplateSend,
 } from '@pms/domain';
 import type { Serialized } from '@/lib/types';
@@ -15,26 +15,17 @@ export type ConversationRecord = Serialized<ConversationRow>;
 export type ConversationWithMessages = Serialized<ConversationDetail>;
 export type Message = Serialized<MessageRow>;
 export type Attachment = Message['attachments'][number];
-export type MessageTemplate = Serialized<MessageTemplateRow>;
+/** A template filled in by the server for the guest of one conversation. */
+export type MessageTemplate = Serialized<RenderedTemplate>;
 export type Channel = Conversation['channel'];
 export type ConversationStatus = Conversation['status'];
 export type TemplateSendResult = Serialized<{ sent: TemplateSend | null; problems: string[] }>;
-/** The part of the guest's own view of a booking that templates quote. */
-export type StayMoney = Pick<Serialized<GuestBooking>, 'total' | 'paid' | 'balance' | 'currency'>;
-
-export interface ConversationPage {
-  conversations: Conversation[];
-}
+export type ConversationPage = Serialized<DomainConversationPage>;
 
 export interface TemplateList {
   templates: MessageTemplate[];
   /** Every placeholder name, with what it stands for. */
   variables: Record<string, string>;
-}
-
-export interface GuestLinks {
-  url: string;
-  checkInUrl: string;
 }
 
 /**
@@ -62,11 +53,10 @@ export interface Translation {
   sourceLanguage: string | null;
 }
 
-/** Someone who can be given work at a property, as `GET /properties/:id/staff` lists them. */
+/** Someone a conversation can be given to, as `GET /inbox/assignees` lists them. */
 export interface StaffMember {
   id: string;
   name: string;
-  roles: string[];
 }
 
 export type StatusFilter = 'active' | ConversationStatus | 'all';

@@ -200,6 +200,8 @@ export interface MessageAttachment {
   /** A stored file of ours, or a link the channel gave. */
   fileId?: string | null;
   url?: string | null;
+  /** The file was kept and has since been removed: its time was up, or the guest was erased. */
+  expired?: boolean;
 }
 
 export const messages = pgTable(

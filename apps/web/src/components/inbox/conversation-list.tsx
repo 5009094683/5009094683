@@ -131,6 +131,7 @@ const Row = memo(function Row({
             <Badge tone={STATUS_TONES[conversation.status]}>
               {STATUS_LABELS[conversation.status]}
             </Badge>
+            {conversation.lastReplyFailed && <Badge tone="danger">Reply not sent</Badge>}
             <span className="[overflow-wrap:anywhere]">
               {conversation.assignedToName ?? 'Unassigned'}
             </span>

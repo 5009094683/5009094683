@@ -76,12 +76,18 @@ function Body({ text }: { text: string }) {
   );
 }
 
-function Attachments({ attachments }: { attachments: Attachment[] }) {
+function Attachments({
+  attachments,
+  messageId,
+}: {
+  attachments: Attachment[];
+  messageId: string | null;
+}) {
   if (attachments.length === 0) return null;
   return (
     <ul className="mt-2 flex flex-col gap-1" aria-label="Attachments">
       {attachments.map((attachment, index) => {
-        const link = attachmentLink(attachment);
+        const link = attachmentLink(attachment, messageId);
         return (
           <li key={index} className="flex items-start gap-1.5 text-[13px]">
             <Paperclip className="mt-0.5 size-3.5 shrink-0 text-ink-faint" aria-hidden />
@@ -101,7 +107,13 @@ function Attachments({ attachments }: { attachments: Attachment[] }) {
               {typeof attachment.size === 'number' && (
                 <span className="text-ink-faint"> · {fileSize(attachment.size)}</span>
               )}
-              {!link && <span className="text-ink-faint"> · the file is not kept here</span>}
+              {!link && (
+                <span className="text-ink-faint">
+                  {attachment.expired
+                    ? ' · the file is no longer kept'
+                    : ' · the file is not kept here'}
+                </span>
+              )}
             </span>
           </li>
         );
@@ -177,7 +189,7 @@ function FromGuest({
       <div className={cn(BUBBLE, 'rounded-bl-md border-line bg-surface shadow-card')}>
         {subject && <p className="mb-1 font-medium [overflow-wrap:anywhere]">{subject}</p>}
         <Body text={message.body} />
-        <Attachments attachments={message.attachments} />
+        <Attachments attachments={message.attachments} messageId={message.id} />
         {translation && shown && (
           <div className="mt-2 border-t border-line pt-2 text-ink-soft">
             {translation.sourceLanguage === 'en' ? (
@@ -263,7 +275,7 @@ function FromProperty({
       >
         {subject && <p className="mb-1 font-medium [overflow-wrap:anywhere]">{subject}</p>}
         <Body text={message.body} />
-        <Attachments attachments={message.attachments} />
+        <Attachments attachments={message.attachments} messageId={message.id} />
       </div>
       <Line side="end">
         <When at={message.createdAt} />

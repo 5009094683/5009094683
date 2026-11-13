@@ -4,7 +4,6 @@ import { ArrowLeft, Check, ChevronDown, RotateCcw, SearchX, UserRound, UserX } f
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
-import { ROLE_PERMISSIONS, type Permission } from '@pms/domain/shared';
 import { Button } from '@/components/ui/button';
 import {
   Badge,
@@ -17,10 +16,9 @@ import {
   PageLoading,
 } from '@/components/ui/misc';
 import { useToast } from '@/components/ui/toast';
-import { ApiError, api, errorMessage } from '@/lib/api';
+import { ApiError, api, errorMessage, query } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useLive } from '@/lib/live';
-import type { Reservation } from '@/lib/types';
 import { Composer, type Reply } from './composer';
 import { Detail, Details } from './details';
 import { CHANNEL_ICONS, STATUS_LABELS, STATUS_TONES, channelName } from './labels';
@@ -36,22 +34,15 @@ import type {
   StaffMember,
 } from './types';
 
-const ROLES: Record<string, readonly Permission[] | undefined> = ROLE_PERMISSIONS;
-
 /** One pane at a time below this width, as in the layout. */
 const twoPanes = (): boolean => window.matchMedia('(min-width: 1024px)').matches;
 
 type Patch = { status: Conversation['status'] } | { assignedTo: string | null };
 
-/** The people who work at a property, as the menu of colleagues and the names in the thread need them. */
+/** The people who may answer guests at a property: the ones a conversation can be handed to. */
 function useStaff(propertyId: string | null): StaffMember[] | undefined {
-  const auth = useAuth();
-  // The list is kept per property and belongs to housekeeping: without it names fall back to
-  // what the server recorded, and a conversation can still be assigned to oneself.
   const { data } = useSWR<{ staff: StaffMember[] }>(
-    propertyId && auth.can('housekeeping.read', propertyId)
-      ? `/properties/${propertyId}/staff`
-      : null,
+    `/inbox/assignees${query({ propertyId: propertyId ?? undefined })}`,
   );
   return data?.staff;
 }
@@ -66,8 +57,7 @@ function Assignee({
 }) {
   const me = useAuth().me.user;
   const colleagues = (useStaff(conversation.propertyId) ?? []).filter(
-    (person) =>
-      person.id !== me.id && person.roles.some((role) => ROLES[role]?.includes('inbox.write')),
+    (person) => person.id !== me.id,
   );
   const current = conversation.assignedTo;
 
@@ -272,15 +262,7 @@ export function ConversationPane({
     names.set(me.id, me.name);
     return names;
   }, [staff, me.id, me.name]);
-  // A conversation started from here does not say which booking site it is on; its booking does.
-  const unnamedSite =
-    conversation?.channel === 'ota' && typeof conversation.meta.provider !== 'string';
-  const { data: reservation } = useSWR<Reservation>(
-    unnamedSite && conversation?.reservationId
-      ? `/reservations/${conversation.reservationId}`
-      : null,
-  );
-  const site = conversation ? channelName(conversation, reservation?.channelCode) : '';
+  const site = conversation ? channelName(conversation) : '';
 
   useLive(/^message\./, (events) => {
     // While a reply is on its way its answer brings the thread up to date; reading the
@@ -294,7 +276,8 @@ export function ConversationPane({
   const unread = data?.conversation.unreadCount ?? 0;
   const newest = data?.messages.at(-1)?.id;
   useEffect(() => {
-    if (unread === 0) return;
+    // Read is shared by everyone, so it is for those who can answer to say.
+    if (unread === 0 || !canWrite) return;
     let done = false;
     // Read means seen: a tab in the background waits until someone looks at it.
     const markRead = () => {
@@ -315,7 +298,7 @@ export function ConversationPane({
       done = true;
       document.removeEventListener('visibilitychange', markRead);
     };
-  }, [id, unread, newest, mutate]);
+  }, [id, unread, newest, canWrite, mutate]);
 
   const send = useCallback(
     async (reply: Reply): Promise<string | null> => {

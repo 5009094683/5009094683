@@ -6,37 +6,20 @@ import useSWR from 'swr';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Select } from '@/components/ui/field';
-import { EmptyState, ErrorState, Notice, PageLoading, Spinner } from '@/components/ui/misc';
+import { EmptyState, ErrorState, Notice, PageLoading } from '@/components/ui/misc';
 import { api, errorMessage } from '@/lib/api';
 import { cn } from '@/lib/cn';
-import { useProperties } from '@/lib/hooks';
-import type { Reservation } from '@/lib/types';
 import { languageName } from './labels';
-import {
-  approvedTemplates,
-  fillTemplate,
-  guestToken,
-  templateValues,
-  templatesFor,
-  unfilled,
-} from './templates';
-import type {
-  Conversation,
-  GuestLinks,
-  MessageTemplate,
-  StayMoney,
-  TemplateList,
-  TemplateSendResult,
-} from './types';
+import type { Conversation, MessageTemplate, TemplateList, TemplateSendResult } from './types';
 import { useReturnFocus } from './use-return-focus';
 
 export type SentTemplate = NonNullable<TemplateSendResult['sent']>;
 
 /**
- * Picks a message template and shows it filled in for this guest. Normally the text then goes
- * into the reply box to be changed and sent like any other reply. On WhatsApp more than 24
- * hours after the guest last wrote, only a template WhatsApp has approved may be sent, exactly
- * as it is: then the server sends it.
+ * Picks a message template and shows it as the server filled it in for this guest. Normally
+ * the text then goes into the reply box to be changed and sent like any other reply. On
+ * WhatsApp more than 24 hours after the guest last wrote, only a template WhatsApp has approved
+ * may be sent, exactly as it is: then the server sends it.
  */
 export function TemplateDialog({
   conversation,
@@ -52,17 +35,8 @@ export function TemplateDialog({
   onSent: (sent: SentTemplate) => void;
 }) {
   useReturnFocus();
-  const { properties } = useProperties();
   const reservationId = conversation.reservationId;
-  const list = useSWR<TemplateList>('/messaging/templates');
-  const reservation = useSWR<Reservation>(reservationId ? `/reservations/${reservationId}` : null);
-  const links = useSWR<GuestLinks>(
-    reservationId ? `/reservations/${reservationId}/guest-link` : null,
-  );
-  // What the stay costs and what is paid is worked out by the server, and the guest's own view
-  // of the booking is where it tells: the same figures a template sent by the server quotes.
-  const token = guestToken(links.data);
-  const money = useSWR<StayMoney>(token ? `/public/bookings/${token}` : null);
+  const list = useSWR<TemplateList>(`/inbox/conversations/${conversation.id}/templates`);
 
   const [chosenId, setChosenId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -72,11 +46,11 @@ export function TemplateDialog({
     if (problems.length > 0) refusal.current?.scrollIntoView({ block: 'nearest' });
   }, [problems]);
 
-  const propertyId = reservation.data?.propertyId ?? conversation.propertyId;
   const all = list.data?.templates ?? [];
+  // WhatsApp sends its own approved wording, one per template: the one the server picks.
   const choices = approvedOnly
-    ? approvedTemplates(all, propertyId, reservation.data?.guest?.language ?? null)
-    : templatesFor(all, propertyId);
+    ? all.filter((template) => template.preferred && template.whatsappTemplate)
+    : all;
   const chosen = choices.find((template) => template.id === chosenId) ?? choices[0] ?? null;
   /** The language of a template, where it is needed to tell one wording from another. */
   const wording = (template: MessageTemplate): string | null =>
@@ -85,22 +59,9 @@ export function TemplateDialog({
       ? languageName(template.language)
       : null;
 
-  const gathering =
-    reservationId !== null &&
-    (reservation.isLoading || links.isLoading || (token !== null && money.isLoading));
-  const values = templateValues({
-    conversation,
-    reservation: reservation.data,
-    property: properties.find((property) => property.id === propertyId),
-    links: links.data,
-    money: money.data,
-  });
-  const withSubject = conversation.channel === 'email' && Boolean(chosen?.subject);
-  const body = chosen ? fillTemplate(chosen.body, values) : '';
-  const subject = chosen?.subject && withSubject ? fillTemplate(chosen.subject, values) : null;
-  const missing = chosen
-    ? unfilled(withSubject ? `${chosen.subject}\n${chosen.body}` : chosen.body, values)
-    : [];
+  const body = chosen?.body ?? '';
+  const subject = chosen?.subject ?? null;
+  const missing = chosen?.unfilled ?? [];
 
   const use = () => {
     if (!chosen) return;
@@ -113,9 +74,10 @@ export function TemplateDialog({
     setSending(true);
     setProblems([]);
     try {
-      const result = await api<TemplateSendResult>(`/reservations/${reservationId}/send-template`, {
-        body: { templateKey: chosen.key, channels: [conversation.channel] },
-      });
+      const result = await api<TemplateSendResult>(
+        `/inbox/conversations/${conversation.id}/send-template`,
+        { body: { templateKey: chosen.key } },
+      );
       if (!result.sent) {
         setProblems(
           result.problems.length > 0 ? result.problems : ['The template could not be sent.'],
@@ -148,14 +110,14 @@ export function TemplateDialog({
           {approvedOnly ? (
             <Button
               variant="primary"
-              disabled={!chosen || !reservationId || gathering}
+              disabled={!chosen || !reservationId}
               loading={sending}
               onClick={() => void send()}
             >
               Send template
             </Button>
           ) : (
-            <Button variant="primary" disabled={!chosen || gathering} onClick={use}>
+            <Button variant="primary" disabled={!chosen} onClick={use}>
               Use this message
             </Button>
           )}
@@ -254,32 +216,26 @@ export function TemplateDialog({
             <p className="text-[13px] font-medium [overflow-wrap:anywhere] text-ink-soft">
               As {conversation.contactName} will read it
             </p>
-            {gathering ? (
-              <p className="flex items-center gap-2 py-6 text-sm text-ink-faint">
-                <Spinner /> Filling in the details of the booking…
-              </p>
-            ) : (
-              <div
-                aria-live="polite"
-                className="rounded-lg border border-line bg-canvas px-3.5 py-3 text-sm text-ink"
-              >
-                {subject && (
-                  <p className="mb-2 border-b border-line pb-2 font-medium [overflow-wrap:anywhere]">
-                    <span className="font-normal text-ink-faint">Subject: </span>
-                    {subject}
-                  </p>
-                )}
-                <p className="[overflow-wrap:anywhere] whitespace-pre-wrap">{body}</p>
-              </div>
-            )}
-            {!gathering && approvedOnly && (
+            <div
+              aria-live="polite"
+              className="rounded-lg border border-line bg-canvas px-3.5 py-3 text-sm text-ink"
+            >
+              {subject && (
+                <p className="mb-2 border-b border-line pb-2 font-medium [overflow-wrap:anywhere]">
+                  <span className="font-normal text-ink-faint">Subject: </span>
+                  {subject}
+                </p>
+              )}
+              <p className="[overflow-wrap:anywhere] whitespace-pre-wrap">{body}</p>
+            </div>
+            {approvedOnly && (
               <Notice tone="info">
                 {reservationId
                   ? `This is sent as the WhatsApp template "${chosen.whatsappTemplate}", with the wording WhatsApp approved. It cannot be changed here.`
                   : 'A template is sent about a booking, and this conversation is not linked to one, so it cannot be sent from here.'}
               </Notice>
             )}
-            {!gathering && !approvedOnly && missing.length > 0 && (
+            {!approvedOnly && missing.length > 0 && (
               <Notice
                 tone="warning"
                 title={

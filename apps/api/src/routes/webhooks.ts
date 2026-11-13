@@ -6,6 +6,7 @@ import { parseMime } from '@pms/channels';
 import {
   DomainError,
   organizationForSender,
+  queueWhatsAppMedia,
   receiveGuestEmail,
   receiveMessage,
   readWhatsAppWebhook,
@@ -158,10 +159,21 @@ export async function engagementWebhookRoutes(app: FastifyInstance): Promise<voi
           contactName: message.name,
           contactAddress: `+${message.from}`,
           body: message.body,
-          attachments: message.attachment ? [{ name: message.attachment }] : [],
+          attachments: message.attachment
+            ? [
+                {
+                  name: message.media?.fileName ?? message.attachment,
+                  contentType: message.media?.mimeType ?? null,
+                },
+              ]
+            : [],
           receivedAt: message.at,
         });
         if (!result.duplicate) stored++;
+        // The photo or document itself is fetched by the worker: WhatsApp expects an answer at once.
+        if (result.message && message.media) {
+          await queueWhatsAppMedia(app.db, result.message.id, message.media);
+        }
       }
       let updated = 0;
       for (const receipt of receipts) {
@@ -186,6 +198,8 @@ export async function engagementWebhookRoutes(app: FastifyInstance): Promise<voi
   app.post(
     '/webhooks/inbox/email',
     {
+      // Room for a message with a few photos attached.
+      bodyLimit: 15 * 1024 * 1024,
       config: { rateLimit: { max: 300, timeWindow: '1 minute' } },
       schema: {
         tags: ['webhooks'],
@@ -227,17 +241,22 @@ export async function engagementWebhookRoutes(app: FastifyInstance): Promise<voi
       }
       const orgId = await organizationForSender(app.db, 'email', mail.from);
       if (!orgId) return reply.status(200).send({ received: true, ignored: 'unknown_sender' });
-      const result = await receiveGuestEmail(app.db, orgId, {
-        from: mail.from,
-        fromName: mail.fromName,
-        subject: mail.subject,
-        text: mail.text,
-        messageId: mail.messageId,
-        inReplyTo: mail.inReplyTo,
-        references: mail.references,
-        date: mail.date,
-        attachments: mail.attachments,
-      });
+      const result = await receiveGuestEmail(
+        app.db,
+        orgId,
+        {
+          from: mail.from,
+          fromName: mail.fromName,
+          subject: mail.subject,
+          text: mail.text,
+          messageId: mail.messageId,
+          inReplyTo: mail.inReplyTo,
+          references: mail.references,
+          date: mail.date,
+          attachments: mail.attachments,
+        },
+        app.files,
+      );
       return reply
         .status(200)
         .send(

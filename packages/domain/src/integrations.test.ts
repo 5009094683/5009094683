@@ -319,7 +319,11 @@ describe('webhooks', () => {
         payload: { ratePlanId: 'p-2' },
       }),
       // A guest wrote: of interest. Staff read it or replied: not.
-      event({ kind: 'message.received', payload: { conversationId: 'c-1', channel: 'email' } }),
+      event({
+        kind: 'message.received',
+        payload: { conversationId: 'c-1', channel: 'email', direction: 'in' },
+      }),
+      event({ kind: 'message.received', payload: { conversationId: 'c-1', receipt: 'read' } }),
       event({ kind: 'message.received', payload: { conversationId: 'c-1', read: true } }),
       event({ kind: 'message.received', payload: { conversationId: 'c-1', direction: 'out' } }),
       // Kinds that only matter to open screens are not sent out.

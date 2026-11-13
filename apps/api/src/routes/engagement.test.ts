@@ -411,9 +411,43 @@ describe('the inbox', () => {
     const opened = (await frontDesk.get(`/inbox/conversations/${conversation.id}`)).json();
     expect(opened.messages).toHaveLength(1);
     expect(opened).toMatchObject({ canWriteFreely: true, sendingUnavailable: null });
+    // Looking without being able to answer leaves it unread for those who can.
+    expect((await reader.post(`/inbox/conversations/${conversation.id}/read`)).statusCode).toBe(
+      403,
+    );
+    expect((await frontDesk.get('/inbox/unread')).json().unread).toBeGreaterThanOrEqual(1);
     expect((await frontDesk.post(`/inbox/conversations/${conversation.id}/read`)).statusCode).toBe(
       204,
     );
+
+    // Who it can be given to: people who answer guests at this property.
+    const assignees = (await frontDesk.get(`/inbox/assignees?propertyId=${hotel.property.id}`))
+      .json()
+      .staff.map((person: { name: string }) => person.name);
+    expect(assignees.length).toBeGreaterThan(0);
+    expect((await housekeeper.get('/inbox/assignees')).statusCode).toBe(403);
+
+    // The templates, filled in for this guest by the server, and one sent in this conversation.
+    const offered = (await reader.get(`/inbox/conversations/${conversation.id}/templates`)).json();
+    const preArrival = offered.templates.find((x: { key: string }) => x.key === 'pre_arrival');
+    expect(preArrival.body).toContain('Meera');
+    expect(preArrival.body).not.toContain('{{');
+    expect(offered.variables.guest_name).toBeTruthy();
+    expect(
+      (
+        await reader.post(`/inbox/conversations/${conversation.id}/send-template`, {
+          templateKey: 'pre_arrival',
+        })
+      ).statusCode,
+    ).toBe(403);
+    const template = await frontDesk.post(`/inbox/conversations/${conversation.id}/send-template`, {
+      templateKey: 'pre_arrival',
+    });
+    expect(template.json().sent.message).toMatchObject({
+      conversationId: conversation.id,
+      body: preArrival.body,
+      templateKey: 'pre_arrival',
+    });
 
     // Someone who may only read cannot answer; front desk can.
     const reply = { body: 'Breakfast is from 7 to 10:30.' };
@@ -469,6 +503,20 @@ describe('the inbox', () => {
     const elsewhere = await ctx.login(user.email);
     const mine = (await frontDesk.get('/inbox/conversations')).json().conversations;
     expect(mine.length).toBeGreaterThan(0);
+    // A page at a time, with the cursor the page before gave.
+    const first = (await frontDesk.get('/inbox/conversations?limit=1')).json();
+    expect(first.conversations).toHaveLength(1);
+    if (mine.length > 1) {
+      const second = (
+        await frontDesk.get(
+          `/inbox/conversations?limit=1&cursor=${encodeURIComponent(first.nextCursor)}`,
+        )
+      ).json();
+      expect(second.conversations[0].id).toBe(mine[1].id);
+    } else {
+      expect(first.nextCursor).toBeNull();
+    }
+    expect((await frontDesk.get('/inbox/conversations?cursor=nonsense')).statusCode).toBe(400);
     const theirs = (await elsewhere.get('/inbox/conversations')).json().conversations;
     expect(theirs).toEqual([]);
     expect((await elsewhere.get(`/inbox/conversations/${mine[0].id}`)).statusCode).toBe(403);
@@ -537,6 +585,55 @@ describe('the inbox', () => {
       subject: 'Re: Early check-in',
       text: 'Yes, your room will be ready.',
     });
+
+    // A photo sent with an email is kept and can be opened by those who may read the conversation.
+    const photo = Buffer.concat([
+      Buffer.from('89504e470d0a1a0a', 'hex'),
+      Buffer.from('the guest\u2019s photo'),
+    ]);
+    const withPhoto = [
+      'From: Guest <emailer@example.com>',
+      'To: stay@seabreeze.example',
+      'Subject: Our car',
+      'Message-ID: <photo-1@mail.example>',
+      'MIME-Version: 1.0',
+      'Content-Type: multipart/mixed; boundary="frontier"',
+      '',
+      '--frontier',
+      'Content-Type: text/plain',
+      '',
+      'This is the car we arrive in.',
+      '--frontier',
+      'Content-Type: image/png; name="car.png"',
+      'Content-Disposition: attachment; filename="car.png"',
+      'Content-Transfer-Encoding: base64',
+      '',
+      photo.toString('base64'),
+      '--frontier--',
+      '',
+    ].join('\r\n');
+    expect((await deliver(withPhoto)).json()).toEqual({ received: true, duplicate: false });
+    const thread = (await frontDesk.get(`/inbox/conversations/${list.conversations[0].id}`)).json();
+    const message = thread.messages.at(-1);
+    expect(message.attachments).toMatchObject([{ name: 'car.png', contentType: 'image/png' }]);
+    const path = `/inbox/messages/${message.id}/attachments/${message.attachments[0].fileId}`;
+    const opened = await frontDesk.get(path);
+    expect(opened.statusCode).toBe(200);
+    expect(opened.headers['content-type']).toBe('image/png');
+    expect(opened.headers['x-content-type-options']).toBe('nosniff');
+    expect(opened.headers['content-security-policy']).toContain('sandbox');
+    expect(opened.rawPayload.equals(photo)).toBe(true);
+    expect((await housekeeper.get(path)).statusCode).toBe(403);
+    expect((await guest.get(path)).statusCode).toBe(401);
+    // Another message's id does not open the file.
+    const first = thread.messages[0];
+    expect(
+      (
+        await frontDesk.get(
+          `/inbox/messages/${first.id}/attachments/${message.attachments[0].fileId}`,
+        )
+      ).statusCode,
+    ).toBe(404);
   });
 
   it('lets managers change templates and automatic messages, and nobody else', async () => {

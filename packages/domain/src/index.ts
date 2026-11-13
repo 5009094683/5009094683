@@ -40,6 +40,7 @@ export { StripeGateway } from './payments/stripe';
 export * from './booking-engine';
 export * from './inbox';
 export * from './messaging';
+export * from './message-attachments';
 export * from './transports/email';
 export * from './transports/whatsapp';
 export * from './storage';

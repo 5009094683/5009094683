@@ -19,6 +19,7 @@ import {
   automationLog,
   cancelPaymentOrder,
   canAcrossOrganisation,
+  conversationTemplates,
   createPaymentLink,
   createPromo,
   deleteAutomationRule,
@@ -28,6 +29,7 @@ import {
   getConversation,
   getStaffCheckin,
   guestBookingUrl,
+  listAssignees,
   listAutomationRules,
   listConversations,
   listPaymentOrders,
@@ -37,12 +39,14 @@ import {
   notFound,
   openConversation,
   propertyScope,
+  readAttachment,
   readCheckinDocument,
   retryMessage,
   saveAutomationRule,
   saveTemplate,
   sendMessage,
   sendTemplate,
+  sendTemplateInConversation,
   syncPaymentOrder,
   TEMPLATE_VARIABLES,
   unreadConversations,
@@ -108,22 +112,38 @@ export async function engagementRoutes(app: FastifyInstance): Promise<void> {
           reservationId: uuid.optional(),
           guestId: uuid.optional(),
           search: z.string().max(120).optional(),
-          before: z.iso.datetime({ offset: true }).optional(),
+          cursor: z
+            .string()
+            .max(80)
+            .optional()
+            .describe('`nextCursor` of the page before, for the conversations after it'),
           limit: z.coerce.number().int().min(1).max(200).optional(),
         }),
       },
     },
     async (req) => {
       const actor = authorize(req, 'inbox.read');
-      const { assignedTo, before, ...filter } = req.query;
-      return {
-        conversations: await listConversations(app.db, actor.orgId, {
-          ...filter,
-          propertyIds: propertyScope(actor.grants, 'inbox.read'),
-          assignedTo: assignedTo === 'me' ? actor.userId : assignedTo,
-          before: before ? new Date(before) : undefined,
-        }),
-      };
+      const { assignedTo, ...filter } = req.query;
+      return listConversations(app.db, actor.orgId, {
+        ...filter,
+        propertyIds: propertyScope(actor.grants, 'inbox.read'),
+        assignedTo: assignedTo === 'me' ? actor.userId : assignedTo,
+      });
+    },
+  );
+
+  r.get(
+    '/inbox/assignees',
+    {
+      schema: {
+        tags: ['inbox'],
+        summary: 'The people a conversation can be given to',
+        querystring: z.object({ propertyId: uuid.optional() }),
+      },
+    },
+    async (req) => {
+      const actor = authorize(req, 'inbox.read', req.query.propertyId);
+      return { staff: await listAssignees(app.db, actor.orgId, req.query.propertyId ?? null) };
     },
   );
 
@@ -219,9 +239,16 @@ export async function engagementRoutes(app: FastifyInstance): Promise<void> {
 
   r.post(
     '/inbox/conversations/:id/read',
-    { schema: { tags: ['inbox'], params: idParams } },
+    {
+      schema: {
+        tags: ['inbox'],
+        summary: 'Mark a conversation as read, for everyone',
+        params: idParams,
+      },
+    },
     async (req, reply) => {
-      const actor = await authorizeConversation(req, req.params.id, 'inbox.read');
+      // Read is shared: looking without being able to answer must not clear it for those who can.
+      const actor = await authorizeConversation(req, req.params.id, 'inbox.write');
       await markConversationRead(app.db, actor.orgId, req.params.id);
       return reply.status(204).send();
     },
@@ -241,6 +268,77 @@ export async function engagementRoutes(app: FastifyInstance): Promise<void> {
       if (!row) throw notFound('Message', req.params.id);
       const actor = await authorizeConversation(req, row.conversationId, 'inbox.write');
       return retryMessage(app.db, actor, req.params.id);
+    },
+  );
+
+  r.get(
+    '/inbox/messages/:id/attachments/:fileId',
+    {
+      schema: {
+        tags: ['inbox'],
+        summary: 'A photo or PDF a guest sent with a message',
+        params: idParams.extend({ fileId: uuid }),
+      },
+    },
+    async (req, reply) => {
+      const session = authorize(req, 'inbox.read');
+      const [row] = await app.db
+        .select({ conversationId: messages.conversationId })
+        .from(messages)
+        .where(and(eq(messages.id, req.params.id), eq(messages.orgId, session.orgId)));
+      if (!row) throw notFound('Message', req.params.id);
+      const actor = await authorizeConversation(req, row.conversationId, 'inbox.read');
+      const { file, data } = await readAttachment(
+        app.db,
+        app.files,
+        actor.orgId,
+        req.params.id,
+        req.params.fileId,
+      );
+      return (
+        reply
+          .header('content-type', file.contentType)
+          .header('content-disposition', `inline; filename="${file.fileName.replace(/"/g, '')}"`)
+          .header('cache-control', 'private, no-store')
+          .header('x-content-type-options', 'nosniff')
+          // A file from outside is shown as what it is and nothing more: no scripts, no frames.
+          .header('content-security-policy', "default-src 'none'; sandbox")
+          .send(data)
+      );
+    },
+  );
+
+  r.get(
+    '/inbox/conversations/:id/templates',
+    {
+      schema: {
+        tags: ['inbox'],
+        summary: 'The templates that can be used in a conversation, filled in for its guest',
+        params: idParams,
+      },
+    },
+    async (req) => {
+      const actor = await authorizeConversation(req, req.params.id, 'inbox.read');
+      return {
+        templates: await conversationTemplates(app.db, actor.orgId, req.params.id),
+        variables: TEMPLATE_VARIABLES,
+      };
+    },
+  );
+
+  r.post(
+    '/inbox/conversations/:id/send-template',
+    {
+      schema: {
+        tags: ['inbox'],
+        summary: 'Send a template in this conversation, to the address it is with',
+        params: idParams,
+        body: z.object({ templateKey: z.string().min(1).max(50) }),
+      },
+    },
+    async (req) => {
+      const actor = await authorizeConversation(req, req.params.id, 'inbox.write');
+      return sendTemplateInConversation(app.db, actor, req.params.id, req.body);
     },
   );
 

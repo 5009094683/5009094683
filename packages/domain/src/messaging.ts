@@ -31,6 +31,14 @@ import {
 } from './inbox';
 import { displayMoney } from './money';
 import { transact } from './sqlx';
+import { TEMPLATE_VARIABLES, renderTemplate, unfilledVariables } from './template-text';
+
+export {
+  SAMPLE_TEMPLATE_VALUES,
+  TEMPLATE_VARIABLES,
+  renderTemplate,
+  unfilledVariables,
+} from './template-text';
 
 export type MessageTemplateRow = typeof messageTemplates.$inferSelect;
 export type AutomationRuleRow = typeof automationRules.$inferSelect;
@@ -49,46 +57,6 @@ export const SILENT_CANCELLATIONS = [
 // ---------------------------------------------------------------------------
 // Templates
 
-/** The names that can be used as `{{name}}` in a template, with what each stands for. */
-export const TEMPLATE_VARIABLES: Record<string, string> = {
-  guest_name: 'The guest\u2019s full name',
-  guest_first_name: 'The guest\u2019s first name',
-  property_name: 'The property\u2019s name',
-  property_address: 'The property\u2019s address',
-  property_phone: 'The property\u2019s phone number',
-  property_email: 'The property\u2019s email address',
-  booking_code: 'The booking reference',
-  check_in: 'Arrival date',
-  check_out: 'Departure date',
-  check_in_time: 'Time from which guests can check in',
-  check_out_time: 'Time by which guests check out',
-  nights: 'Number of nights',
-  rooms: 'The rooms booked, e.g. "2 x Deluxe Room"',
-  guests: 'The number of guests, e.g. "2 adults, 1 child"',
-  total: 'The price of the stay with tax',
-  paid: 'What has been paid',
-  balance: 'What is still to pay',
-  booking_link: 'Link where the guest sees and manages the booking',
-  checkin_link: 'Link to online check-in',
-  arrival_instructions: 'The property\u2019s arrival instructions',
-  amount: 'For a payment request: the amount asked for',
-  pay_link: 'For a payment request: the link to pay',
-};
-
-/** Fills `{{name}}` placeholders. A name with no value is left out, and the gaps it leaves are closed up. */
-export function renderTemplate(text: string, variables: Record<string, string>): string {
-  return text
-    .replace(
-      /\{\{\s*([a-z_]+)\s*\}\}/gi,
-      (_match, name: string) => variables[name.toLowerCase()] ?? '',
-    )
-    .split('\n')
-    .map((line) => line.replace(/[ \t]+$/g, ''))
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
 function longDate(date: DateString): string {
   return new Intl.DateTimeFormat('en-GB', {
     weekday: 'long',
@@ -100,6 +68,22 @@ function longDate(date: DateString): string {
 }
 
 const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
+
+type PropertyRow = typeof properties.$inferSelect;
+
+function propertyVariables(p: PropertyRow): Record<string, string> {
+  return {
+    property_name: p.name,
+    property_address: [p.addressLine1, p.addressLine2, p.city, p.state, p.postalCode]
+      .filter(Boolean)
+      .join(', '),
+    property_phone: p.phone ?? '',
+    property_email: p.email ?? '',
+    check_in_time: p.checkInTime,
+    check_out_time: p.checkOutTime,
+    arrival_instructions: p.settings.arrivalInstructions ?? '',
+  };
+}
 
 /** Everything a template can mention about a reservation. */
 export async function templateVariables(
@@ -118,21 +102,13 @@ export async function templateVariables(
     GROUP BY rt.name ORDER BY rt.name
   `);
   const money = await stayMoney(db, reservation);
-  const p = property!;
   return {
+    ...propertyVariables(property!),
     guest_name: reservation.guestName,
     guest_first_name: reservation.guestName.split(/\s+/)[0] ?? reservation.guestName,
-    property_name: p.name,
-    property_address: [p.addressLine1, p.addressLine2, p.city, p.state, p.postalCode]
-      .filter(Boolean)
-      .join(', '),
-    property_phone: p.phone ?? '',
-    property_email: p.email ?? '',
     booking_code: reservation.code,
     check_in: longDate(reservation.checkIn),
     check_out: longDate(reservation.checkOut),
-    check_in_time: p.checkInTime,
-    check_out_time: p.checkOutTime,
     nights: plural(diffDays(reservation.checkIn, reservation.checkOut), 'night', 'nights'),
     rooms: rows.map((r) => `${r.count} x ${r.name}`).join(', '),
     guests:
@@ -143,7 +119,6 @@ export async function templateVariables(
     balance: displayMoney(Math.max(0, money.balance), reservation.currency),
     booking_link: guestBookingUrl(reservation),
     checkin_link: guestBookingUrl(reservation, '/check-in'),
-    arrival_instructions: p.settings.arrivalInstructions ?? '',
     ...extra,
   };
 }
@@ -534,11 +509,40 @@ export async function findTemplate(
         eq(messageTemplates.active, true),
       ),
     );
+  return pickTemplate(rows, propertyId, language);
+}
+
+function pickTemplate(
+  rows: MessageTemplateRow[],
+  propertyId: string | null,
+  language: string | null,
+): MessageTemplateRow | null {
   const lang = language?.toLowerCase().slice(0, 2) ?? 'en';
   const score = (t: MessageTemplateRow): number =>
     (t.propertyId === propertyId && propertyId ? 4 : t.propertyId ? -100 : 0) +
     (t.language.slice(0, 2) === lang ? 2 : t.language === 'en' ? 1 : 0);
   return rows.filter((t) => score(t) >= 0).sort((a, b) => score(b) - score(a))[0] ?? null;
+}
+
+/** A template as the message it becomes on a channel. */
+function templateMessage(
+  template: MessageTemplateRow,
+  variables: Record<string, string>,
+  channel: ConversationChannel,
+): { body: string; subject: string | null; templateKey: string; meta: Record<string, unknown> } {
+  return {
+    body: renderTemplate(template.body, variables),
+    subject: template.subject ? renderTemplate(template.subject, variables) : null,
+    templateKey: template.key,
+    meta:
+      channel === 'whatsapp' && template.whatsappTemplate
+        ? {
+            whatsappTemplate: template.whatsappTemplate,
+            whatsappLanguage: template.language,
+            whatsappParams: template.whatsappParams.map((name) => variables[name] ?? ''),
+          }
+        : {},
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -654,30 +658,199 @@ export async function sendTemplate(
   if (!usable) return { sent: null, problems: reach.map((r) => r.problem!) };
 
   const variables = await templateVariables(db, reservation, input.variables);
-  const body = renderTemplate(template.body, variables);
-  const subject = template.subject ? renderTemplate(template.subject, variables) : null;
+  const outgoing = templateMessage(template, variables, usable.channel);
   return transact(db, async (tx) => {
     const conversation = await openConversation(tx, actor.orgId, {
       channel: usable.channel,
       reservationId: reservation.id,
-      subject,
+      subject: outgoing.subject,
     });
     const message = await sendMessage(tx, actor, conversation.id, {
-      body,
-      subject,
-      templateKey: template.key,
+      ...outgoing,
       automationRuleId: input.automationRuleId ?? null,
-      meta:
-        usable.channel === 'whatsapp' && template.whatsappTemplate
-          ? {
-              whatsappTemplate: template.whatsappTemplate,
-              whatsappLanguage: template.language,
-              whatsappParams: template.whatsappParams.map((name) => variables[name] ?? ''),
-            }
-          : {},
     });
     return { sent: { conversation, message, channel: usable.channel }, problems: [] };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Templates in a conversation that is already open
+
+export interface RenderedTemplate {
+  id: string;
+  key: string;
+  name: string;
+  language: string;
+  /** The name WhatsApp approved it under, when it has one. */
+  whatsappTemplate: string | null;
+  /** Filled in. Only on email, the one channel with a subject line. */
+  subject: string | null;
+  /** Filled in for this guest, as it would be sent. */
+  body: string;
+  /** Placeholders the wording uses that there was nothing to put in for. */
+  unfilled: string[];
+  /** The wording the system itself picks for this guest: their language, the property's own text. */
+  preferred: boolean;
+}
+
+async function conversationContext(
+  db: DbOrTx,
+  orgId: string,
+  conversationId: string,
+): Promise<{
+  conversation: ConversationRow;
+  reservation: ReservationRow | undefined;
+  guest: GuestRow | undefined;
+  propertyId: string | null;
+}> {
+  const [conversation] = await db
+    .select()
+    .from(conversations)
+    .where(and(eq(conversations.id, conversationId), eq(conversations.orgId, orgId)));
+  if (!conversation) throw notFound('Conversation', conversationId);
+  const [reservation] = conversation.reservationId
+    ? await db.select().from(reservations).where(eq(reservations.id, conversation.reservationId))
+    : [];
+  const guestId = reservation?.guestId ?? conversation.guestId;
+  const [guest] = guestId ? await db.select().from(guests).where(eq(guests.id, guestId)) : [];
+  return {
+    conversation,
+    reservation,
+    guest,
+    propertyId: reservation?.propertyId ?? conversation.propertyId,
+  };
+}
+
+/**
+ * The templates that can be used in a conversation, each filled in for its
+ * guest exactly as it would be sent, so that what staff read before sending
+ * is what the guest gets.
+ */
+export async function conversationTemplates(
+  db: DbOrTx,
+  orgId: string,
+  conversationId: string,
+): Promise<RenderedTemplate[]> {
+  const { conversation, reservation, guest, propertyId } = await conversationContext(
+    db,
+    orgId,
+    conversationId,
+  );
+  await ensureMessagingDefaults(db, orgId);
+  const all = await db
+    .select()
+    .from(messageTemplates)
+    .where(and(eq(messageTemplates.orgId, orgId), eq(messageTemplates.active, true)));
+  // One wording per name and language: the property's own in place of the organisation's.
+  const wordings = new Map<string, MessageTemplateRow>();
+  for (const template of all) {
+    if (template.propertyId && template.propertyId !== propertyId) continue;
+    const variant = `${template.key}:${template.language}`;
+    if (template.propertyId || !wordings.has(variant)) wordings.set(variant, template);
+  }
+  const usable = [...wordings.values()];
+
+  let variables: Record<string, string>;
+  if (reservation) {
+    variables = await templateVariables(db, reservation);
+  } else {
+    const [property] = propertyId
+      ? await db.select().from(properties).where(eq(properties.id, propertyId))
+      : [];
+    // Without a booking the contact may be known only by an address, which is no way to greet anyone.
+    const name =
+      conversation.contactName !== conversation.contactAddress ? conversation.contactName : '';
+    variables = {
+      ...(property ? propertyVariables(property) : {}),
+      guest_name: name,
+      guest_first_name: name.split(/\s+/)[0] ?? '',
+    };
+  }
+
+  const preferred = new Set<string>();
+  for (const key of new Set(usable.map((t) => t.key))) {
+    const best = pickTemplate(
+      usable.filter((t) => t.key === key),
+      propertyId,
+      guest?.language ?? null,
+    );
+    if (best) preferred.add(best.id);
+  }
+  return usable
+    .map((template) => {
+      const subject = conversation.channel === 'email' ? template.subject : null;
+      return {
+        id: template.id,
+        key: template.key,
+        name: template.name,
+        language: template.language,
+        whatsappTemplate: template.whatsappTemplate,
+        subject: subject ? renderTemplate(subject, variables) : null,
+        body: renderTemplate(template.body, variables),
+        unfilled: unfilledVariables(
+          subject ? `${subject}\n${template.body}` : template.body,
+          variables,
+        ),
+        preferred: preferred.has(template.id),
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name) || a.language.localeCompare(b.language));
+}
+
+/**
+ * Sends a template in the conversation that is open, to the address that
+ * conversation is with, rather than wherever the guest's profile points.
+ */
+export async function sendTemplateInConversation(
+  db: DbOrTx,
+  actor: Actor,
+  conversationId: string,
+  input: { templateKey: string },
+): Promise<{ sent: TemplateSend | null; problems: string[] }> {
+  const { conversation, reservation, guest } = await conversationContext(
+    db,
+    actor.orgId,
+    conversationId,
+  );
+  if (!reservation) {
+    return {
+      sent: null,
+      problems: [
+        'A template is sent about a booking, and this conversation is not linked to one. Link it to the booking first.',
+      ],
+    };
+  }
+  await ensureMessagingDefaults(db, actor.orgId);
+  const template = await findTemplate(
+    db,
+    actor.orgId,
+    input.templateKey,
+    reservation.propertyId,
+    guest?.language ?? null,
+  );
+  if (!template) return { sent: null, problems: [`There is no template "${input.templateKey}"`] };
+  const transport = transportFor(conversation.channel);
+  let problem = transport
+    ? transport.unavailable(conversation)
+    : `Sending by ${conversation.channel} is not set up`;
+  if (
+    !problem &&
+    conversation.channel === 'whatsapp' &&
+    !template.whatsappTemplate &&
+    !whatsappWindowOpen(conversation)
+  ) {
+    problem = 'This template has no approved WhatsApp template to open a conversation with';
+  }
+  if (problem) return { sent: null, problems: [problem] };
+
+  const variables = await templateVariables(db, reservation);
+  const message = await sendMessage(
+    db,
+    actor,
+    conversation.id,
+    templateMessage(template, variables, conversation.channel),
+  );
+  return { sent: { conversation, message, channel: conversation.channel }, problems: [] };
 }
 
 // ---------------------------------------------------------------------------

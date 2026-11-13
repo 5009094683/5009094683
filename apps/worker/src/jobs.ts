@@ -14,12 +14,16 @@ import {
 } from '@pms/channels';
 import {
   applyRetention,
+  ATTACHMENT_JOBS,
   deliverMessage,
   draftDueOwnerStatements,
+  fetchWhatsAppMedia,
   MESSAGE_JOBS,
   pruneJobs,
   pruneWebhookDeliveries,
   purgeExpiredFiles,
+  WhatsAppClient,
+  whatsappConfig,
   type FileStore,
   type JobRow,
 } from '@pms/domain';
@@ -65,6 +69,7 @@ export const JOBS = {
   importBookings: CHANNEL_JOBS.importBookings,
   pullMessages: CHANNEL_JOBS.pullMessages,
   sendMessage: MESSAGE_JOBS.send,
+  fetchMedia: ATTACHMENT_JOBS.fetchWhatsApp,
   pullReviews: CHANNEL_JOBS.pullReviews,
   replyReview: CHANNEL_JOBS.replyReview,
   pricing: 'pricing.recommend',
@@ -140,6 +145,16 @@ registerJobHandler(JOBS.sendMessage, async (payload, { db }, job) => {
     finalAttempt: job.attempts >= job.maxAttempts,
   });
   return { ...outcome };
+});
+
+registerJobHandler(JOBS.fetchMedia, async (payload, { db, env, files }) => {
+  const config = whatsappConfig(env);
+  if (!config) return { kept: false, reason: 'WhatsApp is not set up' };
+  return fetchWhatsAppMedia(db, files, new WhatsAppClient(config), {
+    messageId: String(payload.messageId),
+    mediaId: String(payload.mediaId),
+    fileName: typeof payload.fileName === 'string' ? payload.fileName : null,
+  });
 });
 
 registerJobHandler(JOBS.driftCheck, async (payload, { db, env }) => {

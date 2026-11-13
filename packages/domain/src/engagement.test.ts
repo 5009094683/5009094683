@@ -12,8 +12,10 @@ import {
   messages,
   onlineCheckins,
   organizations,
+  outbox,
   reservations,
   storedFiles,
+  users,
 } from '@pms/db';
 import { createTestDatabase, type TestDatabase } from '@pms/db/testing';
 import { createBooking, type BookingRequest } from './booking-engine';
@@ -24,6 +26,7 @@ import { guestToken } from './guest-links';
 import {
   deliverMessage,
   getConversation,
+  listAssignees,
   listConversations,
   markConversationRead,
   openConversation,
@@ -38,7 +41,9 @@ import {
   type MessageTransport,
 } from './inbox';
 import { MemoryMailer } from './mailer';
+import { ATTACHMENT_KEEP_DAYS, fetchWhatsAppMedia, readAttachment } from './message-attachments';
 import {
+  conversationTemplates,
   listAutomationRules,
   listTemplates,
   renderTemplate,
@@ -46,6 +51,7 @@ import {
   saveAutomationRule,
   saveTemplate,
   sendTemplate,
+  sendTemplateInConversation,
 } from './messaging';
 import {
   addCheckinDocument,
@@ -59,8 +65,14 @@ import {
 import { MockGateway } from './payments/mock';
 import { updateProperty } from './properties';
 import { cancelReservation, createReservation, expireHolds } from './reservations';
-import { MemoryFileStore, purgeExpiredFiles, sniffContentType } from './storage';
-import { createTestHotel, createTestOrg, type TestHotel, type TestOrg } from './testing';
+import { deleteStoredFile, MemoryFileStore, purgeExpiredFiles, sniffContentType } from './storage';
+import {
+  createTestHotel,
+  createTestOrg,
+  createTestUser,
+  type TestHotel,
+  type TestOrg,
+} from './testing';
 import { emailTransport, receiveGuestEmail, stripQuotedReply } from './transports/email';
 import {
   readWhatsAppWebhook,
@@ -192,7 +204,7 @@ describe('the inbox', () => {
 
     await receiveMessage(t.db, { ...incoming, externalId: '<m2@mail.example>', body: 'Hello?' });
     expect(await unreadConversations(t.db, org.orgId, 'all')).toBeGreaterThanOrEqual(1);
-    const listed = await listConversations(t.db, org.orgId, {
+    const { conversations: listed } = await listConversations(t.db, org.orgId, {
       propertyIds: 'all',
       search: 'priya',
     });
@@ -201,6 +213,7 @@ describe('the inbox', () => {
       unreadCount: 2,
       reservationCode: reservation.code,
       propertyName: hotel.property.name,
+      lastReplyFailed: false,
     });
     await markConversationRead(t.db, org.orgId, first.conversation.id);
     expect(
@@ -221,15 +234,13 @@ describe('the inbox', () => {
     // Nobody knows yet which property this is about: everyone with inbox access sees it.
     expect(conversation.propertyId).toBeNull();
     const scoped = { propertyIds: [other.property.id] };
-    expect((await listConversations(t.db, org.orgId, scoped)).map((c) => c.id)).toContain(
-      conversation.id,
-    );
+    const idsSeen = async () =>
+      (await listConversations(t.db, org.orgId, scoped)).conversations.map((c) => c.id);
+    expect(await idsSeen()).toContain(conversation.id);
     await updateConversation(t.db, org.admin, conversation.id, {
       propertyId: hotel.property.id,
     });
-    expect((await listConversations(t.db, org.orgId, scoped)).map((c) => c.id)).not.toContain(
-      conversation.id,
-    );
+    expect(await idsSeen()).not.toContain(conversation.id);
     await expect(
       getConversation(t.db, org.orgId, conversation.id, [other.property.id]),
     ).rejects.toMatchObject({ code: 'not_found' });
@@ -255,7 +266,10 @@ describe('the inbox', () => {
     const reply = await sendMessage(t.db, org.admin, conversation.id, {
       body: 'Yes, free parking behind the building.',
     });
-    expect(reply).toMatchObject({ status: 'queued', direction: 'out' });
+    // Shown under the person's name, not their sign-in address.
+    const [sender] = await t.db.select().from(users).where(eq(users.id, org.adminUserId));
+    expect(reply).toMatchObject({ status: 'queued', direction: 'out', senderName: sender!.name });
+    expect(reply.senderName).not.toContain('@');
     expect(await pendingSends(reply.id)).toHaveLength(1);
     const after = await getConversation(t.db, org.orgId, conversation.id);
     expect(after.conversation).toMatchObject({ status: 'waiting', unreadCount: 0 });
@@ -397,6 +411,154 @@ describe('the inbox', () => {
     expect(await recordDeliveryReceipt(t.db, { externalId: 'unknown', status: 'read' })).toBe(
       false,
     );
+  });
+
+  it('pages through the inbox without skipping or repeating a conversation', async () => {
+    // An organisation of its own, so that nothing else is in the list.
+    const quiet = await createTestOrg(t.db, 'Paging Hotels');
+    const when = new Date('2026-03-01T10:00:00Z');
+    const ids: string[] = [];
+    // Three conversations whose last message is at the very same moment, two at other times.
+    for (const [i, receivedAt] of [when, when, when, at(-3), at(-9)].entries()) {
+      const { conversation } = await receiveMessage(t.db, {
+        orgId: quiet.orgId,
+        channel: 'whatsapp',
+        externalThreadId: `9198111000${i}`,
+        contactAddress: `+9198111000${i}`,
+        body: `Message ${i}`,
+        receivedAt,
+      });
+      ids.push(conversation.id);
+    }
+    // And two the property started, with nothing in them yet.
+    for (const i of [5, 6]) {
+      ids.push(
+        (
+          await openConversation(t.db, quiet.orgId, {
+            channel: 'whatsapp',
+            address: `+9198111000${i}`,
+          })
+        ).id,
+      );
+    }
+
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    let pages = 0;
+    do {
+      const page = await listConversations(t.db, quiet.orgId, {
+        propertyIds: 'all',
+        limit: 2,
+        cursor,
+      });
+      expect(page.conversations.length).toBeLessThanOrEqual(2);
+      seen.push(...page.conversations.map((c) => c.id));
+      cursor = page.nextCursor ?? undefined;
+      pages++;
+    } while (cursor && pages < 10);
+    expect(pages).toBe(4);
+    expect(seen).toHaveLength(7);
+    expect(new Set(seen)).toEqual(new Set(ids));
+    // The ones just started come first: they are the latest thing that happened.
+    expect(new Set(seen.slice(0, 2))).toEqual(new Set(ids.slice(5)));
+
+    await expect(
+      listConversations(t.db, quiet.orgId, { propertyIds: 'all', cursor: 'not-a-cursor' }),
+    ).rejects.toMatchObject({ code: 'validation' });
+  });
+
+  it('flags a conversation whose latest reply did not go out, until it does', async () => {
+    const { conversation } = await receiveMessage(t.db, {
+      orgId: org.orgId,
+      channel: 'whatsapp',
+      externalThreadId: '919800077777',
+      contactAddress: '+919800077777',
+      body: 'Can we check in early?',
+    });
+    const flagged = async () =>
+      (await getConversation(t.db, org.orgId, conversation.id)).conversation.lastReplyFailed;
+    const reply = await sendMessage(t.db, org.admin, conversation.id, { body: 'From noon.' });
+    expect(await flagged()).toBe(false);
+    whatsapp.fail(new PermanentSendError('The number is not on WhatsApp.'));
+    await deliverMessage(t.db, reply.id);
+    expect(await flagged()).toBe(true);
+    const { conversations: listed } = await listConversations(t.db, org.orgId, {
+      propertyIds: 'all',
+      search: '919800077777',
+    });
+    expect(listed[0]).toMatchObject({ id: conversation.id, lastReplyFailed: true });
+
+    whatsapp.fail(null);
+    const before = await t.db.select().from(outbox).where(eq(outbox.kind, 'message.received'));
+    await retryMessage(t.db, org.admin, reply.id);
+    // Sending it again is announced, so every open inbox shows it on its way.
+    const after = await t.db.select().from(outbox).where(eq(outbox.kind, 'message.received'));
+    expect(after.length).toBe(before.length + 1);
+    expect(after.at(-1)!.payload).toMatchObject({ conversationId: conversation.id, retried: true });
+    await deliverMessage(t.db, reply.id);
+    expect(await flagged()).toBe(false);
+  });
+
+  it('tells staff when a channel gives up on a message it had accepted', async () => {
+    const { conversation } = await receiveMessage(t.db, {
+      orgId: org.orgId,
+      channel: 'whatsapp',
+      externalThreadId: '919800088888',
+      contactName: 'Meera Pillai',
+      contactAddress: '+919800088888',
+      body: 'Hello',
+    });
+    const reply = await sendMessage(t.db, org.admin, conversation.id, { body: 'Welcome' });
+    await deliverMessage(t.db, reply.id);
+    const [sent] = await t.db.select().from(messages).where(eq(messages.id, reply.id));
+    expect(
+      await recordDeliveryReceipt(t.db, {
+        externalId: sent!.externalId!,
+        status: 'failed',
+        error: 'The phone has been unreachable for too long.',
+      }),
+    ).toBe(true);
+    const [alert] = await t.db
+      .select()
+      .from(alerts)
+      .where(and(eq(alerts.kind, 'message_failed'), eq(alerts.entityId, conversation.id)));
+    expect(alert).toMatchObject({ title: 'A message to Meera Pillai could not be sent' });
+    expect(alert!.body).toContain('unreachable');
+    expect(
+      (await getConversation(t.db, org.orgId, conversation.id)).conversation.lastReplyFailed,
+    ).toBe(true);
+    // The same receipt again changes nothing.
+    expect(
+      await recordDeliveryReceipt(t.db, { externalId: sent!.externalId!, status: 'failed' }),
+    ).toBe(false);
+  });
+
+  it('offers a conversation to the people who may answer guests at its property', async () => {
+    const other = await createTestHotel(t.db, org);
+    const desk = await createTestUser(t.db, org.orgId, {
+      name: 'Deepa at the desk',
+      role: 'front_desk',
+      propertyId: hotel.property.id,
+    });
+    const elsewhere = await createTestUser(t.db, org.orgId, {
+      name: 'Farid elsewhere',
+      role: 'front_desk',
+      propertyId: other.property.id,
+    });
+    const cleaner = await createTestUser(t.db, org.orgId, {
+      name: 'Gita housekeeping',
+      role: 'housekeeping',
+      propertyId: hotel.property.id,
+    });
+    const here = (await listAssignees(t.db, org.orgId, hotel.property.id)).map((p) => p.id);
+    expect(here).toContain(desk.id);
+    expect(here).toContain(org.adminUserId);
+    expect(here).not.toContain(elsewhere.id);
+    expect(here).not.toContain(cleaner.id);
+    // A conversation nobody has tied to a property yet can go to anyone who answers guests.
+    const anywhere = (await listAssignees(t.db, org.orgId, null)).map((p) => p.id);
+    expect(anywhere).toEqual(expect.arrayContaining([desk.id, elsewhere.id]));
+    expect(anywhere).not.toContain(cleaner.id);
   });
 
   it('takes email only from guests and from people answering the inbox', async () => {
@@ -612,6 +774,67 @@ describe('templates and automatic messages', () => {
         .set({ active: false })
         .where(eq(automationRules.id, rule.id));
     }
+  });
+
+  it('shows the templates of an open conversation filled in, and sends one to the address it is with', async () => {
+    // The guest writes from a number that is not the one on their profile.
+    const reservation = await reserve(40, 42, {
+      email: 'nisha@example.com',
+      phone: '+91 98000 66661',
+      firstName: 'Nisha',
+    });
+    const { conversation } = await receiveMessage(t.db, {
+      orgId: org.orgId,
+      channel: 'whatsapp',
+      externalThreadId: '919800066662',
+      contactName: 'Nisha',
+      contactAddress: '+919800066662',
+      body: 'Hi, this is my other phone.',
+      reservationId: reservation.id,
+    });
+
+    const offered = await conversationTemplates(t.db, org.orgId, conversation.id);
+    const preArrival = offered.find((x) => x.key === 'pre_arrival')!;
+    expect(preArrival.preferred).toBe(true);
+    expect(preArrival.body).toContain('Nisha');
+    expect(preArrival.body).not.toContain('{{');
+    expect(preArrival.unfilled).toEqual([]);
+    // Not an email: no subject line.
+    expect(preArrival.subject).toBeNull();
+    // A payment request has no amount or link until one is made for it.
+    expect(offered.find((x) => x.key === 'payment_request')!.unfilled).toEqual(
+      expect.arrayContaining(['amount', 'pay_link']),
+    );
+
+    const result = await sendTemplateInConversation(t.db, org.admin, conversation.id, {
+      templateKey: 'pre_arrival',
+    });
+    expect(result.problems).toEqual([]);
+    expect(result.sent).toMatchObject({ channel: 'whatsapp' });
+    expect(result.sent!.conversation.id).toBe(conversation.id);
+    expect(result.sent!.message.body).toBe(preArrival.body);
+    await deliverMessage(t.db, result.sent!.message.id);
+    expect(whatsapp.sent.at(-1)).toMatchObject({ to: '919800066662' });
+
+    // Without a booking there is less to fill in, and nothing to send a template about.
+    const stranger = await receiveMessage(t.db, {
+      orgId: org.orgId,
+      channel: 'email',
+      externalThreadId: 'stranger@example.org',
+      contactAddress: 'stranger@example.org',
+      body: 'Do you take dogs?',
+      propertyId: hotel.property.id,
+    });
+    const loose = await conversationTemplates(t.db, org.orgId, stranger.conversation.id);
+    const confirmation = loose.find((x) => x.key === 'booking_confirmation')!;
+    expect(confirmation.unfilled).toEqual(expect.arrayContaining(['guest_name', 'booking_code']));
+    expect(confirmation.unfilled).not.toContain('property_name');
+    expect(confirmation.subject).not.toBeNull();
+    const refused = await sendTemplateInConversation(t.db, org.admin, stranger.conversation.id, {
+      templateKey: 'booking_confirmation',
+    });
+    expect(refused.sent).toBeNull();
+    expect(refused.problems[0]).toContain('not linked to');
   });
 
   it('uses WhatsApp first when there is an approved template, otherwise falls back to email', async () => {
@@ -865,6 +1088,169 @@ describe('online check-in', () => {
   });
 });
 
+describe('what guests send with a message', () => {
+  const PNG = Buffer.concat([
+    Buffer.from('89504e470d0a1a0a', 'hex'),
+    Buffer.from('a photo of a passport, as far as this test is concerned'),
+  ]);
+
+  it('keeps photos and PDFs from an email encrypted, and leaves anything else as a name', async () => {
+    const store = new MemoryFileStore();
+    const reservation = await reserve(60, 62, { email: 'sender@example.com', firstName: 'Kiran' });
+    const received = await receiveGuestEmail(
+      t.db,
+      org.orgId,
+      {
+        from: 'sender@example.com',
+        subject: 'Our documents',
+        text: 'Attached as asked.',
+        messageId: 'att-1@mail.example',
+        attachments: [
+          { name: '../../passport.png', contentType: 'image/png', size: PNG.length, content: PNG },
+          {
+            name: 'itinerary.docx',
+            contentType: 'application/msword',
+            size: 4,
+            content: Buffer.from('PK\u0003\u0004'),
+          },
+          // Too large to have been carried along: a name only.
+          { name: 'video.mov', contentType: 'video/quicktime', size: 50_000_000 },
+        ],
+      },
+      store,
+    );
+    const message = received!.message!;
+    const detail = await getConversation(t.db, org.orgId, received!.conversation.id);
+    const [photo, document, video] = detail.messages[0]!.attachments;
+    expect(photo).toMatchObject({ name: '../../passport.png', contentType: 'image/png' });
+    expect(photo!.fileId).toBeTruthy();
+    expect(document!.fileId ?? null).toBeNull();
+    expect(video!.fileId ?? null).toBeNull();
+
+    const [file] = await t.db.select().from(storedFiles).where(eq(storedFiles.id, photo!.fileId!));
+    expect(file).toMatchObject({
+      kind: 'message_attachment',
+      reservationId: reservation.id,
+      guestId: reservation.guestId,
+      // Nothing of the path the sender gave survives.
+      fileName: 'passport.png',
+      encrypted: true,
+    });
+    // On disk it is not readable without the key.
+    expect((await store.get(file!.storageKey)).includes(PNG.subarray(8))).toBe(false);
+    const days = (file!.deleteAfter!.getTime() - Date.now()) / 86_400_000;
+    expect(Math.round(days)).toBe(ATTACHMENT_KEEP_DAYS);
+
+    const read = await readAttachment(t.db, store, org.orgId, message.id, photo!.fileId!);
+    expect(read.data.equals(PNG)).toBe(true);
+    // A file is read through its message: another message's id does not open it.
+    const other = await receiveGuestEmail(
+      t.db,
+      org.orgId,
+      { from: 'sender@example.com', text: 'One more thing.', messageId: 'att-2@mail.example' },
+      store,
+    );
+    await expect(
+      readAttachment(t.db, store, org.orgId, other!.message!.id, photo!.fileId!),
+    ).rejects.toMatchObject({ code: 'not_found' });
+    const rival = await createTestOrg(t.db, 'Rival');
+    await expect(
+      readAttachment(t.db, store, rival.orgId, message.id, photo!.fileId!),
+    ).rejects.toMatchObject({ code: 'not_found' });
+
+    // The same email delivered again keeps nothing twice.
+    const before = (await t.db.select().from(storedFiles)).length;
+    await receiveGuestEmail(
+      t.db,
+      org.orgId,
+      {
+        from: 'sender@example.com',
+        text: 'Attached as asked.',
+        messageId: 'att-1@mail.example',
+        attachments: [{ name: 'passport.png', contentType: 'image/png', content: PNG }],
+      },
+      store,
+    );
+    expect((await t.db.select().from(storedFiles)).length).toBe(before);
+
+    // Once its time is up the thread says so instead of offering it.
+    await deleteStoredFile(t.db, store, photo!.fileId!);
+    const later = await getConversation(t.db, org.orgId, received!.conversation.id);
+    expect(later.messages[0]!.attachments[0]).toMatchObject({ fileId: null, expired: true });
+    await expect(
+      readAttachment(t.db, store, org.orgId, message.id, photo!.fileId!),
+    ).rejects.toMatchObject({ code: 'not_found' });
+  });
+
+  it('fetches a photo sent on WhatsApp, and says why when it cannot', async () => {
+    const store = new MemoryFileStore();
+    const incoming = async (externalId: string) =>
+      (
+        await receiveMessage(t.db, {
+          orgId: org.orgId,
+          channel: 'whatsapp',
+          externalThreadId: '919800099999',
+          contactAddress: '+919800099999',
+          externalId,
+          body: '[Photo]',
+          attachments: [{ name: 'Photo', contentType: 'image/png' }],
+        })
+      ).message!;
+
+    const first = await incoming('wamid.media.1');
+    const asked: string[] = [];
+    const client = {
+      async downloadMedia(mediaId: string) {
+        asked.push(mediaId);
+        return { data: PNG, mimeType: 'image/png' };
+      },
+    };
+    expect(
+      await fetchWhatsAppMedia(t.db, store, client, { messageId: first.id, mediaId: 'media-1' }),
+    ).toEqual({ kept: true });
+    expect(asked).toEqual(['media-1']);
+    const [kept] = await t.db.select().from(messages).where(eq(messages.id, first.id));
+    expect(kept!.attachments[0]).toMatchObject({ contentType: 'image/png', size: PNG.length });
+    const [file] = await t.db
+      .select()
+      .from(storedFiles)
+      .where(eq(storedFiles.id, kept!.attachments[0]!.fileId!));
+    expect(file!.fileName).toBe('Photo.png');
+    // The job running again does not fetch it a second time.
+    expect(
+      await fetchWhatsAppMedia(t.db, store, client, { messageId: first.id, mediaId: 'media-1' }),
+    ).toMatchObject({ kept: false });
+    expect(asked).toHaveLength(1);
+
+    // WhatsApp no longer has it: nothing to try again.
+    const second = await incoming('wamid.media.2');
+    const gone = {
+      async downloadMedia(): Promise<never> {
+        throw new PermanentSendError('WhatsApp did not give the file: expired');
+      },
+    };
+    expect(
+      await fetchWhatsAppMedia(t.db, store, gone, { messageId: second.id, mediaId: 'media-2' }),
+    ).toEqual({ kept: false, reason: 'WhatsApp did not give the file: expired' });
+    // An outage is thrown, so the job is tried again.
+    const down = {
+      async downloadMedia(): Promise<never> {
+        throw new Error('WhatsApp could not be reached');
+      },
+    };
+    await expect(
+      fetchWhatsAppMedia(t.db, store, down, { messageId: second.id, mediaId: 'media-2' }),
+    ).rejects.toThrow('could not be reached');
+    // A voice note is not a photo or a PDF: it stays a name.
+    const voice = {
+      downloadMedia: async () => ({ data: Buffer.from('OggS....'), mimeType: null }),
+    };
+    expect(
+      await fetchWhatsAppMedia(t.db, store, voice, { messageId: second.id, mediaId: 'media-2' }),
+    ).toEqual({ kept: false, reason: 'Only photos and PDF files are kept' });
+  });
+});
+
 describe('WhatsApp', () => {
   const config = { accessToken: 'token-123', phoneNumberId: '1055', apiVersion: 'v27.0' };
   const fake = (status: number, body: unknown) => {
@@ -915,6 +1301,47 @@ describe('WhatsApp', () => {
         ],
       },
     });
+  });
+
+  it('fetches a file a guest sent from WhatsApp\u2019s own servers only', async () => {
+    const calls: { url: string; authorization: string | undefined }[] = [];
+    const serving = (address: string) =>
+      (async (url: string | URL | Request, init?: RequestInit) => {
+        calls.push({
+          url: String(url),
+          authorization: (init?.headers as Record<string, string> | undefined)?.authorization,
+        });
+        return String(url).startsWith('https://graph.facebook.com/')
+          ? new Response(JSON.stringify({ url: address, mime_type: 'image/jpeg', file_size: 5 }))
+          : new Response(Buffer.from('\u00ff\u00d8\u00ffab', 'latin1'));
+      }) as typeof fetch;
+
+    const good = new WhatsAppClient(config, serving('https://lookaside.fbsbx.com/media/abc'));
+    const media = await good.downloadMedia('media-77');
+    expect(media.mimeType).toBe('image/jpeg');
+    expect(media.data.length).toBe(5);
+    expect(calls.map((c) => c.url)).toEqual([
+      'https://graph.facebook.com/v27.0/media-77',
+      'https://lookaside.fbsbx.com/media/abc',
+    ]);
+    expect(calls.every((c) => c.authorization === 'Bearer token-123')).toBe(true);
+
+    // The access token is not sent anywhere else, whatever address comes back.
+    calls.length = 0;
+    const elsewhere = new WhatsAppClient(config, serving('https://files.example.net/media/abc'));
+    await expect(elsewhere.downloadMedia('media-78')).rejects.toBeInstanceOf(PermanentSendError);
+    expect(calls).toHaveLength(1);
+    const plain = new WhatsAppClient(config, serving('http://lookaside.fbsbx.com/media/abc'));
+    await expect(plain.downloadMedia('media-79')).rejects.toBeInstanceOf(PermanentSendError);
+
+    const missing = new WhatsAppClient(
+      config,
+      (async () =>
+        new Response(JSON.stringify({ error: { message: 'Not found' } }), {
+          status: 404,
+        })) as typeof fetch,
+    );
+    await expect(missing.downloadMedia('nope')).rejects.toBeInstanceOf(PermanentSendError);
   });
 
   it('tells a failure worth retrying from one that will not pass', async () => {
@@ -979,7 +1406,7 @@ describe('WhatsApp', () => {
                     id: 'wamid.2',
                     timestamp: '1794000001',
                     type: 'image',
-                    image: { caption: 'Our taxi' },
+                    image: { caption: 'Our taxi', id: 'media-77', mime_type: 'image/jpeg' },
                   },
                   {
                     from: '919800000000',
@@ -1016,6 +1443,13 @@ describe('WhatsApp', () => {
       from: '919800000000',
       name: 'Asha',
       phoneNumberId: '1055',
+      media: null,
+    });
+    // A photo comes with what is needed to fetch it.
+    expect(read.messages[1]!.media).toEqual({
+      id: 'media-77',
+      fileName: null,
+      mimeType: 'image/jpeg',
     });
     expect(read.messages[0]!.at.toISOString()).toBe('2026-11-06T21:20:00.000Z');
     expect(read.receipts).toMatchObject([

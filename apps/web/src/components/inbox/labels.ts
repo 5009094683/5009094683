@@ -34,14 +34,14 @@ export function bookingSiteName(channelCode: string | null | undefined): string 
  * says which one it is, else the one its reservation came from.
  */
 export function channelName(
-  conversation: Pick<Conversation, 'channel' | 'meta'>,
-  channelCode?: string | null,
+  conversation: Pick<Conversation, 'channel' | 'meta'> &
+    Partial<Pick<Conversation, 'reservationChannelCode'>>,
 ): string {
   if (conversation.channel === 'email') return 'Email';
   if (conversation.channel === 'whatsapp') return 'WhatsApp';
   const provider = conversation.meta.provider;
   if (typeof provider === 'string' && provider.trim()) return provider.trim();
-  return bookingSiteName(channelCode) ?? 'Booking site';
+  return bookingSiteName(conversation.reservationChannelCode) ?? 'Booking site';
 }
 
 export const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
@@ -173,8 +173,11 @@ export function deliveryLabel(status: Message['status']): string {
   }
 }
 
-/** Where an attachment can be opened, when the channel gave a web address for it. */
-export function attachmentLink(attachment: Attachment): string | null {
+/** Where an attachment can be opened: a file kept here, or the web address the channel gave for it. */
+export function attachmentLink(attachment: Attachment, messageId: string | null): string | null {
+  if (attachment.fileId && messageId) {
+    return `/api/inbox/messages/${messageId}/attachments/${attachment.fileId}`;
+  }
   if (!attachment.url) return null;
   try {
     const url = new URL(attachment.url);

@@ -17,3 +17,9 @@ export {
 export { BLOCK_KIND_LABELS } from './block-labels';
 export type { DomainErrorCode } from './errors';
 export { CHANNEL_NAMES, SOURCE_LABELS, sourceName } from './source-labels';
+export {
+  SAMPLE_TEMPLATE_VALUES,
+  TEMPLATE_VARIABLES,
+  renderTemplate,
+  unfilledVariables,
+} from './template-text';
