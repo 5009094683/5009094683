@@ -515,6 +515,23 @@ describe('the calendar offered to a channel', () => {
     const listed = await listedVilla();
     const reader = await createTestUser(stack.api.t.db, stack.api.org.orgId, { role: 'read_only' });
     const client = await stack.api.login(reader.email);
+    // Neither the list nor the connection's own summary carries them, for anyone: both are
+    // read by everybody who may see the channels. They say how many calendars there are.
+    for (const who of [client, stack.admin]) {
+      const all = await who.get('/channels/connections');
+      const one = await who.get(`/channels/connections/${listed.connectionId}`);
+      expect(all.statusCode).toBe(200);
+      expect(`${all.body}${one.body}`).not.toContain(listed.path);
+      const summary = (all.json().connections as { id: string }[]).find(
+        (c) => c.id === listed.connectionId,
+      );
+      expect(summary).toMatchObject({
+        config: {},
+        calendars: { count: 2, read: 1, failing: 0 },
+        mailbox: null,
+        readFailing: false,
+      });
+    }
     const res = await client.get(`/channels/connections/${listed.connectionId}/ical/feeds`);
     expect(res.statusCode).toBe(200);
     const feeds = (

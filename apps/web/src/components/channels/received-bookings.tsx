@@ -89,6 +89,15 @@ function Reason({
       ? unknownRoom(revision, onItsPage)
       : null;
   const reason = nameRooms(revision.error ?? 'No reason was recorded', roomNamesOf(structure.data));
+  // Too old to act on: what the message said is no longer kept, so there is nothing to apply.
+  if (revision.contentsDropped) {
+    return (
+      <p className="min-w-0 flex-1 basis-64 break-words">
+        {sentence(reason)} The message was never used and its contents are no longer kept, so it
+        cannot be applied any more.
+      </p>
+    );
+  }
   return (
     <p className="min-w-0 flex-1 basis-64 break-words">
       {fromEmail ?? (
@@ -355,17 +364,18 @@ export function ReceivedBookings({
                                     Open the connection
                                   </Link>
                                 )}
-                                {auth.can('channels.manage', revision.propertyId) && (
-                                  <Button
-                                    size="sm"
-                                    icon={<RotateCw className="size-3.5" />}
-                                    loading={applying.has(revision.id)}
-                                    aria-label={`Apply again: ${subject}`}
-                                    onClick={() => void applyAgain(revision)}
-                                  >
-                                    Apply again
-                                  </Button>
-                                )}
+                                {auth.can('channels.manage', revision.propertyId) &&
+                                  !revision.contentsDropped && (
+                                    <Button
+                                      size="sm"
+                                      icon={<RotateCw className="size-3.5" />}
+                                      loading={applying.has(revision.id)}
+                                      aria-label={`Apply again: ${subject}`}
+                                      onClick={() => void applyAgain(revision)}
+                                    >
+                                      Apply again
+                                    </Button>
+                                  )}
                               </div>
                             </div>
                           </td>

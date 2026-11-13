@@ -28,6 +28,8 @@ import {
   type Actor,
 } from '@pms/domain';
 import { createAdapter, type AdapterContext, type ChannelAdapter } from '../adapter';
+import { mailboxSettings } from '../email/adapter';
+import { feedsOf, type IcalState } from '../ical/adapter';
 
 export type ConnectionRow = typeof channelConnections.$inferSelect;
 
@@ -173,8 +175,9 @@ export async function updateConnection(
           }
         }
         // Whatever changed while the connection was off was not queued, so
-        // (re)starting always restates the whole horizon.
-        set.fullSyncRequestedAt = new Date();
+        // (re)starting always restates the whole horizon. Only a connection that sends
+        // anything has a horizon to restate.
+        if (adapter.capabilities.ari) set.fullSyncRequestedAt = new Date();
         set.consecutiveFailures = 0;
         set.nextAttemptAt = null;
         set.lastError = null;
@@ -319,12 +322,22 @@ export async function saveMappings(
         );
       }
     }
-    if (connection.status === 'active' || connection.status === 'error') {
+    if (
+      (connection.status === 'active' || connection.status === 'error') &&
+      adapterFor(connection).capabilities.ari
+    ) {
       await tx
         .update(channelConnections)
         .set({ fullSyncRequestedAt: new Date(), nextAttemptAt: null })
         .where(eq(channelConnections.id, connectionId));
     }
+    // Bookings held because their room was not known are tried again with what is known now,
+    // within moments and without anyone pressing "Apply again" for each.
+    await tx.execute(sql`
+      UPDATE booking_revisions SET next_attempt_at = now()
+      WHERE connection_id = ${connectionId} AND status = 'unmapped'
+        AND raw <> '{"erased": true}'::jsonb
+    `);
     await writeAudit(tx, actor, {
       action: 'channel.mappings_saved',
       entityType: 'channel_connection',
@@ -370,7 +383,18 @@ export interface ConnectionSummary {
   adapter: ChannelAdapterKind;
   name: string;
   status: ConnectionStatus;
-  config: ConnectionConfig;
+  /**
+   * Only what identifies the property at the channel manager. Calendar addresses and mail
+   * server details are settings for those who manage channels, and are read from the
+   * connection's own routes; a summary is read by everyone who may see the channels.
+   */
+  config: Pick<ConnectionConfig, 'externalPropertyId' | 'baseUrl'>;
+  /** For a calendar connection: its calendars, how many are read from a booking site, and how many of those could not be read last time. */
+  calendars: { count: number; read: number; failing: number } | null;
+  /** For a mailbox connection: whether there is a mailbox to read, entered here or for the whole installation. */
+  mailbox: { entered: boolean } | null;
+  /** True while fetching bookings is failing: what the booking sites have may not be here. */
+  readFailing: boolean;
   capabilities: ChannelAdapter['capabilities'];
   /** Date ranges changed in the PMS and not yet accepted by the channel. */
   pendingChanges: number;
@@ -389,6 +413,17 @@ export interface ConnectionSummary {
   lastFullSyncAt: Date | null;
   lastDriftCheckAt: Date | null;
   lastDriftCount: number | null;
+}
+
+function calendarFacts(connection: ConnectionRow): NonNullable<ConnectionSummary['calendars']> {
+  const feeds = feedsOf(connection.config);
+  const state = (connection.state as IcalState).feeds ?? {};
+  const read = feeds.filter((feed) => feed.importUrl);
+  return {
+    count: feeds.length,
+    read: read.length,
+    failing: read.filter((feed) => state[feed.id]?.error).length,
+  };
 }
 
 export async function listConnections(
@@ -447,6 +482,11 @@ export async function listConnections(
   const { rows: rates } = await db.execute<{ connection_id: string; n: number }>(
     sql`SELECT connection_id, count(*)::int AS n FROM channel_rate_mappings WHERE connection_id IN (${idList}) GROUP BY 1`,
   );
+  const { rows: failingReads } = await db.execute<{ dedupe_key: string }>(
+    sql`SELECT dedupe_key FROM alerts
+        WHERE org_id = ${orgId} AND status <> 'resolved' AND dedupe_key LIKE 'pull_failure:%'`,
+  );
+  const failing = new Set(failingReads.map((r) => r.dedupe_key.slice('pull_failure:'.length)));
   return rows.map(({ connection: c, propertyName }) => {
     const capabilities = adapterFor(c).capabilities;
     const listening = capabilities.ari && (c.status === 'active' || c.status === 'error');
@@ -463,7 +503,14 @@ export async function listConnections(
       adapter: c.adapter,
       name: c.name,
       status: c.status,
-      config: c.config,
+      config: {
+        ...(c.config.externalPropertyId ? { externalPropertyId: c.config.externalPropertyId } : {}),
+        ...(c.config.baseUrl ? { baseUrl: c.config.baseUrl } : {}),
+      },
+      calendars: c.adapter === 'ical' ? calendarFacts(c) : null,
+      mailbox:
+        c.adapter === 'email' ? { entered: mailboxSettings(adapterContext(c)) !== null } : null,
+      readFailing: failing.has(c.id),
       capabilities,
       pendingChanges: (queued?.n ?? 0) + (waiting?.n ?? 0),
       oldestPendingAt: oldest ?? null,

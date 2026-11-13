@@ -161,27 +161,10 @@ export const READ_EVERY_MS: Partial<Record<Kind, number>> = { ical: 5 * 60_000, 
 
 /** How a calendar connection's calendars look from its summary: how many, and whether any is read. */
 export function calendarsOf(connection: Connection): { count: number; read: boolean } {
-  const feeds: unknown[] = Array.isArray(connection.config.feeds) ? connection.config.feeds : [];
-  return {
-    count: feeds.length,
-    // Only a calendar known to have no address counts as not read: people who cannot manage
-    // channels may not be told the addresses at all.
-    read: feeds.some(
-      (feed) =>
-        typeof feed !== 'object' || feed === null || !('importUrl' in feed) || feed.importUrl,
-    ),
-  };
+  return { count: connection.calendars?.count ?? 0, read: (connection.calendars?.read ?? 0) > 0 };
 }
 
-/** Whether a mailbox to read has been entered for a mailbox connection. */
+/** Whether there is a mailbox to read for a mailbox connection. */
 export function hasMailbox(connection: Connection): boolean {
-  const mailbox = connection.config.mailbox;
-  return (
-    typeof mailbox === 'object' &&
-    mailbox !== null &&
-    'host' in mailbox &&
-    Boolean(mailbox.host) &&
-    'user' in mailbox &&
-    Boolean(mailbox.user)
-  );
+  return connection.mailbox?.entered ?? false;
 }

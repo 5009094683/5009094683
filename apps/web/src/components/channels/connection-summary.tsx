@@ -80,6 +80,18 @@ function readState(
           : `${failingCalendars.length} calendars cannot be read. Each of them, below, says what went wrong.`,
     };
   }
+  // Where the calendars themselves are not at hand, the summary still says how many fail.
+  const unread = connection.calendars?.failing ?? 0;
+  if (calendars && unread > 0) {
+    return {
+      icon: AlertTriangle,
+      iconClass: 'text-warning-500',
+      text:
+        unread === 1
+          ? 'One calendar cannot be read. Open the connection to see which, and why.'
+          : `${unread} calendars cannot be read. Open the connection to see which, and why.`,
+    };
+  }
   const last = connection.lastPullAt;
   if (!last) {
     return {
@@ -304,7 +316,10 @@ export function ConnectionOverview({
    */
   failingCalendars?: string[];
 }) {
-  const failing = failingRead !== undefined && isLive(connection) && reads(connection);
+  const failing =
+    (failingRead !== undefined || connection.readFailing) &&
+    isLive(connection) &&
+    reads(connection);
   const state = syncState(connection, now, failing, failingCalendars);
   const Icon = state.icon;
 
@@ -315,7 +330,9 @@ export function ConnectionOverview({
         <span>{state.text}</span>
       </p>
       <LastError connection={connection} now={now} />
-      {failing && <ReadFailure connection={connection} failure={failingRead} now={now} />}
+      {failing && failingRead && (
+        <ReadFailure connection={connection} failure={failingRead} now={now} />
+      )}
       {connection.status === 'pending' ? (
         connection.capabilities.ari && (
           <p className="text-[13px] text-ink-soft">
