@@ -4,6 +4,7 @@ import { ArrowLeft, Building2 } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useSWRConfig } from 'swr';
+import { PropertySettings } from '@/components/property-settings/property-settings';
 import { Badge, EmptyState, ErrorState, PageHeader, PageLoading } from '@/components/ui/misc';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -65,6 +66,8 @@ export function PropertyDetailView({ propertyId }: { propertyId: string }) {
             property={data.property}
             onEdit={canManage ? () => setEditingDetails(true) : undefined}
           />
+
+          <PropertySettings detail={data} canManage={canManage} />
 
           <RoomTypes
             detail={data}
