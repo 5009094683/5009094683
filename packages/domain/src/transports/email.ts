@@ -47,7 +47,8 @@ export function emailTransport(
         )
         .orderBy(desc(messages.createdAt))
         .limit(1);
-      const inReplyTo = typeof last?.meta.messageId === 'string' ? last.meta.messageId : undefined;
+      const lastId = typeof last?.meta.messageId === 'string' ? last.meta.messageId : undefined;
+      const inReplyTo = lastId ? `<${lastId.replace(/^<|>$/g, '')}>` : undefined;
       const subject =
         message.subject ??
         (last?.subject ? `Re: ${last.subject.replace(/^(re:\s*)+/i, '')}` : null) ??
@@ -153,9 +154,14 @@ export async function receiveGuestEmail(
       .limit(1);
     known = Boolean(guest);
   }
-  const answered = [mail.inReplyTo, ...(mail.references ?? [])].filter(
-    (id): id is string => typeof id === 'string' && id.length > 0,
-  );
+  // Mail programs and libraries disagree on whether an id carries its angle brackets: try both.
+  const answered = [mail.inReplyTo, ...(mail.references ?? [])]
+    .filter((id): id is string => typeof id === 'string' && id.length > 0)
+    .slice(0, 20)
+    .flatMap((id) => {
+      const bare = id.replace(/^<|>$/g, '');
+      return [bare, `<${bare}>`];
+    });
   if (!known && answered.length > 0) {
     const [ours] = await db
       .select({ id: messages.id })
@@ -164,7 +170,7 @@ export async function receiveGuestEmail(
         and(
           eq(messages.orgId, orgId),
           eq(messages.direction, 'out'),
-          inArray(messages.externalId, answered.slice(0, 20)),
+          inArray(messages.externalId, answered),
         ),
       )
       .limit(1);

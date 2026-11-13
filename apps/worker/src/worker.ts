@@ -17,6 +17,7 @@ import {
   dispatchDue,
   nextDispatchAt,
   recordHeartbeat,
+  registerMessageTransports,
   removeHeartbeat,
   requestDueFullSyncs,
   retryPendingRevisions,
@@ -26,13 +27,23 @@ import {
 import {
   claimJobs,
   completeJob,
+  createGateway,
+  createMailer,
   enqueueJob,
   enqueueRecurring,
   expireHolds,
   failJob,
+  isDomainError,
+  LocalFileStore,
+  paymentOrdersToCheck,
+  runAutomations,
   runDueNightAudits,
+  syncPaymentOrder,
   systemActor,
+  type FileStore,
   type JobRow,
+  type Mailer,
+  type PaymentGateway,
 } from '@pms/domain';
 import { jobHandler, jobKinds, JOBS, type JobContext } from './jobs';
 import { Loop } from './loop';
@@ -45,6 +56,10 @@ export interface WorkerOptions {
   id?: string;
   /** Extra work done in the transaction that takes events off the outbox (outbound webhooks). */
   route?: RouteOptions;
+  /** Stand-ins for the mail server, the file store and the payment gateway, for tests. */
+  mailer?: Mailer;
+  files?: FileStore;
+  gateway?: PaymentGateway;
   /** Timings, shortened by tests. */
   timings?: Partial<Timings>;
 }
@@ -107,7 +122,13 @@ export class Worker {
     this.env = options.env;
     this.log = options.log;
     this.timings = { ...DEFAULT_TIMINGS, ...options.timings };
-    this.context = { db: this.db, env: this.env, log: this.log };
+    this.context = {
+      db: this.db,
+      env: this.env,
+      log: this.log,
+      files: options.files ?? new LocalFileStore(this.env.STORAGE_DIR),
+    };
+    registerMessageTransports(this.db, this.env, options.mailer ?? createMailer(this.env));
     const onError = (name: string) => (err: unknown) =>
       this.log.error({ err, loop: name }, 'worker loop failed; it will run again');
     this.syncLoop = new Loop(() => this.syncTick(), {
@@ -318,6 +339,11 @@ export class Worker {
         else this.log.error({ ...audit }, 'night audit failed');
       }
     });
+    await step('automatic messages', async () => {
+      const run = await runAutomations(this.db, now);
+      if (run.sent + run.skipped > 0) this.log.info({ ...run }, 'automatic messages');
+    });
+    await step('online payments', () => this.checkPaymentOrders(now));
     await step('pruning', () => enqueueRecurring(this.db, JOBS.prune, DAY_MS, {}, { now }));
     return this.timings.scheduleMs;
   }
@@ -348,6 +374,40 @@ export class Worker {
         { connectionId: connection.id, via: 'poll' },
         { key: `${JOBS.channelPull}:poll:${connection.id}`, now },
       );
+    }
+  }
+
+  private gateway: PaymentGateway | null | undefined;
+
+  /**
+   * Asks the gateway about online payments nobody came back from: a guest who
+   * paid and closed the tab is confirmed, and an order past its time is closed.
+   */
+  private async checkPaymentOrders(now: Date): Promise<void> {
+    if (this.gateway === undefined) {
+      try {
+        this.gateway = this.options.gateway ?? createGateway(this.env, this.db);
+      } catch (err) {
+        if (!isDomainError(err, 'not_configured')) throw err;
+        this.gateway = null;
+      }
+    }
+    if (!this.gateway) return;
+    for (const orderId of await paymentOrdersToCheck(this.db, this.gateway.name, now)) {
+      try {
+        const outcome = await syncPaymentOrder(this.db, this.gateway, orderId, now);
+        if (outcome.settled) {
+          this.log.info(
+            { orderId, refunded: outcome.refunded },
+            outcome.refunded
+              ? 'online payment arrived too late and was refunded'
+              : 'online payment recorded',
+          );
+        }
+      } catch (err) {
+        // One order the gateway cannot answer for must not hold up the others.
+        this.log.warn({ err, orderId }, 'could not check an online payment');
+      }
     }
   }
 

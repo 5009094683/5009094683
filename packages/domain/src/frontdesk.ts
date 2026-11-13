@@ -37,7 +37,7 @@ import {
   type ReservationDetail,
   type ReservationRoomRow,
 } from './reservations';
-import { transact } from './sqlx';
+import { parsePgTimestamp, transact } from './sqlx';
 import { computeTax, taxRuleFor } from './taxes';
 
 type ReservationRow = typeof reservations.$inferSelect;
@@ -503,6 +503,8 @@ export interface FrontDeskStay {
   currency: string;
   overbooked: boolean;
   needsReview: boolean;
+  /** When the guest filled in online check-in, if they did. */
+  onlineCheckinAt: Date | null;
 }
 
 export interface FrontDeskBoard {
@@ -559,6 +561,7 @@ export async function frontDeskBoard(
     currency: string;
     overbooked: boolean;
     needs_review: boolean;
+    online_checkin_at: string | null;
     checked_in_on: string | null;
     checked_out_on: string | null;
   }>(sql`
@@ -567,6 +570,7 @@ export async function frontDeskBoard(
            rr.unit_id, u.name AS unit_name, u.housekeeping_status AS housekeeping,
            rr.check_in::text, rr.check_out::text, rr.adults, rr.children,
            r.arrival_time, r.special_requests, r.currency, r.overbooked, r.needs_review,
+           r.online_checkin_at,
            (rr.checked_in_at AT TIME ZONE ${property.timezone})::date::text AS checked_in_on,
            (rr.checked_out_at AT TIME ZONE ${property.timezone})::date::text AS checked_out_on,
            (SELECT sum(l.amount + l.tax_amount) FROM folio_lines l JOIN folios f ON f.id = l.folio_id
@@ -606,6 +610,7 @@ export async function frontDeskBoard(
       currency: r.currency,
       overbooked: r.overbooked,
       needsReview: r.needs_review,
+      onlineCheckinAt: parsePgTimestamp(r.online_checkin_at),
     } satisfies FrontDeskStay,
     checkedInOn: r.checked_in_on,
     checkedOutOn: r.checked_out_on,

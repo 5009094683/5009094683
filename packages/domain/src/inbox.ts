@@ -834,7 +834,7 @@ export async function getConversation(
     .select()
     .from(messages)
     .where(eq(messages.conversationId, conversationId))
-    .orderBy(asc(messages.createdAt), asc(messages.id))
+    .orderBy(asc(messages.createdAt), asc(messages.seq))
     .limit(1000);
   const transport = transports.get(summary.channel);
   return {
@@ -980,4 +980,34 @@ export function requireAddress(conversation: ConversationRow): string {
     throw new DomainError('invalid_state', 'This conversation has no address to send to');
   }
   return conversation.contactAddress;
+}
+
+/**
+ * The organisation a message from outside belongs to. With one organisation
+ * there is nothing to decide; with several, the one that knows the sender (as
+ * a guest, or from an earlier conversation), provided only one does.
+ */
+export async function organizationForSender(
+  db: DbOrTx,
+  channel: ConversationChannel,
+  address: string,
+): Promise<string | null> {
+  const { rows: orgs } = await db.execute<{ id: string }>(
+    sql`SELECT id FROM organizations LIMIT 2`,
+  );
+  if (orgs.length === 1) return orgs[0]!.id;
+  const key = threadKey(channel, address);
+  const { rows } = await db.execute<{ org_id: string }>(sql`
+    SELECT DISTINCT org_id FROM conversations
+    WHERE channel = ${channel} AND external_thread_id = ${key}
+    UNION
+    SELECT DISTINCT org_id FROM guests
+    WHERE anonymized_at IS NULL AND ${
+      channel === 'email'
+        ? sql`email = ${key}`
+        : sql`regexp_replace(phone, '\\D', '', 'g') = ${key}`
+    }
+    LIMIT 2
+  `);
+  return rows.length === 1 ? rows[0]!.org_id : null;
 }

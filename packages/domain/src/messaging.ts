@@ -636,6 +636,8 @@ export async function sendTemplate(
   const [guest] = reservation.guestId
     ? await db.select().from(guests).where(eq(guests.id, reservation.guestId))
     : [];
+  // An organisation that has never opened its templates still has the standard ones to send.
+  await ensureMessagingDefaults(db, actor.orgId);
   const template = await findTemplate(
     db,
     actor.orgId,
