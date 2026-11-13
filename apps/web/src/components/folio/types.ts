@@ -1,7 +1,7 @@
 import type {
   ChargeKind as DomainChargeKind,
   CompanyView,
-  FolioLineRow,
+  FolioLineView,
   FolioView,
   InvoiceRow,
   PaymentRow,
@@ -9,7 +9,7 @@ import type {
 import type { Serialized } from '@/lib/types';
 
 export type Folio = Serialized<FolioView>;
-export type FolioLine = Serialized<FolioLineRow>;
+export type FolioLine = Serialized<FolioLineView>;
 export type Payment = Serialized<PaymentRow>;
 export type Invoice = Serialized<InvoiceRow>;
 export type Company = Serialized<CompanyView>;

@@ -37,9 +37,11 @@ export function RefundDialog({
 }) {
   const toast = useToast();
   const paid = -line.amount;
+  // What can still go back: the payment less what earlier refunds returned.
+  const left = line.payment ? line.payment.refundable : paid;
   // An overpayment is the usual reason: the amount starts at what the guest is owed.
   const [amount, setAmount] = useState(
-    String(fromMinor(credit > 0 ? Math.min(paid, credit) : paid, currency)),
+    String(fromMinor(credit > 0 ? Math.min(left, credit) : left, currency)),
   );
   const [reason, setReason] = useState('');
   const [method, setMethod] = useState<PaymentMethod | ''>('');
@@ -64,13 +66,15 @@ export function RefundDialog({
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const value = parseAmount(amount, currency);
-    const tooMuch = value !== null && value > paid;
+    const tooMuch = value !== null && value > left;
     const badReference = looksLikeCardNumber(reference);
     setAmountError(
       value === null
         ? AMOUNT_ERROR
         : tooMuch
-          ? `No more than ${formatMoney(paid, currency)} was paid.`
+          ? left < paid
+            ? `Only ${formatMoney(left, currency)} of this payment is left to refund.`
+            : `No more than ${formatMoney(paid, currency)} was paid.`
           : null,
     );
     setReferenceError(badReference ? CARD_NUMBER_ERROR : null);
@@ -99,6 +103,7 @@ export function RefundDialog({
         {save.error && <Notice tone="danger">{save.error}</Notice>}
         <p className="text-[13px] text-ink-soft">
           {formatMoney(paid, currency)} was paid
+          {left < paid && `, of which ${formatMoney(left, currency)} has not been refunded yet`}
           {credit > 0 && `, and the folio is ${formatMoney(credit, currency)} in credit`}. This
           records the refund on the bill. It does not send any money: give it back yourself, the way
           you record it here.

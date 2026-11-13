@@ -26,7 +26,7 @@ import {
   totalsOf,
   transferToCompany,
 } from './folios';
-import { formatMoney } from './money';
+import { displayMoney } from './money';
 import { findFreeUnits } from './occupancy';
 import { emit } from './outbox';
 import {
@@ -104,7 +104,7 @@ export async function postRoomCharges(
       propertyId: reservation.propertyId,
       businessDate: night.date,
       kind: 'room',
-      description: `${type?.name ?? 'Room'}, night of ${night.date}`,
+      description: `${type?.name ?? 'Room'}, night of ${longDate(night.date)}`,
       amount: night.amount,
       taxAmount: tax.taxAmount,
       taxes: tax.taxes,
@@ -241,6 +241,8 @@ export async function checkIn(
           to: reservation.checkOut,
         },
       },
+      // Checking in opens the guest's bill.
+      { kind: 'folio.updated', propertyId: reservation.propertyId, payload: { reservationId } },
     ]);
     return loadReservation(tx, actor.orgId, reservationId);
   });
@@ -416,8 +418,8 @@ export async function checkOut(
         throw new DomainError(
           'conflict',
           balance > 0
-            ? `${formatMoney(balance, reservation.currency)} is still owed. Take payment, bill it to a company, or check out leaving the folio open.`
-            : `The guest is ${formatMoney(-balance, reservation.currency)} in credit. Refund it, or check out leaving the folio open.`,
+            ? `${displayMoney(balance, reservation.currency)} is still owed. Take payment, bill it to a company, or check out leaving the folio open.`
+            : `The guest is ${displayMoney(-balance, reservation.currency)} in credit. Refund it, or check out leaving the folio open.`,
           { reason: 'balance_due', balance },
         );
       }
@@ -466,6 +468,8 @@ export async function checkOut(
           to: reservation.checkOut,
         },
       },
+      // Checking out charges the nights not yet charged and closes bills that are settled.
+      { kind: 'folio.updated', propertyId: reservation.propertyId, payload: { reservationId } },
       { kind: 'task.updated', propertyId: reservation.propertyId, payload: {} },
     ]);
     return {
@@ -474,6 +478,16 @@ export async function checkOut(
       nightsReleased,
     };
   });
+}
+
+/** "13 Nov 2026": how a date reads on a bill and on the invoice printed from it. */
+function longDate(date: DateString): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(`${date}T00:00:00Z`));
 }
 
 function daysBetween(from: DateString, to: DateString): number {

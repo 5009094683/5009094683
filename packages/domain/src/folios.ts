@@ -18,9 +18,9 @@ import { writeAudit } from './audit';
 import type { Actor } from './context';
 import { todayIn, type DateString } from './dates';
 import { conflict, invalidState, notFound, validationError } from './errors';
-import { formatMoney } from './money';
+import { displayMoney, formatMoney } from './money';
 import { emit } from './outbox';
-import { transact } from './sqlx';
+import { transact, uuidArray } from './sqlx';
 import { computeTax, taxRuleFor } from './taxes';
 
 export type FolioRow = typeof folios.$inferSelect;
@@ -76,9 +76,17 @@ export function totalsOf(
   return totals;
 }
 
+export interface FolioLineView extends FolioLineRow {
+  /**
+   * For a payment or a refund: how the money moved, and for a payment how
+   * much of it has not been refunded yet. Null for charges.
+   */
+  payment: { method: PaymentMethod; refundable: number } | null;
+}
+
 export interface FolioView extends Omit<FolioRow, 'routes'> {
   routes: FolioLineKind[];
-  lines: FolioLineRow[];
+  lines: FolioLineView[];
   totals: FolioTotals;
   reservationCode: string | null;
   guestName: string | null;
@@ -108,9 +116,33 @@ export async function getFolio(db: DbOrTx, orgId: string, folioId: string): Prom
     .from(folioLines)
     .where(eq(folioLines.folioId, folioId))
     .orderBy(asc(folioLines.businessDate), asc(folioLines.seq));
+  const paymentIds = [...new Set(lines.flatMap((l) => (l.paymentId ? [l.paymentId] : [])))];
+  const { rows: money } = paymentIds.length
+    ? await db.execute<{ id: string; method: PaymentMethod; amount: string; refunded: string }>(
+        sql`
+          SELECT p.id, p.method, p.amount::text,
+            coalesce((SELECT sum(r.amount) FROM payments r
+                      WHERE r.refund_of_payment_id = p.id AND r.status = 'captured'), 0)::text AS refunded
+          FROM payments p WHERE p.id = ANY(${uuidArray(paymentIds)})
+        `,
+      )
+    : { rows: [] };
+  const byPayment = new Map(money.map((m) => [m.id, m]));
   return {
     ...row.folio,
-    lines,
+    lines: lines.map((line) => {
+      const paid = line.paymentId ? byPayment.get(line.paymentId) : undefined;
+      return {
+        ...line,
+        payment: paid
+          ? {
+              method: paid.method,
+              // Refunds are stored as negative payments against the one they return.
+              refundable: Math.max(0, Number(paid.amount) + Number(paid.refunded)),
+            }
+          : null,
+      };
+    }),
     totals: totalsOf(lines),
     reservationCode: row.code,
     guestName: row.guestName,
@@ -629,7 +661,9 @@ export async function refundPayment(
       throw validationError('The refund must be a whole amount above zero');
     }
     if (amount > left) {
-      throw conflict(`Only ${formatMoney(left, folio.currency)} of this payment is left to refund`);
+      throw conflict(
+        `Only ${displayMoney(left, folio.currency)} of this payment is left to refund`,
+      );
     }
     const [property] = await tx
       .select()
@@ -839,7 +873,7 @@ export async function transferToCompany(
       const owed = Number(rows[0]?.owed ?? 0);
       if (owed + amount > company.creditLimit) {
         throw conflict(
-          `${company.name} would exceed its credit limit of ${formatMoney(company.creditLimit, folio.currency)} (already owes ${formatMoney(owed, folio.currency)})`,
+          `${company.name} would exceed its credit limit of ${displayMoney(company.creditLimit, folio.currency)} (already owes ${displayMoney(owed, folio.currency)})`,
         );
       }
     }
@@ -915,7 +949,7 @@ export async function closeFolio(db: DbOrTx, actor: Actor, folioId: string): Pro
     const { balance } = totalsOf(lines);
     if (balance !== 0) {
       throw invalidState(
-        `This folio cannot be closed while ${formatMoney(Math.abs(balance), folio.currency)} is ${balance > 0 ? 'owed' : 'in credit'}`,
+        `This folio cannot be closed while ${displayMoney(Math.abs(balance), folio.currency)} is ${balance > 0 ? 'owed' : 'in credit'}`,
       );
     }
     const [closed] = await tx

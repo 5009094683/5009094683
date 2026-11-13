@@ -428,16 +428,25 @@ describe('folios', () => {
       method: 'card',
     });
     expect(await reservationBalance(t.db, r.id)).toBe(100_000);
+    // The bill says how each amount was paid and how much of a payment can still go back.
+    const money = async () =>
+      (await getFolio(t.db, org.orgId, folio!.id)).lines.map((l) => [l.kind, l.payment]);
+    expect(await money()).toEqual([
+      ['room', null],
+      ['payment', { method: 'card', refundable: 372_500 }],
+      ['refund', { method: 'card', refundable: 0 }],
+    ]);
     expect(
       (await errorOf(refundPayment(t.db, org.admin, payment.id, { amount: 400_000, reason: 'x' })))
         .message,
-    ).toMatch(/Only INR 3725.00 of this payment is left to refund/);
+    ).toMatch(/Only ₹3,725 of this payment is left to refund/);
     // With no amount, the rest is refunded.
     const rest = await refundPayment(t.db, org.admin, payment.id, { reason: 'Stay cancelled' });
     expect(rest.payment.amount).toBe(-372_500);
     expect(
       (await errorOf(refundPayment(t.db, org.admin, payment.id, { reason: 'again' }))).message,
     ).toMatch(/already been refunded in full/);
+    expect((await money())[1]).toEqual(['payment', { method: 'card', refundable: 0 }]);
     // A refund cannot itself be refunded.
     expect(
       (await errorOf(refundPayment(t.db, org.admin, rest.payment.id, { reason: 'x' }))).code,
@@ -535,7 +544,7 @@ describe('folios', () => {
     const [secondFolio] = await listFolios(t.db, org.orgId, second.id);
     expect(
       (await errorOf(transferToCompany(t.db, org.admin, secondFolio!.id, company.id))).message,
-    ).toMatch(/would exceed its credit limit of INR 10000.00 \(already owes INR 4725.00\)/);
+    ).toMatch(/would exceed its credit limit of ₹10,000 \(already owes ₹4,725\)/);
 
     // The company pays; its account shows both entries.
     await recordPayment(t.db, org.admin, {
@@ -563,7 +572,7 @@ describe('folios', () => {
     });
     const [folio] = await listFolios(t.db, org.orgId, r.id);
     expect((await errorOf(closeFolio(t.db, org.admin, folio!.id))).message).toMatch(
-      /INR 1180.00 is owed/,
+      /₹1,180 is owed/,
     );
     await recordPayment(t.db, org.admin, { folioId: folio!.id, method: 'cash', amount: 118_000 });
     expect((await closeFolio(t.db, org.admin, folio!.id)).status).toBe('closed');
@@ -651,7 +660,7 @@ describe('front desk', () => {
     // A same-day check-out still pays for the night.
     const owing = await errorOf(checkOut(t.db, org.admin, r.id));
     expect(owing.code).toBe('conflict');
-    expect(owing.message).toMatch(/INR 4725.00 is still owed/);
+    expect(owing.message).toMatch(/₹4,725 is still owed/);
     expect(owing.details).toMatchObject({ reason: 'balance_due', balance: 472_500 });
     // Nothing happened: the refusal undid the charge and the guest is still in.
     expect((await loadReservation(t.db, org.orgId, r.id)).status).toBe('in_house');
@@ -787,6 +796,10 @@ describe('night audit', () => {
       { code: 'CGST', rateBp: 900, amount: 72_000 },
       { code: 'SGST', rateBp: 900, amount: 72_000 },
     ]);
+    // Worded for the bill and the invoice a guest reads, not as a date a database writes.
+    expect(folioB!.lines[0]!.description).toMatch(
+      /^Deluxe Room, night of \d{1,2} [A-Z][a-z]{2} \d{4}$/,
+    );
 
     // The same day cannot be closed twice; the next one has not begun.
     expect(

@@ -99,8 +99,10 @@ export function FolioLines({
             const charge = isCharge(line);
             const canVoid =
               onVoid && charge && !voided && !line.invoiceId && folio.status === 'open';
-            const canRefund =
-              onRefund && line.kind === 'payment' && !voided && line.paymentId && line.amount < 0;
+            // What is left of a payment after earlier refunds; all of it when the server does not say.
+            const refundable = line.payment ? line.payment.refundable : -line.amount;
+            const isPayment = line.kind === 'payment' && !voided && line.amount < 0;
+            const canRefund = onRefund && isPayment && line.paymentId && refundable > 0;
             const struck = voided && 'text-ink-faint line-through';
             return (
               <tr key={line.id} className="align-top">
@@ -116,6 +118,13 @@ export function FolioLines({
                   {voided && (
                     <span className="mt-0.5 block text-xs text-ink-soft">
                       Voided: {line.voidReason ?? 'no reason given'}
+                    </span>
+                  )}
+                  {isPayment && refundable < -line.amount && (
+                    <span className="mt-0.5 block text-xs text-ink-soft">
+                      {refundable > 0
+                        ? `${formatMoney(refundable, currency)} of this has not been refunded`
+                        : 'Refunded in full'}
                     </span>
                   )}
                   {line.invoiceId && (
