@@ -145,6 +145,14 @@ export const reservations = pgTable(
     holdExpiresAt: timestamptz('hold_expires_at'),
     groupId: uuid('group_id').references(() => reservationGroups.id, { onDelete: 'set null' }),
     companyId: uuid('company_id'),
+    /** The promotional code the booking was made with, and what it took off the room charges before tax. */
+    promoCodeId: uuid('promo_code_id'),
+    promoCode: text('promo_code'),
+    discountAmount: money('discount_amount').notNull().default(0),
+    /** Raising this makes every link sent to the guest for this booking stop working. */
+    guestTokenVersion: integer('guest_token_version').notNull().default(1),
+    /** When the guest completed online check-in. */
+    onlineCheckinAt: timestamptz('online_checkin_at'),
     /** Arrived over capacity (two channels sold the last room). Staff must resolve. */
     overbooked: boolean('overbooked').notNull().default(false),
     /** Created from incomplete data (calendar feed, parsed email) and awaiting staff confirmation. */

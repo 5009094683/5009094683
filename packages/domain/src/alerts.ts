@@ -17,6 +17,9 @@ export type AlertKind =
   | 'calendar_feed_failure'
   | 'unusual_cancellations'
   | 'payment_failed'
+  | 'payment_unplaced'
+  | 'refund_pending'
+  | 'message_failed'
   | 'night_audit'
   | 'ledger_mismatch';
 

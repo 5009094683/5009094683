@@ -164,6 +164,63 @@ export type MaintenanceStatus = (typeof MAINTENANCE_STATUSES)[number];
 export const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
 export type Priority = (typeof PRIORITIES)[number];
 
+export const PROMO_KINDS = ['percent', 'amount'] as const;
+export type PromoKind = (typeof PROMO_KINDS)[number];
+
+/** What a guest is asked to pay online: `created` until the gateway reports an outcome. */
+export const PAYMENT_ORDER_STATUSES = [
+  'created',
+  'paid',
+  'failed',
+  'expired',
+  'cancelled',
+] as const;
+export type PaymentOrderStatus = (typeof PAYMENT_ORDER_STATUSES)[number];
+
+export const PAYMENT_ORDER_PURPOSES = ['booking', 'payment_link'] as const;
+export type PaymentOrderPurpose = (typeof PAYMENT_ORDER_PURPOSES)[number];
+
+/** Where a conversation with a guest takes place. `ota` is a booking site's own message box. */
+export const CONVERSATION_CHANNELS = ['email', 'whatsapp', 'ota'] as const;
+export type ConversationChannel = (typeof CONVERSATION_CHANNELS)[number];
+
+/** `waiting`: answered, nothing for staff to do until the guest writes again. */
+export const CONVERSATION_STATUSES = ['open', 'waiting', 'closed'] as const;
+export type ConversationStatus = (typeof CONVERSATION_STATUSES)[number];
+
+export const MESSAGE_DIRECTIONS = ['in', 'out'] as const;
+export type MessageDirection = (typeof MESSAGE_DIRECTIONS)[number];
+
+/** A `note` is written by staff for staff and is never sent. */
+export const MESSAGE_KINDS = ['text', 'note'] as const;
+export type MessageKind = (typeof MESSAGE_KINDS)[number];
+
+export const MESSAGE_STATUSES = [
+  'received',
+  'queued',
+  'sent',
+  'delivered',
+  'read',
+  'failed',
+] as const;
+export type MessageStatus = (typeof MESSAGE_STATUSES)[number];
+
+/** The moments in a stay at which a message can be sent by itself. */
+export const AUTOMATION_TRIGGERS = [
+  'booking_confirmed',
+  'pre_arrival',
+  'check_in_day',
+  'post_stay',
+  'booking_cancelled',
+] as const;
+export type AutomationTrigger = (typeof AUTOMATION_TRIGGERS)[number];
+
+export const ONLINE_CHECKIN_STATUSES = ['started', 'submitted', 'verified'] as const;
+export type OnlineCheckinStatus = (typeof ONLINE_CHECKIN_STATUSES)[number];
+
+export const STORED_FILE_KINDS = ['id_document', 'message_attachment', 'other'] as const;
+export type StoredFileKind = (typeof STORED_FILE_KINDS)[number];
+
 /** SQL fragment helper: `'a','b','c'` for CHECK constraints. */
 export function sqlList(values: readonly string[]): string {
   return values.map((v) => `'${v}'`).join(',');

@@ -39,6 +39,18 @@ export interface PropertySettings {
   /** Minutes a website booking holds inventory while the guest pays. */
   bookingHoldMinutes?: number;
   bookingEngineEnabled?: boolean;
+  /**
+   * What a website booking pays when it is made: the whole stay, a deposit,
+   * or nothing (pay at the property). Absent: the whole stay. A non-refundable
+   * rate is always paid in full.
+   */
+  bookingPayment?: 'full' | 'deposit' | 'none';
+  /** Share of the stay taken as a deposit, in percent. Absent: 30. */
+  depositPercent?: number;
+  /** House rules and terms a guest accepts when booking and at online check-in. */
+  bookingTerms?: string;
+  /** Sent to guests before arrival: directions, key collection, contact number. */
+  arrivalInstructions?: string;
   /** Children at or below this age count as children for pricing. */
   childMaxAge?: number;
   /** Minutes of housekeeping work for a departure clean and a stay-over service. */
