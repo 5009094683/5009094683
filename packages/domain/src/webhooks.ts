@@ -583,7 +583,10 @@ export async function queueWebhookTest(
   )!;
 }
 
-/** Puts a delivery that was given up back in the queue, to be tried now. */
+/**
+ * Sends a delivery now: one that was given up, or one that failed and is waiting for its
+ * next attempt, which can be hours away when the receiver has just been repaired.
+ */
 export async function retryWebhookDelivery(
   db: DbOrTx,
   actor: Actor,
@@ -595,9 +598,6 @@ export async function retryWebhookDelivery(
     .where(and(eq(webhookDeliveries.id, deliveryId), eq(webhookDeliveries.orgId, actor.orgId)));
   if (!delivery) throw notFound('Delivery', String(deliveryId));
   if (delivery.status === 'delivered') throw invalidState('This delivery already got through');
-  if (delivery.status === 'pending') {
-    throw invalidState('This delivery is already waiting to be sent');
-  }
   const endpoint = await requireEndpoint(db, actor.orgId, delivery.endpointId);
   if (!endpoint.active) throw invalidState('Switch the webhook on before sending this again');
   await db

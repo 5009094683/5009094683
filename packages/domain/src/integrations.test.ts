@@ -464,16 +464,22 @@ describe('webhooks', () => {
       code: 'invalid_state',
     });
 
-    // One that is still waiting its turn is not put in the queue a second time.
+    // One that failed and is waiting for its next attempt can be sent now instead, and
+    // starts again with a clean slate.
     await queue([event()]);
+    answer = 500;
+    const at = new Date('2027-01-11T10:00:00Z');
+    await deliverDueWebhooks(t.db, send, { now: at });
     const [waiting] = await listWebhookDeliveries(t.db, org.orgId, endpoint.id, {
       status: 'pending',
     });
-    await expect(retryWebhookDelivery(t.db, org.admin, waiting!.id)).rejects.toThrow(
-      'This delivery is already waiting to be sent',
-    );
+    expect(waiting).toMatchObject({ attempts: 1, lastStatusCode: 500 });
+    await retryWebhookDelivery(t.db, org.admin, waiting!.id);
+    const [reset] = await listWebhookDeliveries(t.db, org.orgId, endpoint.id, {
+      status: 'pending',
+    });
+    expect(reset).toMatchObject({ attempts: 0, lastStatusCode: null, lastError: null });
     // And nothing is sent, tested or sent again while the webhook is switched off.
-    answer = 500;
     await deliverDueWebhooks(t.db, send);
     await updateWebhookEndpoint(t.db, org.admin, endpoint.id, { active: false }, open);
     await expect(queueWebhookTest(t.db, org.admin, endpoint.id)).rejects.toThrow(
