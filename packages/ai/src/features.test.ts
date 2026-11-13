@@ -423,6 +423,13 @@ describe('risk, rooms and workload', () => {
     const codes = list.map((r) => r.code);
     expect(codes.indexOf(risky.code)).toBeLessThan(codes.indexOf(safe.code));
     expect(list.find((r) => r.code === risky.code)).toMatchObject({ source: 'BDC' });
+    // Someone due yesterday who may still come is on the front desk's list, so is scored too.
+    const overdue = await book(-1, 2);
+    const later = await arrivalsAtRisk(t.db, org.orgId, hotel.property.id, { days: 10 });
+    expect(later.find((r) => r.code === overdue.code)!.factors).toContain(
+      'Was due earlier and has not arrived',
+    );
+    expect(scoreRisk({ ...base, daysToArrival: -1 }).noShow).toBe(scoreRisk(base).noShow + 20);
     const rival = await createTestOrg(t.db, 'Rival 2');
     await expect(arrivalsAtRisk(t.db, rival.orgId, hotel.property.id)).rejects.toMatchObject({
       code: 'not_found',

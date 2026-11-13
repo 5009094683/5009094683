@@ -2,6 +2,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { properties, type Database, type DbOrTx } from '@pms/db';
 import {
   addDays,
+  businessDateOf,
   eachDate,
   notFound,
   raiseAlert,
@@ -88,7 +89,8 @@ export function scoreRisk(row: {
   if (row.nights >= 7) add(5, 0, 'Long stay');
   if (row.onlineCheckin) add(-15, -20, 'Checked in online');
   // A booking still standing on the eve of arrival is far less likely to be cancelled than one made months out.
-  if (row.daysToArrival <= 1) add(-8, 0, 'Arriving within a day');
+  if (row.daysToArrival < 0) add(0, 20, 'Was due earlier and has not arrived');
+  else if (row.daysToArrival <= 1) add(-8, 0, 'Arriving within a day');
 
   const clamp = (n: number): number => Math.min(95, Math.max(1, Math.round(n)));
   const worst = Math.max(clamp(cancellation), clamp(noShow));
@@ -180,7 +182,9 @@ export async function arrivalsAtRisk(
     SELECT id, code, guest_name, check_in::text, check_out::text, coalesce(channel_code, source) AS source
     FROM reservations
     WHERE property_id = ${propertyId} AND status = 'confirmed'
-      AND check_in >= ${today}::date AND check_in < ${addDays(today, options.days ?? 14)}::date
+      -- Also those due earlier who may still come: the front desk lists them as arrivals too.
+      AND check_out > ${businessDateOf(property, options.now)}::date
+      AND check_in < ${addDays(today, options.days ?? 14)}::date
     ORDER BY check_in LIMIT 500
   `);
   const risks = await reservationRisks(

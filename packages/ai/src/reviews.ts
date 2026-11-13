@@ -9,7 +9,7 @@ import {
   type ReviewTopic,
   type Sentiment,
 } from '@pms/db';
-import { notFound, type Actor, type DateString } from '@pms/domain';
+import { emit, notFound, type Actor, type DateString } from '@pms/domain';
 import type { LlmProvider } from './provider';
 import { extract } from './runs';
 
@@ -210,7 +210,15 @@ export async function analysePendingReviews(
     .where(isNull(reviews.analysedAt))
     .orderBy(desc(reviews.receivedAt))
     .limit(limit);
-  for (const { id } of waiting) await analyseReview(db, provider, id);
+  const read: { orgId: string; propertyId: string }[] = [];
+  for (const { id } of waiting) read.push(await analyseReview(db, provider, id));
+  // One announcement per property, so open review screens show what was read.
+  const seen = new Set<string>();
+  for (const { orgId, propertyId } of read) {
+    if (seen.has(propertyId)) continue;
+    seen.add(propertyId);
+    await emit(db, orgId, [{ kind: 'review.updated', propertyId, payload: { analysed: true } }]);
+  }
   return waiting.length;
 }
 

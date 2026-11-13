@@ -1,6 +1,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { channelConnections, reservations, reviews, type DbOrTx } from '@pms/db';
 import {
+  emit,
   enqueueJob,
   invalidState,
   notFound,
@@ -100,6 +101,11 @@ export async function pullReviews(db: DbOrTx, connectionId: string): Promise<Rev
       })
       .where(and(eq(reviews.connectionId, connection.id), eq(reviews.externalId, review.id)));
   }
+  if (fresh > 0) {
+    await emit(db, connection.orgId, [
+      { kind: 'review.updated', propertyId: connection.propertyId, payload: { fresh } },
+    ]);
+  }
   return { outcome: 'ok', fresh };
 }
 
@@ -148,6 +154,9 @@ export async function queueReviewReply(
       propertyId: review.propertyId,
       summary: `Replied to a review${review.guestName ? ` from ${review.guestName}` : ''}`,
     });
+    await emit(tx, actor.orgId, [
+      { kind: 'review.updated', propertyId: review.propertyId, payload: { reviewId } },
+    ]);
     return updated!;
   });
 }
@@ -166,6 +175,11 @@ export async function sendReviewReply(
     .select()
     .from(channelConnections)
     .where(eq(channelConnections.id, review.connectionId));
+  // Open screens show the reply's new state without being asked again.
+  const announce = (): Promise<void> =>
+    emit(db, review.orgId, [
+      { kind: 'review.updated', propertyId: review.propertyId, payload: { reviewId } },
+    ]);
   const fail = async (error: string): Promise<'failed'> => {
     await db
       .update(reviews)
@@ -182,6 +196,7 @@ export async function sendReviewReply(
       entityId: review.id,
       dedupeKey: `review_reply_failed:${review.id}`,
     });
+    await announce();
     return 'failed';
   };
   if (!connection) return fail('The booking site connection no longer exists.');
@@ -199,5 +214,6 @@ export async function sendReviewReply(
     .update(reviews)
     .set({ replyStatus: 'sent', replyError: null, repliedAt: new Date() })
     .where(eq(reviews.id, reviewId));
+  await announce();
   return 'sent';
 }

@@ -183,8 +183,25 @@ export async function updateProperty(
   patch: Partial<Omit<PropertyInput, 'code' | 'kind'>> & { active?: boolean },
 ): Promise<PropertyRow> {
   validatePropertyFields(patch);
+  for (const event of patch.settings?.pricingEvents ?? []) {
+    if (event.to < event.from) {
+      throw validationError(`"${event.name}" ends before it begins`);
+    }
+  }
   return transact(db, async (tx) => {
     const before = await requireProperty(tx, actor.orgId, propertyId);
+    const autopilot = patch.settings?.pricingAutopilotRoomTypes ?? [];
+    if (autopilot.length > 0) {
+      const own = await tx
+        .select({ id: roomTypes.id })
+        .from(roomTypes)
+        .where(and(eq(roomTypes.propertyId, propertyId), inArray(roomTypes.id, autopilot)));
+      if (own.length !== new Set(autopilot).size) {
+        throw validationError(
+          'Rates can only be applied automatically for room types of this property',
+        );
+      }
+    }
     const next = {
       ...patch,
       ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),

@@ -40,6 +40,29 @@ const propertySettings = z
     depositPercent: z.number().int().min(1).max(100).optional(),
     bookingTerms: z.string().max(10_000).optional(),
     arrivalInstructions: z.string().max(4000).optional(),
+    knowledge: z
+      .string()
+      .max(8000)
+      .optional()
+      .describe('Facts that may be used when drafting replies to guests'),
+    pricingAutopilotRoomTypes: z
+      .array(uuid)
+      .max(200)
+      .optional()
+      .describe('Room types whose suggested rates are applied without waiting for a person'),
+    pricingMaxChangePercent: z.number().int().min(5).max(100).optional(),
+    pricingRounding: z.number().int().min(1).max(10_000_000).optional(),
+    pricingEvents: z
+      .array(
+        z.object({
+          from: dateString,
+          to: dateString,
+          name: z.string().trim().min(1).max(120),
+          upliftPercent: z.number().int().min(0).max(200).optional(),
+        }),
+      )
+      .max(100)
+      .optional(),
     childMaxAge: z.number().int().min(0).max(17).optional(),
     departureCleanMinutes: z.number().int().min(5).max(480).optional(),
     stayoverCleanMinutes: z.number().int().min(5).max(480).optional(),

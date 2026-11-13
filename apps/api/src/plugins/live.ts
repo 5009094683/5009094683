@@ -19,7 +19,7 @@ interface Subscriber {
 
 /** Outbox kinds that open screens care about. Rate-plan internals reach them as `rates.updated`. */
 const FORWARDED =
-  /^(reservation|block|unit|rates|alert|sync|message|folio|task)\.|^ari\.availability$/;
+  /^(reservation|block|unit|rates|alert|sync|message|folio|task|review)\.|^ari\.availability$/;
 
 /**
  * Fans database change notifications out to connected browsers. Each server

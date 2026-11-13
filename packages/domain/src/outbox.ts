@@ -28,7 +28,8 @@ export type EntityEvent = {
     | 'sync.updated'
     | 'message.received'
     | 'folio.updated'
-    | 'task.updated';
+    | 'task.updated'
+    | 'review.updated';
   propertyId: string | null;
   payload: Record<string, unknown>;
 };
