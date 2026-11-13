@@ -579,7 +579,9 @@ export function ReservationPanel({
       <Section
         title="Guest"
         action={
-          canWrite && (
+          // A guest whose details were erased has none left to change.
+          canWrite &&
+          !reservation.guest?.anonymizedAt && (
             <Button
               size="sm"
               variant="ghost"

@@ -78,7 +78,9 @@ export function EraseDialog({
               <li>All conversations with the guest.</li>
               <li>The special requests, notes and arrival times on their stays.</li>
               <li>Their documents, and what they entered at online check-in.</li>
-              <li>Their name on reviews and in the audit trail.</li>
+              <li>Their name and address on their own bills.</li>
+              <li>What the booking sites sent about their bookings.</li>
+              <li>Their name on reviews, on alerts and in the audit trail.</li>
             </ul>
           </div>
           <div>

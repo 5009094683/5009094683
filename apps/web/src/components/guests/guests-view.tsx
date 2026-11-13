@@ -396,7 +396,13 @@ export function GuestsView() {
           </ul>
         )}
       </div>
-      <Drawer open={openId !== null} onClose={() => setOpenId(null)} title={open?.name ?? 'Guest'}>
+      {/* An erased guest drops out of the list while their panel is still open. */}
+      <Drawer
+        open={openId !== null}
+        onClose={() => setOpenId(null)}
+        title={open?.name ?? 'Guest'}
+        description={open ? undefined : 'No longer in the list'}
+      >
         {openId && <GuestPanel guestId={openId} onChanged={() => void mutate()} />}
       </Drawer>
     </div>

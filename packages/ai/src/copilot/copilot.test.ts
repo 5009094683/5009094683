@@ -21,7 +21,14 @@ import {
   type TestVilla,
 } from '@pms/domain/testing';
 import { FakeProvider } from '../testing';
-import { confirmAction, expireActions, pendingActions, rejectAction, runCopilot } from './copilot';
+import {
+  PROPOSAL_KEEP_DAYS,
+  confirmAction,
+  expireActions,
+  pendingActions,
+  rejectAction,
+  runCopilot,
+} from './copilot';
 import { parseDate } from './rules';
 
 let t: TestDatabase;
@@ -151,6 +158,18 @@ describe('the assistant without a language model', () => {
     expect(await expireActions(t.db, late)).toBeGreaterThanOrEqual(1);
     const [row] = await t.db.select().from(aiActions).where(eq(aiActions.id, third.actions[0]!.id));
     expect(row!.status).toBe('expired');
+    // Proposals are kept for a while as a record of what was offered, then dropped; one still
+    // waiting for an answer is never dropped.
+    const waiting = await ask(admin, `block ${unit.name} from ${day(75)} to ${day(76)}`);
+    const muchLater = new Date(Date.now() + (PROPOSAL_KEEP_DAYS + 1) * 86_400_000);
+    await t.db
+      .update(aiActions)
+      .set({ expiresAt: new Date(muchLater.getTime() + 60_000) })
+      .where(eq(aiActions.id, waiting.actions[0]!.id));
+    await expireActions(t.db, muchLater);
+    expect((await t.db.select().from(aiActions)).map((a) => a.id)).toEqual([
+      waiting.actions[0]!.id,
+    ]);
   });
 
   it('never goes beyond what the person asking may do', async () => {

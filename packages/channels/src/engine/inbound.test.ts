@@ -35,6 +35,7 @@ import {
   type ConnectionRow,
 } from './connections';
 import { dispatchDue } from './dispatcher';
+import { pruneSyncHistory, UNUSED_MESSAGE_DAYS } from './health';
 import {
   applyRevision,
   ingestBookingEvent,
@@ -780,6 +781,72 @@ describe('bookings that cannot be placed', () => {
     expect(await openAlerts(key)).toHaveLength(0);
     // Applying it again does nothing.
     expect(await reprocessRevision(t.db, org.admin, result.id)).toMatchObject({ changed: false });
+  });
+
+  it('drops the contents of a booking message nobody acted on, once it is old', async () => {
+    const c = await connectHotel({ standardRooms: 3 });
+    const unused = bookingEvent({
+      guest: { firstName: 'Noor', lastName: 'Unmapped', email: 'noor@example.com' },
+      rooms: [
+        {
+          externalRoomTypeId: 'ext-nowhere',
+          externalRatePlanId: 'ext-nowhere-bar',
+          checkIn: day(10),
+          checkOut: day(12),
+          amount: 1_000_000,
+        },
+      ],
+    });
+    const held = await ingestBookingEvent(t.db, c.connection, unused, 'webhook');
+    const booked = await ingestBookingEvent(
+      t.db,
+      c.connection,
+      bookingEvent({
+        rooms: [
+          {
+            externalRoomTypeId: 'ext-std',
+            externalRatePlanId: 'ext-std-bar',
+            checkIn: day(20),
+            checkOut: day(21),
+            amount: 450_000,
+          },
+        ],
+      }),
+      'webhook',
+    );
+    expect(booked.status).toBe('applied');
+    const age = (id: string, days: number) =>
+      t.db
+        .update(bookingRevisions)
+        .set({ receivedAt: new Date(Date.now() - days * 86_400_000) })
+        .where(eq(bookingRevisions.id, id));
+    const row = async (id: string) =>
+      (await t.db.select().from(bookingRevisions).where(eq(bookingRevisions.id, id)))[0]!;
+
+    // Young, or the record of a reservation: kept as received.
+    await age(held.id, UNUSED_MESSAGE_DAYS - 1);
+    await age(booked.id, UNUSED_MESSAGE_DAYS + 30);
+    await pruneSyncHistory(t.db);
+    expect(JSON.stringify(await row(held.id))).toContain('noor@example.com');
+    expect((await row(booked.id)).raw).not.toEqual({ erased: true });
+
+    await age(held.id, UNUSED_MESSAGE_DAYS + 1);
+    expect(await pruneSyncHistory(t.db)).toBeGreaterThanOrEqual(1);
+    const emptied = await row(held.id);
+    expect(emptied.raw).toEqual({ erased: true });
+    expect(emptied.event).toEqual({ bookingId: unused.bookingId, status: 'new' });
+    expect(JSON.stringify(emptied)).not.toContain('Noor');
+    // The same message arriving again is still recognised, and it can no longer be applied.
+    expect(await ingestBookingEvent(t.db, c.connection, unused, 'webhook')).toMatchObject({
+      id: held.id,
+      duplicate: true,
+      status: 'unmapped',
+      reservationId: null,
+    });
+    expect((await row(held.id)).raw).toEqual({ erased: true });
+    await expect(reprocessRevision(t.db, org.admin, held.id)).rejects.toThrow(
+      /no longer kept, so it cannot be applied again/,
+    );
   });
 
   it('alerts and retries when a booking cannot be applied, and recovers when it can', async () => {

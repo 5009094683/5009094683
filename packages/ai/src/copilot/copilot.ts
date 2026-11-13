@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, lte } from 'drizzle-orm';
+import { and, desc, eq, gt, lte, ne } from 'drizzle-orm';
 import { aiActions, organizations, type Database } from '@pms/db';
 import {
   DomainError,
@@ -304,12 +304,25 @@ export async function pendingActions(
     .limit(20);
 }
 
-/** Marks proposals nobody confirmed in time. Run by the worker. */
+/** How long a proposal the assistant made is kept after it was made. */
+export const PROPOSAL_KEEP_DAYS = 90;
+
+/** Marks proposals nobody confirmed in time, and drops old ones. Run by the worker. */
 export async function expireActions(db: Database, now: Date = new Date()): Promise<number> {
   const expired = await db
     .update(aiActions)
     .set({ status: 'expired' })
     .where(and(eq(aiActions.status, 'proposed'), lte(aiActions.expiresAt, now)))
     .returning({ id: aiActions.id });
+  // A proposal can name a guest. What was actually done is in the audit trail, so the
+  // proposal itself need not outlive its usefulness.
+  await db
+    .delete(aiActions)
+    .where(
+      and(
+        ne(aiActions.status, 'proposed'),
+        lte(aiActions.createdAt, new Date(now.getTime() - PROPOSAL_KEEP_DAYS * 86_400_000)),
+      ),
+    );
   return expired.length;
 }

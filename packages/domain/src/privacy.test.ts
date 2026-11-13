@@ -1,10 +1,15 @@
-import { eq, sql } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
+  aiActions,
   alerts,
   auditLog,
+  bookingRevisions,
+  channelConnections,
   conversations,
+  folios,
   guests,
+  invoices,
   onlineCheckins,
   pgErrorInfo,
   reservations,
@@ -15,8 +20,10 @@ import { emailNewAlerts } from './alert-emails';
 import { raiseAlert } from './alerts';
 import { encryptJson } from './crypto';
 import { addDays, todayIn } from './dates';
+import { postCharge } from './folios';
 import { updateGuest } from './guests';
 import { receiveMessage } from './inbox';
+import { issueInvoice } from './invoices';
 import { MemoryMailer, type Mailer } from './mailer';
 import { updateOrganization } from './org';
 import { anonymiseGuest, applyRetention, exportGuestData } from './privacy';
@@ -235,6 +242,158 @@ describe('a guest\u2019s own data', () => {
       /a stay under way or still to come/,
     );
     expect((await guestRow(coming.guestId)).firstName).toBe('Kabir');
+  });
+
+  it('leaves no copy behind in bills, booking messages, alerts or assistant proposals', async () => {
+    const { guestId, reservation, name } = await guestWithStay(-30, -28);
+    await updateGuest(t.db, org.admin, guestId, {
+      addressLine1: '14 Carter Road',
+      city: 'Mumbai',
+      gstin: '27ABCDE1234F1Z5',
+    });
+    // The bill is made out to the guest; one invoice is issued from it.
+    const line = await postCharge(t.db, org.admin, {
+      reservationId: reservation.id,
+      kind: 'food',
+      description: 'Dinner',
+      unitAmount: 120_000,
+    });
+    const [before] = await t.db.select().from(folios).where(eq(folios.id, line.folioId));
+    expect(before!.billTo).toMatchObject({ name, addressLine1: '14 Carter Road' });
+    const invoice = await issueInvoice(t.db, org.admin, line.folioId);
+    // What the booking site sent, as received and as read.
+    const [connection] = await t.db
+      .insert(channelConnections)
+      .values({
+        orgId: org.orgId,
+        propertyId: hotel.property.id,
+        adapter: 'channex',
+        name: 'Channel manager',
+        status: 'active',
+      })
+      .returning();
+    const [message] = await t.db
+      .insert(bookingRevisions)
+      .values({
+        connectionId: connection!.id,
+        externalRevisionId: 'rev-erase-1',
+        externalBookingId: 'bk-erase-1',
+        channelCode: 'BDC',
+        receivedVia: 'webhook',
+        revisionAt: new Date(),
+        raw: { customer: { name, mail: 'kabir@example.com', phone: '+91 98000 00000' } },
+        event: {
+          bookingId: 'bk-erase-1',
+          status: 'new',
+          totalAmount: 900_000,
+          notes: 'Arriving late, call me',
+          arrivalTime: '23:30',
+          guest: { firstName: 'Kabir', lastName: 'Sethi', email: 'kabir@example.com', phone: '1' },
+          rooms: [{ checkIn: day(-30), checkOut: day(-28), adults: 2, guestName: name }],
+        },
+        status: 'applied',
+        reservationId: reservation.id,
+      })
+      .returning();
+    await raiseAlert(t.db, {
+      orgId: org.orgId,
+      propertyId: hotel.property.id,
+      kind: 'booking_needs_review',
+      severity: 'warning',
+      title: `Reservation ${reservation.code} needs a look`,
+      body: `${name}: the room could not be matched`,
+      entityType: 'reservation',
+      entityId: reservation.id,
+      dedupeKey: `review:${reservation.id}`,
+    });
+    // Somebody else of the same name has an alert of their own; it is not theirs to lose.
+    await raiseAlert(t.db, {
+      orgId: org.orgId,
+      kind: 'booking_needs_review',
+      severity: 'warning',
+      title: 'Another booking',
+      body: `${name}: a namesake`,
+      entityType: 'reservation',
+      entityId: '00000000-0000-4000-8000-000000000000',
+      dedupeKey: 'review:namesake',
+    });
+    await t.db.insert(aiActions).values([
+      {
+        orgId: org.orgId,
+        userId: org.adminUserId,
+        tool: 'cancel_reservation',
+        params: { reservationId: reservation.id },
+        summary: `Cancel the reservation of ${name}`,
+        expiresAt: new Date(),
+        status: 'expired',
+      },
+      {
+        orgId: org.orgId,
+        userId: org.adminUserId,
+        tool: 'create_block',
+        params: { unitId: hotel.standard.units[0]!.id },
+        summary: 'Block room 101',
+        expiresAt: new Date(),
+        status: 'expired',
+      },
+    ]);
+
+    await anonymiseGuest(t.db, org.admin, guestId);
+
+    const [bill] = await t.db.select().from(folios).where(eq(folios.id, line.folioId));
+    expect(bill!.billTo).toEqual({ name: 'Former guest' });
+    // The invoice is a tax document: it stays exactly as issued.
+    const [kept] = await t.db.select().from(invoices).where(eq(invoices.id, invoice.id));
+    expect(kept!.buyer).toMatchObject({ name, gstin: '27ABCDE1234F1Z5' });
+    const [scrubbed] = await t.db
+      .select()
+      .from(bookingRevisions)
+      .where(eq(bookingRevisions.id, message!.id));
+    expect(scrubbed!.raw).toEqual({ erased: true });
+    expect(scrubbed!.event).toEqual({
+      bookingId: 'bk-erase-1',
+      status: 'new',
+      totalAmount: 900_000,
+      notes: null,
+      arrivalTime: null,
+      guest: {
+        firstName: 'Former',
+        lastName: 'guest',
+        email: null,
+        phone: null,
+        country: null,
+        language: null,
+      },
+      rooms: [{ checkIn: day(-30), checkOut: day(-28), adults: 2, guestName: null }],
+    });
+    const raised = await t.db.select().from(alerts).where(eq(alerts.kind, 'booking_needs_review'));
+    expect(raised.map((a) => a.body).sort()).toEqual([
+      `${name}: a namesake`,
+      'a former guest: the room could not be matched',
+    ]);
+    expect((await t.db.select().from(aiActions)).map((a) => a.summary)).toEqual(['Block room 101']);
+    // The entries about the bill and the invoice no longer name them either.
+    const trail = await t.db
+      .select()
+      .from(auditLog)
+      .where(inArray(auditLog.entityId, [reservation.id, line.folioId, invoice.id]));
+    expect(trail.length).toBeGreaterThan(1);
+    expect(JSON.stringify(trail)).not.toContain(name);
+    expect(trail.find((e) => e.action === 'invoice.issued')?.summary).toBe(
+      `Issued invoice ${invoice.number} to a former guest`,
+    );
+  });
+
+  it('is not erased while the guest is marked "Do not accept"', async () => {
+    const { guestId } = await guestWithStay(-40, -38);
+    await updateGuest(t.db, org.admin, guestId, { blacklisted: true });
+    await expect(anonymiseGuest(t.db, org.admin, guestId)).rejects.toThrow(
+      /marked "Do not accept"/,
+    );
+    expect((await guestRow(guestId)).firstName).toBe('Kabir');
+    await updateGuest(t.db, org.admin, guestId, { blacklisted: false });
+    await anonymiseGuest(t.db, org.admin, guestId);
+    expect((await guestRow(guestId)).firstName).toBe('Former');
   });
 });
 

@@ -373,6 +373,8 @@ export function DocumentReader({
   const guest = reservation.guest;
   const allowed =
     guest !== null &&
+    // Erased on request: reading a document would put the details straight back.
+    !guest.anonymizedAt &&
     auth.can('guests.pii', reservation.propertyId) &&
     auth.can('ai.use', reservation.propertyId);
   const status = useAiStatus(allowed);

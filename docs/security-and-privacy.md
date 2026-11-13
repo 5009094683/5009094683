@@ -118,6 +118,14 @@ once a day:
 - **Files guests send with a message**: photos and PDFs are kept, encrypted,
   for 180 days, or until the guest is erased if that is sooner. Anything else
   a guest attaches is shown by name only and is not kept.
+- **Messages from booking sites**: each booking message is kept as received,
+  because it is the proof of what the site sent. It shares the fate of the
+  guest it belongs to. A message that never became a reservation (it could not
+  be read, or its room was never mapped) has its contents dropped after 90 days.
+- **What the assistant proposed**: kept for 90 days; what was actually done
+  stays in the audit trail.
+- **Technical records of deliveries from outside** (payment and channel
+  manager notifications): 30 days.
 - Zero means "keep until removed by hand". Set these to what your registration
   rules require and no longer.
 
@@ -129,13 +137,18 @@ invoice numbers, a list of documents. Taking it is recorded.
 
 - Removed: name, email, phone, address, date of birth, nationality, identity
   details, notes, preferences; all conversations with them; their documents;
-  what they entered at online check-in; their name on reviews and in the
-  audit trail.
+  what they entered at online check-in; their name and address on their own
+  bills; what the booking sites sent about their bookings; anything the
+  assistant proposed about them; their name on reviews, on alerts, and in
+  the audit trail entries about their stays, bills, invoices and payments.
 - Kept, without a name: the stays themselves, with their dates, rooms and
   amounts, under "Former guest". The books and the statistics need them.
 - Kept as issued: tax invoices. The law requires them to be kept unchanged
   for years, and that outranks a request to erase.
 - Refused while the guest has a stay under way or to come.
+- Refused, and skipped by the automatic rule, while the guest is marked "Do
+  not accept": erasing them would also forget why. Take the mark off first if
+  the details are really to go.
 - It cannot be undone.
 
 **Who else receives guest data**:

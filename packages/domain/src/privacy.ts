@@ -1,5 +1,6 @@
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import {
+  bookingRevisions,
   conversations,
   guests,
   messages,
@@ -48,6 +49,13 @@ export async function anonymiseGuest(
       .for('update');
     if (!guest) throw notFound('Guest', guestId);
     if (guest.anonymizedAt) return;
+    // Erasing would also forget why this person is not to be given a room again. That has to be
+    // somebody's decision, made by taking the mark off first.
+    if (guest.blacklisted) {
+      throw invalidState(
+        'This guest is marked "Do not accept". Take that mark off first if their details are really to be erased.',
+      );
+    }
     const stays = await tx
       .select({ id: reservations.id, status: reservations.status, name: reservations.guestName })
       .from(reservations)
@@ -65,6 +73,50 @@ export async function anonymiseGuest(
       summary: 'Erased the personal details of a guest',
     });
   });
+}
+
+/** `LIKE ANY` patterns matching text that contains any of the ids. */
+function likeAny(ids: string[]): SQL {
+  return sql`ARRAY[${sql.join(
+    ids.map((id) => sql`${`%${id}%`}`),
+    sql`, `,
+  )}]::text[]`;
+}
+
+/**
+ * What a booking site sent about the stays is kept as received, guest details included, so
+ * that a booking can be traced. For an erased guest the message is emptied and the reading of
+ * it keeps only what the books need: dates, rooms and amounts.
+ */
+async function scrubBookingMessages(tx: Transaction, stayIds: string[]): Promise<void> {
+  const rows = await tx
+    .select({ id: bookingRevisions.id, event: bookingRevisions.event })
+    .from(bookingRevisions)
+    .where(inArray(bookingRevisions.reservationId, stayIds));
+  for (const row of rows) {
+    const event = { ...row.event };
+    if ('guest' in event) {
+      event.guest = {
+        firstName: 'Former',
+        lastName: 'guest',
+        email: null,
+        phone: null,
+        country: null,
+        language: null,
+      };
+    }
+    if ('notes' in event) event.notes = null;
+    if ('arrivalTime' in event) event.arrivalTime = null;
+    if (Array.isArray(event.rooms)) {
+      event.rooms = event.rooms.map((room: unknown) =>
+        room && typeof room === 'object' ? { ...room, guestName: null } : room,
+      );
+    }
+    await tx
+      .update(bookingRevisions)
+      .set({ raw: { erased: true }, event })
+      .where(eq(bookingRevisions.id, row.id));
+  }
 }
 
 async function scrub(
@@ -122,6 +174,19 @@ async function scrub(
       WHERE reservation_id = ANY(${ids})
     `);
     await tx.execute(sql`UPDATE reviews SET guest_name = NULL WHERE reservation_id = ANY(${ids})`);
+    // A guest's own bill carries their name, address and tax number. An invoice issued from it
+    // has its own copy, which the law keeps; a bill made out to a company is not theirs.
+    await tx.execute(sql`
+      UPDATE folios SET bill_to = jsonb_build_object('name', ${FORMER}::text)
+      WHERE reservation_id = ANY(${ids}) AND company_id IS NULL
+    `);
+    await scrubBookingMessages(tx, stayIds);
+    await tx.execute(sql`
+      DELETE FROM ai_actions
+      WHERE org_id = (SELECT org_id FROM guests WHERE id = ${guestId})
+        AND (params::text LIKE ANY(${likeAny([guestId, ...stayIds])})
+          OR result::text LIKE ANY(${likeAny([guestId, ...stayIds])}))
+    `);
   }
   // The audit trail keeps what was done and by whom, without the guest's name. Its wording is
   // the one thing about an audit entry that may change, and only when announced like this.
@@ -130,11 +195,32 @@ async function scrub(
     const names = [...new Set([name, ...stays.map((s) => s.name)])].filter(
       (n) => n.trim().length > 1 && n !== FORMER,
     );
+    // Entries about the stays, and about what hangs from them: their bills, invoices,
+    // payments and reviews. An entry elsewhere that happens to hold the same name is someone else's.
+    const { rows: linked } = await tx.execute<{ id: string }>(sql`
+      SELECT id::text FROM folios WHERE reservation_id = ANY(${uuidArray(stayIds)})
+      UNION ALL
+      SELECT i.id::text FROM invoices i JOIN folios f ON f.id = i.folio_id
+      WHERE f.reservation_id = ANY(${uuidArray(stayIds)})
+      UNION ALL
+      SELECT p.id::text FROM payments p JOIN folios f ON f.id = p.folio_id
+      WHERE f.reservation_id = ANY(${uuidArray(stayIds)})
+      UNION ALL
+      SELECT id::text FROM reviews WHERE reservation_id = ANY(${uuidArray(stayIds)})
+    `);
+    const about = `{${[...stayIds, ...linked.map((row) => row.id)].join(',')}}`;
     for (const known of names) {
+      const like = `%${known.replace(/[%_\\]/g, '\\$&')}%`;
       await tx.execute(sql`
         UPDATE audit_log SET summary = replace(summary, ${known}, 'a former guest')
+        WHERE entity_id = ANY(${about}::text[]) AND summary LIKE ${like}
+      `);
+      await tx.execute(sql`
+        UPDATE alerts
+        SET title = replace(title, ${known}, 'a former guest'),
+            body = replace(body, ${known}, 'a former guest')
         WHERE entity_type = 'reservation' AND entity_id = ANY(${`{${stayIds.join(',')}}`}::text[])
-          AND summary LIKE ${`%${known.replace(/[%_\\]/g, '\\$&')}%`}
+          AND (title LIKE ${like} OR body LIKE ${like})
       `);
     }
     await tx.execute(sql`
@@ -376,7 +462,7 @@ export async function applyRetention(db: DbOrTx, now: Date = new Date()): Promis
       const age = sql`make_interval(days => ${profileDays})`;
       const { rows: due } = await db.execute<{ id: string }>(sql`
         SELECT g.id FROM guests g
-        WHERE g.org_id = ${org.id} AND g.anonymized_at IS NULL
+        WHERE g.org_id = ${org.id} AND g.anonymized_at IS NULL AND NOT g.blacklisted
           AND g.created_at < ${at} - ${age}
           AND NOT EXISTS (
             SELECT 1 FROM reservations r WHERE r.guest_id = g.id

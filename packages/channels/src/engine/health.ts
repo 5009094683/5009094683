@@ -163,7 +163,10 @@ export async function checkSyncLag(
   return { lagging };
 }
 
-/** Removes sync history older than the given age. Returns rows removed. */
+/** How long the contents of a booking message that led to no reservation are kept. */
+export const UNUSED_MESSAGE_DAYS = 90;
+
+/** Removes sync history older than the given age. Returns rows removed or emptied. */
 export async function pruneSyncHistory(db: Database, olderThanDays = 30): Promise<number> {
   const log = await db.execute(
     sql`DELETE FROM sync_log WHERE created_at < now() - make_interval(days => ${olderThanDays})`,
@@ -174,5 +177,20 @@ export async function pruneSyncHistory(db: Database, olderThanDays = 30): Promis
   const beats = await db.execute(
     sql`DELETE FROM worker_heartbeats WHERE last_seen_at < now() - interval '1 day'`,
   );
-  return (log.rowCount ?? 0) + (hooks.rowCount ?? 0) + (beats.rowCount ?? 0);
+  // A booking message that never became a reservation (it could not be read, or its room was
+  // never mapped) has nobody's profile to share the fate of. Its contents, which name a
+  // guest, are dropped once nobody is going to act on it; the row stays, so that the same
+  // message arriving again is still recognised.
+  const stale = await db.execute(sql`
+    UPDATE booking_revisions
+    SET raw = '{"erased": true}'::jsonb,
+        event = jsonb_build_object('bookingId', event->'bookingId', 'status', event->'status'),
+        next_attempt_at = NULL
+    WHERE reservation_id IS NULL
+      AND received_at < now() - make_interval(days => ${UNUSED_MESSAGE_DAYS})
+      AND raw <> '{"erased": true}'::jsonb
+  `);
+  return (
+    (log.rowCount ?? 0) + (hooks.rowCount ?? 0) + (beats.rowCount ?? 0) + (stale.rowCount ?? 0)
+  );
 }

@@ -129,7 +129,7 @@ account.
   tokens, how long it took, whether it worked. Not the question and not the
   answer.
 - Every action the assistant proposed, and whether it was confirmed, by whom
-  and with what result.
+  and with what result, for 90 days.
 - Everything that was actually changed, in the audit trail, as "the assistant
   on behalf of" the person.
 - Calls, failures and tokens per feature over the last thirty days are

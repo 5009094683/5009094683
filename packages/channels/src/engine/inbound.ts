@@ -27,6 +27,7 @@ import {
   formatMoney,
   isDomainError,
   isValidDate,
+  invalidState,
   notFound,
   raiseAlert,
   reinstateReservation,
@@ -794,6 +795,10 @@ export async function applyRevision(db: Database, revisionRowId: string): Promis
       if (row.status === 'applied' || row.status === 'superseded') {
         return { status: row.status, reservationId: row.reservationId, changed: false };
       }
+      // Its contents were dropped (too old, or its guest was erased): there is nothing to apply.
+      if (row.raw.erased === true) {
+        return { status: row.status, reservationId: row.reservationId, changed: false };
+      }
       const [connection] = await tx
         .select()
         .from(channelConnections)
@@ -1338,6 +1343,11 @@ export async function reprocessRevision(
     .innerJoin(channelConnections, eq(channelConnections.id, bookingRevisions.connectionId))
     .where(and(eq(bookingRevisions.id, revisionRowId), eq(channelConnections.orgId, actor.orgId)));
   if (!row) throw notFound('Booking revision', revisionRowId);
+  if (row.revision.raw.erased === true) {
+    throw invalidState(
+      'The contents of this booking message are no longer kept, so it cannot be applied again.',
+    );
+  }
   await writeAudit(db, actor, {
     action: 'channel.revision_reprocessed',
     entityType: 'booking_revision',
@@ -1385,6 +1395,11 @@ export interface RevisionSummary {
   attempts: number;
   reservationId: string | null;
   reservationCode: string | null;
+  /**
+   * True once the message's contents are no longer kept (it was never used and grew old, or
+   * its guest was erased). It can then be neither read in full nor applied again.
+   */
+  contentsDropped: boolean;
 }
 
 /** Recent booking messages for the sync monitor, newest first. */
@@ -1443,6 +1458,7 @@ export async function listRevisions(
       attempts: r.attempts,
       reservationId: r.reservationId,
       reservationCode,
+      contentsDropped: r.raw.erased === true,
     };
   });
 }
