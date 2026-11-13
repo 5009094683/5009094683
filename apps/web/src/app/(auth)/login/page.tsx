@@ -16,7 +16,7 @@ type Step = 'credentials' | 'second-factor' | 'forgot' | 'forgot-sent';
 
 function safeReturnTo(value: string | null): string {
   // Only paths on this site; anything else could send the user to another site after sign-in.
-  return value && value.startsWith('/') && !value.startsWith('//') ? value : '/calendar';
+  return value && value.startsWith('/') && !value.startsWith('//') ? value : '/home';
 }
 
 function LoginForm() {
