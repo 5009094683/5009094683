@@ -455,6 +455,39 @@ importers:
         specifier: ^5.12.8
         version: 5.12.8
 
+  tests/load:
+    devDependencies:
+      '@pms/api':
+        specifier: workspace:*
+        version: link:../../apps/api
+      '@pms/channels':
+        specifier: workspace:*
+        version: link:../../packages/channels
+      '@pms/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@pms/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@pms/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+      '@pms/ota-sim':
+        specifier: workspace:*
+        version: link:../../apps/ota-sim
+      '@pms/worker':
+        specifier: workspace:*
+        version: link:../../apps/worker
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
+      drizzle-orm:
+        specifier: ^0.45.4
+        version: 0.45.4(@types/pg@8.23.1)(pg@8.23.1)
+      pg:
+        specifier: ^8.23.1
+        version: 8.23.1
+
 packages:
 
   '@alloc/quick-lru@5.3.0':

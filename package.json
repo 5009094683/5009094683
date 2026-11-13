@@ -16,6 +16,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "pnpm --filter @pms/e2e test",
+    "test:load": "pnpm --filter @pms/load-tests start",
     "db:generate": "pnpm --filter @pms/db generate",
     "db:migrate": "pnpm --filter @pms/db migrate",
     "db:seed": "pnpm --filter @pms/domain seed",

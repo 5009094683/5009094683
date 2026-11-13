@@ -1,0 +1,22 @@
+{
+  "name": "@pms/load-tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx run.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@pms/api": "workspace:*",
+    "@pms/channels": "workspace:*",
+    "@pms/config": "workspace:*",
+    "@pms/db": "workspace:*",
+    "@pms/domain": "workspace:*",
+    "@pms/ota-sim": "workspace:*",
+    "@pms/worker": "workspace:*",
+    "@types/pg": "^8.23.1",
+    "drizzle-orm": "^0.45.4",
+    "pg": "^8.23.1"
+  }
+}
