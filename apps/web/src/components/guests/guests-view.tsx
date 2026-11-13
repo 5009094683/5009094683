@@ -1,6 +1,6 @@
 'use client';
 
-import { Eye, Mail, Phone, Search, Star, Users } from 'lucide-react';
+import { Eye, FileDown, Mail, Phone, Search, Star, Users } from 'lucide-react';
 import Link from 'next/link';
 import { useState, type FormEvent } from 'react';
 import useSWR from 'swr';
@@ -20,9 +20,10 @@ import { useToast } from '@/components/ui/toast';
 import { api, errorMessage, query } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { STATUS_LABELS, formatDate, formatMoney, formatStay, plural } from '@/lib/format';
-import { useDebounced } from '@/lib/hooks';
+import { useDebounced, useProperties } from '@/lib/hooks';
 import type { Guest, Reservation } from '@/lib/types';
 import { PrivacyActions } from './privacy-actions';
+import { GuestRegisterDialog } from './register-dialog';
 
 function GuestPanel({ guestId, onChanged }: { guestId: string; onChanged: () => void }) {
   const auth = useAuth();
@@ -331,6 +332,11 @@ function GuestPanel({ guestId, onChanged }: { guestId: string; onChanged: () => 
 }
 
 export function GuestsView() {
+  const auth = useAuth();
+  const { properties } = useProperties();
+  // The register holds identity numbers: for those who may see them, property by property.
+  const registerProperties = properties.filter((p) => p.active && auth.can('guests.pii', p.id));
+  const [register, setRegister] = useState(false);
   const [search, setSearch] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
   const term = useDebounced(search.trim(), 250);
@@ -341,7 +347,20 @@ export function GuestsView() {
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col p-4 sm:p-6">
-      <PageHeader title="Guests" description="Everyone who has booked, with their stay history." />
+      <PageHeader
+        title="Guests"
+        description="Everyone who has booked, with their stay history."
+        actions={
+          registerProperties.length > 0 && (
+            <Button
+              icon={<FileDown className="size-4" aria-hidden />}
+              onClick={() => setRegister(true)}
+            >
+              Guest register
+            </Button>
+          )
+        }
+      />
       <div className="relative mb-3 max-w-sm">
         <Search
           className="pointer-events-none absolute top-2.5 left-2.5 size-4 text-ink-faint"
@@ -405,6 +424,9 @@ export function GuestsView() {
       >
         {openId && <GuestPanel guestId={openId} onChanged={() => void mutate()} />}
       </Drawer>
+      {register && (
+        <GuestRegisterDialog properties={registerProperties} onClose={() => setRegister(false)} />
+      )}
     </div>
   );
 }

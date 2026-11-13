@@ -1,6 +1,6 @@
 'use client';
 
-import { Building2, Moon, Percent, ReceiptText, type LucideIcon } from 'lucide-react';
+import { Building2, Landmark, Moon, Percent, ReceiptText, type LucideIcon } from 'lucide-react';
 import type { Permission } from '@pms/domain/shared';
 import { useAuth } from '@/lib/auth';
 
@@ -23,6 +23,12 @@ export const ACCOUNTS_SECTIONS: AccountsSection[] = [
   },
   { href: '/accounts/night-audit', label: 'Night audit', icon: Moon, permissions: ['folio.read'] },
   { href: '/accounts/taxes', label: 'Tax rules', icon: Percent, permissions: ['folio.read'] },
+  {
+    href: '/accounts/tax-register',
+    label: 'Tax register',
+    icon: Landmark,
+    permissions: ['folio.read'],
+  },
 ];
 
 /** The accounts sections the signed-in user may open, in menu order. */
