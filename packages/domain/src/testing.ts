@@ -14,6 +14,7 @@ import {
 
 export { startMockOidcProvider, type MockOidcProvider } from './testing/mock-oidc';
 export { DEMO_ADMIN, seedDemo } from './demo-seed';
+export { seedDemoHistory, type DemoHistorySummary } from './demo-history';
 
 export const TEST_PASSWORD = 'correct horse battery staple';
 

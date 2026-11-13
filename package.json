@@ -19,7 +19,7 @@
     "test:load": "pnpm --filter @pms/load-tests start",
     "db:generate": "pnpm --filter @pms/db generate",
     "db:migrate": "pnpm --filter @pms/db migrate",
-    "db:seed": "pnpm --filter @pms/domain seed",
+    "db:seed": "pnpm --filter @pms/worker seed",
     "db:reset": "bash scripts/db-reset.sh"
   },
   "devDependencies": {

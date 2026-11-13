@@ -16,7 +16,7 @@ without accounts anywhere.
 ```bash
 pnpm install
 pnpm db:migrate        # creates the tables
-pnpm db:seed           # an example chain: one hotel, two villas, bookings around today
+pnpm db:seed           # an example chain: one hotel, two villas, five weeks of history
 pnpm dev               # starts everything below
 ```
 
@@ -30,6 +30,33 @@ pnpm dev               # starts everything below
 
 No `.env` file is needed for this. `.env.example` lists every setting with
 what it is for; copy it to `.env` to change one.
+
+## What the example data holds
+
+`pnpm db:seed` makes "Sea Breeze Hotels & Villas": a hotel of twelve rooms in
+Candolim, a three-bedroom villa sold whole or by the bedroom, and a cottage.
+It then lives through the last five weeks one hotel day at a time, with the
+same code the application runs: guests arrive, eat, pay and leave, rooms are
+cleaned, each night is closed. So on the first look there are guests in
+house, arrivals expected and departures due today, bills with charges and
+payments, invoices, rooms to clean, repairs waiting, messages from guests,
+reviews, rate suggestions, a month of figures in the reports, and last
+month's statements for the two villa owners.
+
+Everyone's password is `demo-password-1`:
+
+| Sign in as                 | To see the system as                               |
+| -------------------------- | -------------------------------------------------- |
+| `admin@example.com`        | The administrator: everything                      |
+| `manager@example.com`      | A general manager                                  |
+| `frontdesk@example.com`    | The front desk of the hotel                        |
+| `revenue@example.com`      | The revenue manager                                |
+| `accounts@example.com`     | The accountant                                     |
+| `housekeeping@example.com` | A housekeeper: the cleaning board and nothing else |
+| `maintenance@example.com`  | The engineer: repairs                              |
+
+To see the owner's side, open Villa owners, choose Kavita Menon and invite
+her to the owner portal: the link it gives sets her password.
 
 ## Things to try
 
