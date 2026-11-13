@@ -7,6 +7,7 @@ export * from './engine/drift';
 export * from './engine/schedule';
 export * from './engine/health';
 export * from './engine/messages';
+export * from './engine/reviews';
 export * from './jobs';
 export * from './register';
 export * from './channex/client';

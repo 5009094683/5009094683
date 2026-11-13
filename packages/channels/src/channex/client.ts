@@ -591,6 +591,28 @@ export class ChannexClient {
     return body.data;
   }
 
+  // -------------------------------------------------------------------------
+  // Reviews
+
+  async listReviews(propertyId: string): Promise<ChannexReviewResource[]> {
+    const { body } = await this.json<{ data?: ChannexReviewResource[] }>(
+      'Listing reviews',
+      'GET',
+      `/reviews?filter[property_id]=${encodeURIComponent(propertyId)}&pagination[limit]=${PAGE_LIMIT}`,
+    );
+    return body?.data ?? [];
+  }
+
+  async replyToReview(reviewId: string, text: string): Promise<void> {
+    const { response, body } = await this.json<unknown>(
+      'Replying to a review',
+      'POST',
+      `/reviews/${encodeURIComponent(reviewId)}/reply`,
+      { reply: { reply: text } },
+    );
+    if (!response.ok) this.fail('Replying to a review', response, body);
+  }
+
   async oneTimeToken(propertyId: string, username: string): Promise<string> {
     const request = new Request(`${this.baseUrl}/auth/one_time_token`, {
       method: 'POST',
@@ -631,6 +653,24 @@ export interface ChannexMessageResource {
     inserted_at?: string | null;
   };
   relationships?: { message_thread?: { data?: { id?: string } | null } };
+}
+
+/** A review as Channex returns it (reviews add-on). Shaped from the API guide. */
+export interface ChannexReviewResource {
+  id: string;
+  attributes: {
+    content?: string | null;
+    guest_name?: string | null;
+    ota?: string | null;
+    ota_reservation_id?: string | null;
+    overall_score?: number | null;
+    scores?: { category?: string; score?: number }[] | null;
+    received_at?: string | null;
+    inserted_at?: string | null;
+    is_hidden?: boolean;
+    is_replied?: boolean;
+    reply?: string | null;
+  };
 }
 
 /** Test hook: forget any locally remembered quota pauses. */

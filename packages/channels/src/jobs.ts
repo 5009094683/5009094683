@@ -8,4 +8,8 @@ export const CHANNEL_JOBS = {
   importBookings: 'channel.import_bookings',
   /** Read one guest conversation into the inbox. Payload: `{ connectionId, threadId }`. */
   pullMessages: 'channel.pull_messages',
+  /** Read the booking sites' guest reviews for one connection. Payload: `{ connectionId }`. */
+  pullReviews: 'channel.pull_reviews',
+  /** Post the property's reply to a review. Payload: `{ reviewId }`. */
+  replyReview: 'channel.reply_review',
 } as const;

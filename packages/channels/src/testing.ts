@@ -7,6 +7,7 @@ import {
   type AriBatch,
   type BookingEvent,
   type ChannelAdapter,
+  type ChannelReview,
   type ChannelThread,
   type PushResult,
   type RemoteAri,
@@ -37,6 +38,13 @@ export class FakeChannel {
     bookings: 'webhook',
     messaging: false,
   };
+  /** Reviews on the booking sites, and the replies posted to them. */
+  reviews: ChannelReview[] = [];
+  readonly reviewReplies: { reviewId: string; text: string }[] = [];
+  failReviewReply: Error | null = null;
+  failListReviews: Error | null = null;
+  /** False for a kind of connection that carries no reviews at all. */
+  hasReviews = true;
   /** Guest conversations in the channel's message box, by thread id. */
   readonly threads = new Map<string, ChannelThread>();
   /** What the property sent through the adapter. */
@@ -67,7 +75,22 @@ export class FakeChannel {
   adapter(): ChannelAdapter {
     const capabilities = (): ChannelAdapter['capabilities'] => this.capabilities;
     const minPushIntervalMs = (): number => this.minPushIntervalMs;
+    const reviews: Pick<ChannelAdapter, 'listReviews' | 'replyToReview'> = this.hasReviews
+      ? {
+          listReviews: async () => {
+            if (this.failListReviews) throw this.failListReviews;
+            return this.reviews.map((r) => structuredClone(r));
+          },
+          replyToReview: async (reviewId: string, text: string) => {
+            if (this.failReviewReply) throw this.failReviewReply;
+            this.reviewReplies.push({ reviewId, text });
+            const review = this.reviews.find((r) => r.id === reviewId);
+            if (review) review.reply = text;
+          },
+        }
+      : {};
     return {
+      ...reviews,
       get capabilities() {
         return capabilities();
       },

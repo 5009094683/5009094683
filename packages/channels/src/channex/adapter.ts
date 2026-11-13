@@ -5,6 +5,7 @@ import {
   type AriBatch,
   type BookingEvent,
   type ChannelAdapter,
+  type ChannelReview,
   type ChannelThread,
   type ChannelThreadSummary,
   type PushResult,
@@ -17,6 +18,7 @@ import {
 } from './client';
 import {
   bookingToEvent,
+  channelCodeOf,
   DRIFT_RESTRICTION_KINDS,
   parseChannexTime,
   restrictionFromChannex,
@@ -209,6 +211,32 @@ export function channexAdapter(context: AdapterContext): ChannelAdapter {
 
     async listThreads(): Promise<ChannelThreadSummary[]> {
       return (await api().listThreads(property())).map(threadSummary);
+    },
+
+    async listReviews(): Promise<ChannelReview[]> {
+      return (await api().listReviews(property())).map((review) => {
+        const a = review.attributes;
+        return {
+          id: review.id,
+          channelCode: channelCodeOf(null, a.ota),
+          reservationCode: a.ota_reservation_id ?? null,
+          guestName: a.guest_name?.trim() || null,
+          overallScore: typeof a.overall_score === 'number' ? a.overall_score : null,
+          scores: (a.scores ?? []).flatMap((s) =>
+            typeof s.category === 'string' && typeof s.score === 'number'
+              ? [{ category: s.category, score: s.score }]
+              : [],
+          ),
+          content: a.content?.trim() || null,
+          receivedAt: parseChannexTime(a.received_at ?? a.inserted_at),
+          hidden: a.is_hidden === true,
+          reply: a.reply?.trim() || null,
+        };
+      });
+    },
+
+    async replyToReview(reviewId: string, text: string): Promise<void> {
+      await api().replyToReview(reviewId, text);
     },
   };
 }

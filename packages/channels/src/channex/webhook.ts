@@ -92,6 +92,7 @@ export interface WebhookOutcome {
   action:
     | 'pull_queued'
     | 'messages_queued'
+    | 'reviews_queued'
     | 'alert_raised'
     | 'alert_resolved'
     | 'stored'
@@ -213,6 +214,16 @@ export async function handleChannexWebhook(
       await queueThreadPull(db, connection.id, threadId);
       return done('messages_queued');
     }
+    case 'review':
+    case 'updated_review':
+      // As with bookings: the review is read from the channel manager, not from this call.
+      await enqueueJob(
+        db,
+        CHANNEL_JOBS.pullReviews,
+        { connectionId: connection.id },
+        { uniqueKey: `${CHANNEL_JOBS.pullReviews}:${connection.id}`, maxAttempts: 4 },
+      );
+      return done('reviews_queued');
     case 'sync_error':
     case 'sync_warning':
     case 'rate_error': {

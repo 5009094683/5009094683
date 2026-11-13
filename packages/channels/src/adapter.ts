@@ -84,6 +84,29 @@ export interface ChannelAdapter {
 
   /** Conversations with the most recent activity first, for catching up on what a webhook did not announce. */
   listThreads?(): Promise<ChannelThreadSummary[]>;
+
+  /** Guest reviews on the booking sites, newest first. */
+  listReviews?(): Promise<ChannelReview[]>;
+
+  /** Posts the property's public reply to a review. */
+  replyToReview?(reviewId: string, text: string): Promise<void>;
+}
+
+export interface ChannelReview {
+  id: string;
+  /** The booking site, as a channel code (BDC, ABB) where it is known. */
+  channelCode: string | null;
+  /** The booking site's reservation number the review is about. */
+  reservationCode: string | null;
+  guestName: string | null;
+  /** Out of 10. */
+  overallScore: number | null;
+  scores: { category: string; score: number }[];
+  content: string | null;
+  receivedAt: Date;
+  /** Not yet shown publicly (Airbnb, until the host reviews the guest). */
+  hidden: boolean;
+  reply: string | null;
 }
 
 export interface ChannelThreadSummary {
