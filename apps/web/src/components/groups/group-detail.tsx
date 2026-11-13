@@ -16,7 +16,7 @@ import {
   UserRound,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import useSWR from 'swr';
 import { ReservationDialog } from '@/components/reservations/reservation-dialog';
 import { ReservationPanel } from '@/components/reservations/reservation-panel';
@@ -45,7 +45,7 @@ import {
   formatStay,
   plural,
 } from '@/lib/format';
-import { useProperties } from '@/lib/hooks';
+import { useCurrentProperty } from '@/lib/hooks';
 import { useLive } from '@/lib/live';
 import { ExistingBookingDialog } from './existing-booking-dialog';
 import { GroupDialog } from './group-dialog';
@@ -146,10 +146,15 @@ function BookingRow({
 export function GroupDetailView({ groupId }: { groupId: string }) {
   const auth = useAuth();
   const toast = useToast();
-  const { properties } = useProperties();
+  const { properties, select } = useCurrentProperty();
   const { data: group, error, mutate } = useSWR<Group>(`/groups/${groupId}`);
   const [open, setOpen] = useState<Open | null>(null);
   useLive(/^(group|reservation|block)\./, () => void mutate());
+  // The way back to the list should show this group's property, however the page was reached.
+  const propertyId = group?.propertyId;
+  useEffect(() => {
+    if (propertyId) select(propertyId);
+  }, [propertyId, select]);
 
   const back = (
     <Link
