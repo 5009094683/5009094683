@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { Photo } from '@/components/photo';
 import { pageClass } from '@/components/site-chrome';
 import { buttonClass } from '@/components/ui/button';
+import { LinkPending } from '@/components/ui/link-pending';
 import { cn } from '@/lib/cn';
 import { kindLabel, placeOf } from '@/lib/format';
 import { usablePhotos } from '@/lib/photos';
@@ -45,7 +46,7 @@ function PropertyCard({ property }: { property: Property }) {
             className={cn(buttonClass('primary'), 'w-full after:absolute after:inset-0 sm:w-auto')}
           >
             View and book
-            <ArrowRight className="size-4" aria-hidden />
+            <LinkPending icon={<ArrowRight className="size-4" aria-hidden />} />
           </Link>
         </div>
       </div>

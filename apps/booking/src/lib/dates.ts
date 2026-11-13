@@ -71,6 +71,16 @@ export function formatInstantDate(value: string, timezone: string): string {
   return formatDate(dateIn(timezone, new Date(value)));
 }
 
+/** The time of day of a timestamp where the property is: `14:25`. */
+export function formatInstantTime(value: string, timezone: string): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(new Date(value));
+}
+
 /**
  * The time of day of a timestamp on the reader's own clock: `14:25`. The
  * server's clock is not the reader's, so only call this in the browser.
@@ -79,4 +89,21 @@ export function formatLocalTime(value: string | number): string {
   const instant = new Date(value);
   const two = (n: number) => String(n).padStart(2, '0');
   return `${two(instant.getHours())}:${two(instant.getMinutes())}`;
+}
+
+/**
+ * A moment on the reader's own clock: `14:25` when it falls on the reader's
+ * today, `Mon 16 Nov, 14:25` otherwise. Browser only, like `formatLocalTime`.
+ */
+export function formatLocalMoment(value: string | number, now: number = Date.now()): string {
+  const instant = new Date(value);
+  const today = new Date(now);
+  const time = formatLocalTime(value);
+  const sameDay =
+    instant.getFullYear() === today.getFullYear() &&
+    instant.getMonth() === today.getMonth() &&
+    instant.getDate() === today.getDate();
+  return sameDay
+    ? time
+    : `${WEEKDAYS[instant.getDay()]} ${instant.getDate()} ${MONTHS[instant.getMonth()]}, ${time}`;
 }

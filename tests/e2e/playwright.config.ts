@@ -1,5 +1,15 @@
 import { defineConfig } from '@playwright/test';
-import { API_PORT, API_URL, AUTH_STATE, E2E_DATABASE_URL, WEB_PORT, WEB_URL } from './env';
+import {
+  API_PORT,
+  API_URL,
+  AUTH_STATE,
+  BOOKING_PORT,
+  BOOKING_URL,
+  E2E_DATABASE_URL,
+  INBOUND_EMAIL_SECRET,
+  WEB_PORT,
+  WEB_URL,
+} from './env';
 
 const serverEnv = {
   // "test" lifts the sign-in rate limit, which the suite would otherwise trip.
@@ -10,6 +20,23 @@ const serverEnv = {
   API_INTERNAL_URL: API_URL,
   API_PUBLIC_URL: `${WEB_URL}/api`,
   WEB_URL,
+  // Where the API sends a guest back to after paying, and what the links it writes point at.
+  BOOKING_URL,
+  // Files uploaded during a run are kept apart from those of `pnpm dev`.
+  STORAGE_DIR: './var/e2e-files',
+  // The inbox takes guests' email, and offers to answer by email. No worker runs here, so
+  // nothing is ever sent to this address: it only has to be set for a reply to be written.
+  INBOUND_EMAIL_SECRET,
+  SMTP_URL: 'smtp://127.0.0.1:1',
+  MAIL_FROM: 'Sea Breeze <stay@seabreeze.example>',
+};
+
+const nextEnv = {
+  ...serverEnv,
+  NODE_ENV: 'development',
+  // A separate build directory lets the suite run while `pnpm dev` is up.
+  NEXT_DIST_DIR: '.next-e2e',
+  NEXT_TELEMETRY_DISABLED: '1',
 };
 
 export default defineConfig({
@@ -54,15 +81,19 @@ export default defineConfig({
       stdout: 'pipe',
     },
     {
-      // A separate build directory lets the suite run while `pnpm dev` is up.
       command: `pnpm --filter @pms/web exec next dev -p ${WEB_PORT}`,
       url: `${WEB_URL}/login`,
-      env: {
-        ...serverEnv,
-        NODE_ENV: 'development',
-        NEXT_DIST_DIR: '.next-e2e',
-        NEXT_TELEMETRY_DISABLED: '1',
-      },
+      env: nextEnv,
+      reuseExistingServer: !process.env.CI,
+      timeout: 180_000,
+      stdout: 'pipe',
+    },
+    {
+      // The guest booking site. Its start page lists the properties, so it is up
+      // only once it can reach the API.
+      command: `pnpm --filter @pms/booking exec next dev -p ${BOOKING_PORT}`,
+      url: BOOKING_URL,
+      env: nextEnv,
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,
       stdout: 'pipe',

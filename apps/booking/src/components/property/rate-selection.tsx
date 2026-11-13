@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from 'react';
 import { Button, buttonClass } from '@/components/ui/button';
+import { LinkPending } from '@/components/ui/link-pending';
 import { Stepper } from '@/components/ui/stepper';
 import { cn } from '@/lib/cn';
 import { count, formatMoney } from '@/lib/format';
@@ -131,7 +132,7 @@ export function RateAction({
         className={cn(buttonClass('primary'), 'w-full')}
       >
         Continue
-        <ArrowRight className="size-4" aria-hidden />
+        <LinkPending icon={<ArrowRight className="size-4" aria-hidden />} />
       </Link>
     </div>
   );

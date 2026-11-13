@@ -1,8 +1,9 @@
-import { CircleAlert, CircleCheck, Clock, Mail, MapPin, Phone } from 'lucide-react';
+import { CircleAlert, CircleCheck, Clock, MapPin } from 'lucide-react';
 import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import { AmenityList } from '@/components/amenities';
+import { ContactLinks } from '@/components/contact-links';
 import { Gallery } from '@/components/gallery';
 import { RateSelection } from '@/components/property/rate-selection';
 import { fits, OfferCard, RatesSkeleton, RoomCard } from '@/components/property/rooms';
@@ -14,7 +15,7 @@ import { errorMessage } from '@/lib/api-error';
 import { brandStyle } from '@/lib/brand';
 import { cn } from '@/lib/cn';
 import { dateIn, formatDate, formatDay } from '@/lib/dates';
-import { count, kindLabel, party, placeOf } from '@/lib/format';
+import { count, kindLabel, party, placeOf, sentence } from '@/lib/format';
 import { getProperty, searchStay } from '@/lib/server-api';
 import {
   hasDates,
@@ -45,7 +46,7 @@ function search(code: string, stay: StayInput): Promise<Outcome> {
 const NOTICES: Record<string, { title: string; text: string }> = {
   gone: {
     title: 'That room is no longer free for these dates',
-    text: 'Someone else may have just booked it. Here is what is free now.',
+    text: 'Someone else may have just booked it. Please choose again, or try other dates.',
   },
   changed: {
     title: 'That price is no longer on offer',
@@ -55,7 +56,10 @@ const NOTICES: Record<string, { title: string; text: string }> = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { property: slug } = await params;
-  const property = await getProperty(slug).catch(() => null);
+  // A place that does not exist is said here as well as on the page, so that the tab takes the
+  // title of the page that says so. A fault is left to the page, which asks the same question.
+  const property = await getProperty(slug).catch(() => undefined);
+  if (property === null) notFound();
   if (!property) return {};
   const place = placeOf(property);
   return {
@@ -84,7 +88,7 @@ async function PromoMessage({ outcome }: { outcome: Promise<Outcome> }) {
   ) : (
     <p className="flex items-start gap-1.5 font-medium text-danger-700">
       <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
-      <span>{promo.reason ?? 'This code cannot be used for this stay.'}</span>
+      <span>{sentence(promo.reason ?? 'This code cannot be used for this stay')}</span>
     </p>
   );
 }
@@ -235,46 +239,19 @@ function About({ property }: { property: PropertyDetail }) {
         {address.length > 0 || property.phone || property.email ? (
           <div className="border-t border-line pt-5">
             <h3 className="text-base font-semibold">Find us</h3>
-            <ul className="mt-3 space-y-1 text-[15px]">
-              {address.length > 0 ? (
-                <li className="flex items-start gap-2.5 py-1">
-                  <MapPin className="mt-0.5 size-4 shrink-0 text-ink-faint" aria-hidden />
-                  <address className="not-italic">
-                    {address.map((line) => (
-                      <span key={line} className="block">
-                        {line}
-                      </span>
-                    ))}
-                  </address>
-                </li>
-              ) : null}
-              {property.phone ? (
-                <li>
-                  <a
-                    href={`tel:${property.phone.replace(/[^\d+]/g, '')}`}
-                    className="-mx-2 flex min-h-11 items-center gap-2.5 rounded-lg px-2 hover:bg-sunken"
-                  >
-                    <Phone className="size-4 shrink-0 text-ink-faint" aria-hidden />
-                    <span className="underline decoration-line-strong underline-offset-4">
-                      {property.phone}
+            {address.length > 0 ? (
+              <p className="mt-3 flex items-start gap-2.5 py-1 text-[15px]">
+                <MapPin className="mt-0.5 size-4 shrink-0 text-ink-faint" aria-hidden />
+                <span>
+                  {address.map((line) => (
+                    <span key={line} className="block">
+                      {line}
                     </span>
-                  </a>
-                </li>
-              ) : null}
-              {property.email ? (
-                <li>
-                  <a
-                    href={`mailto:${property.email}`}
-                    className="-mx-2 flex min-h-11 items-center gap-2.5 rounded-lg px-2 hover:bg-sunken"
-                  >
-                    <Mail className="size-4 shrink-0 text-ink-faint" aria-hidden />
-                    <span className="break-all underline decoration-line-strong underline-offset-4">
-                      {property.email}
-                    </span>
-                  </a>
-                </li>
-              ) : null}
-            </ul>
+                  ))}
+                </span>
+              </p>
+            ) : null}
+            <ContactLinks phone={property.phone} email={property.email} className="mt-1" />
           </div>
         ) : null}
       </aside>
@@ -379,9 +356,19 @@ export default async function PropertyPage({ params, searchParams }: Props) {
 
           <div className="mt-5 space-y-5">
             {outcome ? (
-              <Suspense key={searchKey} fallback={<RoomList rooms={suited} loading />}>
-                <Results outcome={outcome} property={property} stay={stay} />
-              </Suspense>
+              <>
+                {/* The prices follow the page and are put in place by a script: without one,
+                    the placeholders below would stay for good, with no word of why. */}
+                <noscript className="block">
+                  <Notice tone="warning" title="Prices cannot be shown">
+                    This page needs scripts to show prices and to book, and your browser has them
+                    switched off. Please switch them on and load the page again.
+                  </Notice>
+                </noscript>
+                <Suspense key={searchKey} fallback={<RoomList rooms={suited} loading />}>
+                  <Results outcome={outcome} property={property} stay={stay} />
+                </Suspense>
+              </>
             ) : (
               <RoomList rooms={property.roomTypes} />
             )}

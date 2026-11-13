@@ -4,13 +4,14 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { BookingForm } from '@/components/booking-form';
 import { pageClass } from '@/components/site-chrome';
+import { LinkPending } from '@/components/ui/link-pending';
 import { Notice } from '@/components/ui/notice';
 import { ApiError } from '@/lib/api-error';
 import { brandStyle } from '@/lib/brand';
 import { cn } from '@/lib/cn';
 import { countriesWithFirst } from '@/lib/countries';
 import { formatDate, formatDay } from '@/lib/dates';
-import { count, formatMoney, mealPlanLabel, party, placeOf } from '@/lib/format';
+import { count, formatMoney, mealPlanLabel, moneyColumn, party, placeOf } from '@/lib/format';
 import { getOrganisationName, getProperty, organisationSlug, searchStay } from '@/lib/server-api';
 import {
   hasDates,
@@ -29,10 +30,18 @@ interface Props {
   searchParams: Promise<SearchParams>;
 }
 
-export const metadata: Metadata = {
+const metadata: Metadata = {
   title: 'Your booking',
   robots: { index: false },
 };
+
+// As on the property's page: a place that does not exist is said here as well, so that the
+// tab takes the title of the page that says so.
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { property: slug } = await params;
+  if ((await getProperty(slug).catch(() => undefined)) === null) notFound();
+  return metadata;
+}
 
 function Line({
   label,
@@ -46,7 +55,9 @@ function Line({
   className?: string;
 }) {
   return (
-    <div className={cn('flex justify-between gap-4', strong && 'font-semibold text-ink', className)}>
+    <div
+      className={cn('flex justify-between gap-4', strong && 'font-semibold text-ink', className)}
+    >
       <dt>{label}</dt>
       <dd className="text-right tabular-nums">{amount}</dd>
     </div>
@@ -63,11 +74,18 @@ interface SummaryProps {
 }
 
 function Summary({ property, stay, offer, plan, rooms, promo }: SummaryProps) {
-  const money = (amount: number) => formatMoney(amount, property.currency);
   const place = placeOf(property);
   const meal = mealPlanLabel(plan.mealPlan);
   const total = plan.total * rooms;
   const payNow = plan.payNow * rooms;
+  const money = moneyColumn(property.currency, [
+    ...plan.nightly.map((night) => night.amount),
+    plan.subtotal,
+    plan.discount,
+    plan.taxes,
+    total,
+    payNow,
+  ]);
   const discounted = plan.discount > 0;
   const CancelIcon = plan.cancellation.nonRefundable ? CircleSlash : CalendarCheck;
   const nightly = (
@@ -235,7 +253,7 @@ export default async function BookPage({ params, searchParams }: Props) {
           href={results()}
           className="-ml-2 inline-flex min-h-11 items-center gap-2 rounded-lg px-2 text-[15px] font-medium text-ink-soft hover:bg-sunken hover:text-ink"
         >
-          <ArrowLeft className="size-4" aria-hidden />
+          <LinkPending icon={<ArrowLeft className="size-4" aria-hidden />} />
           Back to rooms and prices
         </Link>
         <h1 className="mt-2 font-display text-3xl leading-tight sm:text-4xl">
@@ -244,8 +262,9 @@ export default async function BookPage({ params, searchParams }: Props) {
 
         {rooms < wanted ? (
           <Notice tone="warning" role="status" className="mt-4">
-            Only {count(offer.available, 'room')} of this kind {offer.available === 1 ? 'is' : 'are'}{' '}
-            left for these dates, so this booking is now for {count(rooms, 'room')}.
+            Only {count(offer.available, 'room')} of this kind{' '}
+            {offer.available === 1 ? 'is' : 'are'} left for these dates, so this booking is now for{' '}
+            {count(rooms, 'room')}.
           </Notice>
         ) : null}
 
@@ -280,9 +299,11 @@ export default async function BookPage({ params, searchParams }: Props) {
               countries={countriesWithFirst(property.country)}
               resultsHref={results()}
               goneHref={results('gone')}
+              // What this booking costs to cancel and when it is paid come first. The property's
+              // own terms can be long, and the box they are shown in scrolls: what is cut off
+              // on a small screen must be the long text, not these two sentences.
               terms={
                 <>
-                  {property.terms ? <p className="whitespace-pre-line">{property.terms}</p> : null}
                   <p>{plan.cancellation.text}</p>
                   <p>
                     {plan.payNow >= plan.total
@@ -291,6 +312,7 @@ export default async function BookPage({ params, searchParams }: Props) {
                         ? `${formatMoney(plan.payNow * rooms, property.currency)} is paid when you book. The rest is paid at the property.`
                         : 'Nothing is paid when you book. The full price is paid at the property.'}
                   </p>
+                  {property.terms ? <p className="whitespace-pre-line">{property.terms}</p> : null}
                 </>
               }
             />

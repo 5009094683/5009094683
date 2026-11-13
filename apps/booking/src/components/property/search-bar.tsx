@@ -6,7 +6,15 @@ import { useEffect, useRef, useState, useTransition, type FormEvent, type ReactN
 import { Button } from '@/components/ui/button';
 import { SelectField, TextField } from '@/components/ui/field';
 import { addDays, diffDays, isDate } from '@/lib/dates';
-import { latestCheckOut, MAX_NIGHTS, stayQuery, type StayInput } from '@/lib/stay';
+import { useEarlyInput } from '@/lib/hooks';
+import {
+  latestCheckOut,
+  MAX_NIGHTS,
+  readStay,
+  stayQuery,
+  type SearchParams,
+  type StayInput,
+} from '@/lib/stay';
 
 /** The arrival field's id: links elsewhere on the page point at it to bring the guest back here. */
 export const ARRIVAL_FIELD = 'stay-arrival';
@@ -51,6 +59,18 @@ function validate(form: StayInput, today: string, bookableUntil: string): Errors
   return errors;
 }
 
+/**
+ * What the form's fields hold now. This, not the component's own record of them, is what
+ * a search takes, so that it can never be for other dates than the ones the guest sees.
+ */
+function heldBy(form: HTMLFormElement): StayInput {
+  const fields: SearchParams = {};
+  for (const [name, value] of new FormData(form)) {
+    if (typeof value === 'string') fields[name] = value;
+  }
+  return readStay(fields);
+}
+
 export function SearchBar({
   path,
   stay,
@@ -67,6 +87,7 @@ export function SearchBar({
   const [errors, setErrors] = useState<Errors>({});
   const formRef = useRef<HTMLFormElement>(null);
   const awaitingResults = useRef(false);
+  useEarlyInput(formRef);
 
   // The address is the truth: going back or forward changes it, and the form follows.
   const inAddress = stayQuery(stay);
@@ -101,14 +122,16 @@ export function SearchBar({
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (isPending) return;
-    const found = validate(form, today, bookableUntil);
+    const held = heldBy(event.currentTarget);
+    setForm(held);
+    const found = validate(held, today, bookableUntil);
     setErrors(found);
     const firstWrong = found.checkIn ? 'checkIn' : found.checkOut ? 'checkOut' : null;
     if (firstWrong) {
       formRef.current?.querySelector<HTMLInputElement>(`[name="${firstWrong}"]`)?.focus();
       return;
     }
-    const query = stayQuery({ ...form, promo: form.promo.trim().toUpperCase() });
+    const query = stayQuery(held);
     awaitingResults.current = true;
     startTransition(() => {
       router.push(`${path}?${query}`, { scroll: false });

@@ -1,3 +1,4 @@
+import { formatDate } from './dates';
 import type { MealPlan, Property } from './types';
 
 const fractionDigitsCache = new Map<string, number>();
@@ -17,20 +18,34 @@ function fractionDigits(currency: string): number {
   return digits;
 }
 
-/** `₹9,450` from 945000 minor units. Whole amounts drop the decimals. */
-export function formatMoney(amount: number, currency: string): string {
+/**
+ * `₹9,450` from 945000 minor units. Whole amounts drop the decimals, unless
+ * `withFraction` asks for `₹9,450.00`.
+ */
+export function formatMoney(amount: number, currency: string, withFraction = false): string {
   const digits = fractionDigits(currency);
   const value = amount / 10 ** digits;
   try {
     return new Intl.NumberFormat(currency === 'INR' ? 'en-IN' : 'en', {
       style: 'currency',
       currency,
-      minimumFractionDigits: Number.isInteger(value) ? 0 : digits,
+      minimumFractionDigits: withFraction || !Number.isInteger(value) ? digits : 0,
       maximumFractionDigits: digits,
     }).format(value);
   } catch {
     return `${currency} ${value}`;
   }
+}
+
+/**
+ * Formats amounts that are read together, as the lines of a price summary
+ * are: when any of them has a fraction, all are written with one, so that
+ * the column lines up.
+ */
+export function moneyColumn(currency: string, amounts: number[]): (amount: number) => string {
+  const unit = 10 ** fractionDigits(currency);
+  const withFraction = amounts.some((amount) => amount % unit !== 0);
+  return (amount) => formatMoney(amount, currency, withFraction);
 }
 
 /** `1 night`, `3 nights`. */
@@ -71,4 +86,13 @@ export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} bytes`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * A sentence from the server as it reads on a page: most of them come
+ * without a full stop, and some name a date as `2026-11-20`.
+ */
+export function sentence(text: string): string {
+  const readable = text.trim().replace(/\b\d{4}-\d{2}-\d{2}\b/g, (date) => formatDate(date));
+  return /[.!?]$/.test(readable) ? readable : `${readable}.`;
 }

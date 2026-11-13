@@ -94,5 +94,6 @@ export const getBooking = cache((token: string): Promise<Booking> =>
 export const getCheckin = (token: string): Promise<Checkin> =>
   get<Checkin>(`/bookings/${segment(token)}/check-in`);
 
-export const getPaymentRequest = (token: string, orderId: string): Promise<PaymentRequest> =>
-  get<PaymentRequest>(`/bookings/${segment(token)}/pay/${segment(orderId)}`);
+export const getPaymentRequest = cache((token: string, orderId: string): Promise<PaymentRequest> =>
+  get<PaymentRequest>(`/bookings/${segment(token)}/pay/${segment(orderId)}`),
+);

@@ -137,3 +137,31 @@ export async function showOnlyProperties(
     JSON.stringify(hidden),
   );
 }
+
+/** `PATCH` on the API, on a request context that `apiClient` has signed in. */
+export async function apiPatch<T>(
+  request: APIRequestContext,
+  path: string,
+  body: unknown,
+): Promise<T> {
+  const res = await request.patch(`${API_URL}${path}`, { data: body });
+  expect(res.ok(), `PATCH ${path}: ${await res.text()}`).toBe(true);
+  return (await res.json()) as T;
+}
+
+/**
+ * Opens a test property to bookings from the guest website. `fields` is anything else
+ * the property should have for the test: an address, a phone number, more settings.
+ * Returns the property's code, which is its address on the booking site.
+ */
+export async function takeWebsiteBookings(
+  request: APIRequestContext,
+  property: TestProperty,
+  fields: { settings?: Record<string, unknown> } & Record<string, unknown> = {},
+): Promise<string> {
+  const { code } = await apiPatch<{ code: string }>(request, `/properties/${property.id}`, {
+    ...fields,
+    settings: { ...fields.settings, bookingEngineEnabled: true },
+  });
+  return code;
+}

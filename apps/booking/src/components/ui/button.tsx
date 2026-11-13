@@ -2,13 +2,16 @@ import { LoaderCircle } from 'lucide-react';
 import Link from 'next/link';
 import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from 'react';
 import { cn } from '@/lib/cn';
+import { LinkPending } from './link-pending';
 
 type Variant = 'primary' | 'secondary' | 'quiet' | 'danger';
 type Size = 'md' | 'lg';
 
 const BASE =
   'inline-flex items-center justify-center gap-2 rounded-lg text-center font-semibold transition-colors select-none ' +
-  'disabled:cursor-not-allowed disabled:opacity-50 aria-busy:cursor-progress! aria-busy:opacity-75!';
+  'disabled:cursor-not-allowed disabled:opacity-50 aria-busy:cursor-progress! aria-busy:opacity-75! ' +
+  // For a link, while the page it leads to is being fetched: see `LinkPending`.
+  'has-[[data-pending]]:animate-pulse has-[[data-pending]]:cursor-progress has-[[data-pending]]:opacity-75';
 
 const VARIANTS: Record<Variant, string> = {
   primary: 'bg-brand-600 text-on-brand shadow-sm hover:bg-brand-700 active:bg-brand-800',
@@ -96,7 +99,7 @@ export function ButtonLink({
   }
   return (
     <Link href={href} className={classes} {...props}>
-      {icon}
+      <LinkPending icon={icon} />
       {children}
     </Link>
   );

@@ -12,6 +12,7 @@ import { api } from '@/lib/browser-api';
 import type { Country } from '@/lib/countries';
 import { clearDraft, readDraft, rememberForm, writeDraft } from '@/lib/draft';
 import { formatMoney } from '@/lib/format';
+import { useEarlyInput } from '@/lib/hooks';
 import type { Booked, BookingBody } from '@/lib/types';
 
 export interface BookingFormProps {
@@ -102,9 +103,28 @@ function fieldOf(err: unknown): Field | null {
 }
 
 interface Failure {
+  title: string;
   message: string;
   /** Where the guest can put it right, when it is not on this page. */
   way?: { href: string; label: string };
+}
+
+/**
+ * What to say when no answer came back, or a fault on the way to one. The request may have
+ * arrived all the same. Where a booking is paid for on the next page that leaves a hold which
+ * lapses by itself, and trying again is right. Where it is confirmed at once, trying again
+ * could book the same stay twice, and the confirmation email is how the guest can tell.
+ */
+function unanswered(err: unknown, confirmedAtOnce: boolean): Failure | null {
+  if (!confirmedAtOnce || !(err instanceof ApiError)) return null;
+  if (err.status !== 0 && err.status < 500) return null;
+  return {
+    title: 'We are not sure your booking was made',
+    message:
+      err.status === 0
+        ? 'We could not reach the server. Check your connection, and look for our email before you try again, so that you do not book twice.'
+        : 'Something went wrong on our side. Please look for our email before you try again, so that you do not book twice.',
+  };
 }
 
 export function BookingForm(props: BookingFormProps) {
@@ -118,18 +138,19 @@ export function BookingForm(props: BookingFormProps) {
   const failureRef = useRef<HTMLDivElement>(null);
   const bookingPage = useRef<string | null>(null);
 
-  // Declared before the effect that reads the draft, so that on the first pass it does not
-  // write the empty form over what was saved.
-  const draftRead = useRef(false);
+  // The form as it first renders is never written: that would put an empty form over what
+  // was saved, before it has been read. Nor is anything written once the booking is made.
+  const finished = useRef(false);
   useEffect(() => {
-    if (draftRead.current) writeDraft(values);
+    if (values !== EMPTY && !finished.current) writeDraft(values);
   }, [values]);
 
   useEffect(() => {
-    draftRead.current = true;
     const draft = readDraft();
     if (Object.keys(draft).length > 0) setValues((current) => ({ ...current, ...draft }));
   }, []);
+  // After the draft, so that what the guest has just typed goes over what was saved earlier.
+  useEarlyInput(formRef);
 
   // Coming back from the payment page with the Back button can bring this page back as it
   // was left, form and all. The booking exists by then: show it rather than a form to send twice.
@@ -203,12 +224,14 @@ export function BookingForm(props: BookingFormProps) {
         // Kept until the booking is paid for: if the payment does not go through, the guest
         // can come back to this form as they left it.
         rememberForm(booked.token, window.location.pathname + window.location.search);
-        // The Back button on the payment page should lead to the booking, not to this form.
+        // The Back button on the payment page should lead to the booking, not to this form,
+        // and to its top rather than as far down as this form was scrolled.
         bookingPage.current = page;
+        window.history.scrollRestoration = 'manual';
         window.history.replaceState(null, '', page);
         window.location.assign(booked.payment.checkoutUrl);
       } else {
-        draftRead.current = false;
+        finished.current = true;
         clearDraft();
         router.replace(page);
       }
@@ -228,10 +251,13 @@ export function BookingForm(props: BookingFormProps) {
       const elsewhere =
         err instanceof ApiError &&
         (err.code === 'restriction_violated' || (err.code === 'validation' && err.status === 400));
-      setFailure({
-        message: errorMessage(err),
-        way: elsewhere ? { href: resultsHref, label: 'Choose again' } : undefined,
-      });
+      setFailure(
+        unanswered(err, payNow === 0) ?? {
+          title: 'Your booking was not made',
+          message: errorMessage(err),
+          way: elsewhere ? { href: resultsHref, label: 'Choose again' } : undefined,
+        },
+      );
     }
   };
 
@@ -239,8 +265,13 @@ export function BookingForm(props: BookingFormProps) {
   const action = payNow > 0 ? `Confirm and pay ${money(payNow)}` : 'Confirm booking';
 
   return (
+    // Sent before the page's scripts have loaded, or with scripts switched off, this goes to
+    // the server as a plain form and the page comes back empty. As a POST it does so quietly.
+    // As the GET it would be by default, the guest's name, email and phone would be written
+    // into the address, and from there into every log on the way.
     <form
       ref={formRef}
+      method="post"
       noValidate
       onSubmit={onSubmit}
       aria-label="Your booking"
@@ -394,7 +425,7 @@ export function BookingForm(props: BookingFormProps) {
 
       {failure ? (
         <div ref={failureRef} tabIndex={-1} className="rounded-xl outline-offset-4">
-          <Notice tone="danger" role="alert" title="Your booking was not made">
+          <Notice tone="danger" role="alert" title={failure.title}>
             <p>{failure.message}</p>
             {failure.way ? (
               <p className="mt-2">
@@ -409,6 +440,13 @@ export function BookingForm(props: BookingFormProps) {
           </Notice>
         </div>
       ) : null}
+
+      <noscript>
+        <Notice tone="warning" title="This form cannot be sent">
+          It needs scripts to make your booking, and your browser has them switched off. Please
+          switch them on and load the page again.
+        </Notice>
+      </noscript>
 
       {/* On a phone this stays at the bottom of the screen: the total and the button in reach of a thumb. */}
       <div className="sticky bottom-0 z-20 -mx-4 border-t border-line bg-surface px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-6px_16px_-8px_rgb(40_30_16/0.18)] sm:-mx-6 sm:px-6 lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
@@ -426,7 +464,7 @@ export function BookingForm(props: BookingFormProps) {
             icon={payNow > 0 ? <Lock className="size-4" aria-hidden /> : undefined}
             className="flex-1 lg:w-full lg:flex-none"
           >
-            {submitting ? (payNow > 0 ? 'Taking you to the payment page' : 'Booking') : action}
+            {submitting ? 'Making your booking' : action}
           </Button>
         </div>
         <p className="mt-2 hidden text-sm text-ink-soft lg:block">

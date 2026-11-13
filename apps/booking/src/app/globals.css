@@ -58,10 +58,16 @@ body {
   font-family: var(--font-sans);
 }
 
-/* A property with a pale brand colour sets --color-focus to one that can be seen. */
-:focus-visible {
-  outline: 2px solid var(--color-focus, var(--color-brand-600));
-  outline-offset: 2px;
+/*
+ * A property with a pale brand colour sets --color-focus to one that can be seen.
+ * In the base layer, so that a utility on an element can change it: a heading that is given
+ * focus only so that a screen reader starts reading there shows no ring.
+ */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-focus, var(--color-brand-600));
+    outline-offset: 2px;
+  }
 }
 
 /* Tailwind's reset leaves these with the arrow cursor. */

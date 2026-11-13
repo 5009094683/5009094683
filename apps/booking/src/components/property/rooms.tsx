@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { AmenityList } from '@/components/amenities';
 import { Photo } from '@/components/photo';
 import { cn } from '@/lib/cn';
-import { count, formatMoney, mealPlanLabel } from '@/lib/format';
+import { count, formatMoney, mealPlanLabel, moneyColumn, sentence } from '@/lib/format';
 import { usablePhotos } from '@/lib/photos';
 import { MAX_ROOMS } from '@/lib/stay';
 import type { Offer, Plan, Promo, RoomType } from '@/lib/types';
@@ -107,6 +107,7 @@ interface RateRowProps {
 
 function RateRow({ room, plan, available, nights, currency, promo, bookHref }: RateRowProps) {
   const money = (amount: number) => formatMoney(amount, currency);
+  const line = moneyColumn(currency, [plan.subtotal, plan.discount, plan.taxes, plan.total]);
   const meal = mealPlanLabel(plan.mealPlan);
   const before = Math.round(plan.subtotal / nights);
   const perNight = Math.round((plan.subtotal - plan.discount) / nights);
@@ -185,16 +186,16 @@ function RateRow({ room, plan, available, nights, currency, promo, bookHref }: R
                       ? `${count(nights, 'night')} x ${money(before)}`
                       : `${count(nights, 'night')}, ${money(before)} on average`
                   }
-                  amount={money(plan.subtotal)}
+                  amount={line(plan.subtotal)}
                 />
                 {discounted ? (
                   <PriceLine
                     label={promo ? `Discount (${promo.code})` : 'Discount'}
-                    amount={`-${money(plan.discount)}`}
+                    amount={`-${line(plan.discount)}`}
                   />
                 ) : null}
-                <PriceLine label="Taxes" amount={money(plan.taxes)} />
-                <PriceLine label="Total" amount={money(plan.total)} strong />
+                <PriceLine label="Taxes" amount={line(plan.taxes)} />
+                <PriceLine label="Total" amount={line(plan.total)} strong />
               </dl>
             </details>
           </div>
@@ -214,7 +215,7 @@ function RateRow({ room, plan, available, nights, currency, promo, bookHref }: R
           <Info className="mt-0.5 size-4 shrink-0 text-ink-soft" aria-hidden />
           <span>
             <span className="font-semibold">Not available for this stay.</span>{' '}
-            {plan.reason ?? 'Try other dates.'}
+            {plan.reason ? sentence(plan.reason) : 'Try other dates.'}
           </span>
         </p>
       )}

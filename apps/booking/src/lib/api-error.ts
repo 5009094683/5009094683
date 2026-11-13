@@ -1,3 +1,5 @@
+import { sentence } from './format';
+
 /** A failed API call, carrying the server's own code and message so pages can show the message as it is. */
 export class ApiError extends Error {
   readonly status: number;
@@ -85,7 +87,7 @@ export function errorMessage(err: unknown): string {
   if (fieldIssues(err).length > 0 || err.code === 'bad_request' || err.code === 'error') {
     return 'Some of these details could not be accepted. Please check them and try again.';
   }
-  return err.message;
+  return sentence(err.message);
 }
 
 /** A guest link the server does not recognise: wrong, revoked, expired, or not a link at all. */
