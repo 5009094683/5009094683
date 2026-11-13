@@ -340,10 +340,15 @@ export async function saveMappings(
 }
 
 export async function getMappings(db: DbOrTx, connectionId: string) {
-  const [rooms, rates] = await Promise.all([
-    db.select().from(channelRoomMappings).where(eq(channelRoomMappings.connectionId, connectionId)),
-    db.select().from(channelRateMappings).where(eq(channelRateMappings.connectionId, connectionId)),
-  ]);
+  // One after the other: inside a transaction both run on one connection, which takes one query at a time.
+  const rooms = await db
+    .select()
+    .from(channelRoomMappings)
+    .where(eq(channelRoomMappings.connectionId, connectionId));
+  const rates = await db
+    .select()
+    .from(channelRateMappings)
+    .where(eq(channelRateMappings.connectionId, connectionId));
   return {
     roomTypes: rooms.map((m) => ({
       roomTypeId: m.roomTypeId,
@@ -419,23 +424,28 @@ export async function listConnections(
     ids.map((id) => sql`${id}`),
     sql`, `,
   );
-  const [{ rows: queue }, { rows: unrouted }, { rows: rooms }, { rows: rates }] = await Promise.all(
-    [
-      db.execute<{ connection_id: string; n: number; oldest: string | null }>(
-        sql`SELECT connection_id, count(*)::int AS n, min(changed_at)::text AS oldest FROM sync_queue WHERE connection_id IN (${idList}) GROUP BY 1`,
-      ),
-      // Changes committed but not yet handed to any connection's work list (the worker does that within moments).
-      db.execute<{ property_id: string; n: number; oldest: string | null }>(
-        sql`SELECT property_id, count(*)::int AS n, min(created_at)::text AS oldest FROM outbox
+  // One after the other: they share the snapshot's single connection, which takes one query at a time.
+  const { rows: queue } = await db.execute<{
+    connection_id: string;
+    n: number;
+    oldest: string | null;
+  }>(
+    sql`SELECT connection_id, count(*)::int AS n, min(changed_at)::text AS oldest FROM sync_queue WHERE connection_id IN (${idList}) GROUP BY 1`,
+  );
+  // Changes committed but not yet handed to any connection's work list (the worker does that within moments).
+  const { rows: unrouted } = await db.execute<{
+    property_id: string;
+    n: number;
+    oldest: string | null;
+  }>(
+    sql`SELECT property_id, count(*)::int AS n, min(created_at)::text AS oldest FROM outbox
           WHERE org_id = ${orgId} AND kind IN ('ari.availability', 'ari.restrictions') GROUP BY 1`,
-      ),
-      db.execute<{ connection_id: string; n: number }>(
-        sql`SELECT connection_id, count(*)::int AS n FROM channel_room_mappings WHERE connection_id IN (${idList}) GROUP BY 1`,
-      ),
-      db.execute<{ connection_id: string; n: number }>(
-        sql`SELECT connection_id, count(*)::int AS n FROM channel_rate_mappings WHERE connection_id IN (${idList}) GROUP BY 1`,
-      ),
-    ],
+  );
+  const { rows: rooms } = await db.execute<{ connection_id: string; n: number }>(
+    sql`SELECT connection_id, count(*)::int AS n FROM channel_room_mappings WHERE connection_id IN (${idList}) GROUP BY 1`,
+  );
+  const { rows: rates } = await db.execute<{ connection_id: string; n: number }>(
+    sql`SELECT connection_id, count(*)::int AS n FROM channel_rate_mappings WHERE connection_id IN (${idList}) GROUP BY 1`,
   );
   return rows.map(({ connection: c, propertyName }) => {
     const capabilities = adapterFor(c).capabilities;

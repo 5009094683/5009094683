@@ -69,6 +69,44 @@ export interface ChannelAdapter {
    * come back in minor units of `currency`, the property's currency.
    */
   fetchAri?(range: DateRange, currency: string): Promise<RemoteAri>;
+
+  /**
+   * Writes to a guest in the booking site's own message box: in a thread
+   * that exists, or on a booking that has no thread yet.
+   */
+  sendMessage?(
+    target: { threadId?: string; bookingId?: string },
+    text: string,
+  ): Promise<{ messageId: string; threadId: string | null }>;
+
+  /** One conversation with everything said in it, oldest first. Null when the channel no longer has it. */
+  fetchThread?(threadId: string): Promise<ChannelThread | null>;
+
+  /** Conversations with the most recent activity first, for catching up on what a webhook did not announce. */
+  listThreads?(): Promise<ChannelThreadSummary[]>;
+}
+
+export interface ChannelThreadSummary {
+  threadId: string;
+  /** The channel's id of the booking the conversation is about, when it is about one. */
+  bookingId: string | null;
+  title: string | null;
+  /** The booking site, as the channel names it. */
+  provider: string | null;
+  lastMessageAt: Date | null;
+}
+
+export interface ChannelMessage {
+  id: string;
+  sender: 'guest' | 'property' | 'system';
+  text: string;
+  /** Links to files sent with the message. */
+  attachments: string[];
+  at: Date;
+}
+
+export interface ChannelThread extends ChannelThreadSummary {
+  messages: ChannelMessage[];
 }
 
 export interface AvailabilityUpdate {

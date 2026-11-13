@@ -391,6 +391,43 @@ export interface WebhookRegistration {
   created: boolean;
 }
 
+export interface WebhookState {
+  /** Where the channel manager is expected to announce bookings. */
+  callbackUrl: string;
+  /** Whether a webhook pointing there exists and is switched on. Null when the channel manager could not be asked. */
+  registered: boolean | null;
+  /** Events the PMS relies on that the registered webhook does not send. */
+  missingEvents: string[];
+  error: string | null;
+}
+
+/** Whether Channex is set to announce bookings to this PMS. Read-only. */
+export async function channexWebhookState(env: Env): Promise<WebhookState> {
+  const callbackUrl = `${env.API_PUBLIC_URL.replace(/\/+$/, '')}${CHANNEX_WEBHOOK_PATH}`;
+  if (!env.CHANNEX_API_KEY) {
+    return { callbackUrl, registered: null, missingEvents: [], error: 'No API key is set' };
+  }
+  try {
+    const hooks = await accountClient(env).listWebhooks();
+    const hook = hooks.find((w) => w.callback_url === callbackUrl);
+    if (!hook || hook.is_active === false) {
+      return { callbackUrl, registered: false, missingEvents: [], error: null };
+    }
+    const mask = (hook.event_mask ?? '').split(';').map((e) => e.trim());
+    const missingEvents = mask.includes('*')
+      ? []
+      : CHANNEX_WEBHOOK_EVENTS.filter((e) => !mask.includes(e));
+    return { callbackUrl, registered: true, missingEvents, error: null };
+  } catch (err) {
+    return {
+      callbackUrl,
+      registered: null,
+      missingEvents: [],
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 /**
  * Makes sure Channex has one account-wide webhook pointing at this PMS, with
  * the shared secret it must send back. Safe to run again: it updates the

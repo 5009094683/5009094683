@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 import type { Env } from '@pms/config';
 import { webhookEvents, type Database } from '@pms/db';
 import { enqueueJob, raiseAlert, resolveAlert } from '@pms/domain';
+import { queueThreadPull } from '../engine/messages';
 import { CHANNEL_JOBS } from '../jobs';
 
 export interface IncomingWebhook {
@@ -88,7 +89,13 @@ export interface WebhookOutcome {
   event: string;
   connectionId: string | null;
   /** What was done about it. */
-  action: 'pull_queued' | 'alert_raised' | 'alert_resolved' | 'stored' | 'unknown_property';
+  action:
+    | 'pull_queued'
+    | 'messages_queued'
+    | 'alert_raised'
+    | 'alert_resolved'
+    | 'stored'
+    | 'unknown_property';
 }
 
 const BOOKING_EVENTS = new Set([
@@ -198,6 +205,14 @@ export async function handleChannexWebhook(
   }
 
   switch (event) {
+    case 'message':
+    case 'message_thread_booking_assigned': {
+      // The message itself is read from the channel manager, not from this call.
+      const threadId = payload.message_thread_id;
+      if (typeof threadId !== 'string' || !threadId) return done('stored');
+      await queueThreadPull(db, connection.id, threadId);
+      return done('messages_queued');
+    }
     case 'sync_error':
     case 'sync_warning':
     case 'rate_error': {
@@ -250,7 +265,7 @@ export async function handleChannexWebhook(
       });
       return done('alert_raised');
     default:
-      // Messages, reviews, Airbnb requests and anything new: kept as received for the features that read them.
+      // Reviews, Airbnb requests and anything new: kept as received for the features that read them.
       return { event, connectionId: connection.id, action: 'stored' };
   }
 }

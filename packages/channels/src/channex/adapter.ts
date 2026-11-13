@@ -5,13 +5,20 @@ import {
   type AriBatch,
   type BookingEvent,
   type ChannelAdapter,
+  type ChannelThread,
+  type ChannelThreadSummary,
   type PushResult,
   type RemoteAri,
 } from '../adapter';
-import { ChannexClient, type ChannexAvailabilityUpdate } from './client';
+import {
+  ChannexClient,
+  type ChannexAvailabilityUpdate,
+  type ChannexThreadResource,
+} from './client';
 import {
   bookingToEvent,
   DRIFT_RESTRICTION_KINDS,
+  parseChannexTime,
   restrictionFromChannex,
   restrictionToChannex,
   revisionToEvent,
@@ -157,5 +164,62 @@ export function channexAdapter(context: AdapterContext): ChannelAdapter {
       }
       return remote;
     },
+
+    async sendMessage(target, text) {
+      const sent = target.threadId
+        ? await api().sendThreadMessage(target.threadId, text)
+        : target.bookingId
+          ? await api().sendBookingMessage(target.bookingId, text)
+          : undefined;
+      if (!sent) {
+        throw new ChannelError('A message needs a conversation or a booking to go to', {
+          retryable: false,
+        });
+      }
+      return {
+        messageId: sent.id,
+        threadId: sent.relationships?.message_thread?.data?.id ?? target.threadId ?? null,
+      };
+    },
+
+    async fetchThread(threadId: string): Promise<ChannelThread | null> {
+      const thread = await api().getThread(threadId);
+      if (!thread) return null;
+      const messages = await api().threadMessages(threadId);
+      return {
+        ...threadSummary(thread),
+        messages: messages
+          .map((m) => ({
+            id: m.id,
+            sender:
+              m.attributes.sender === 'guest'
+                ? ('guest' as const)
+                : m.attributes.sender === 'property'
+                  ? ('property' as const)
+                  : ('system' as const),
+            text: m.attributes.message ?? '',
+            attachments: (m.attributes.attachments ?? []).filter(
+              (a): a is string => typeof a === 'string',
+            ),
+            at: parseChannexTime(m.attributes.inserted_at),
+          }))
+          .sort((a, b) => a.at.getTime() - b.at.getTime()),
+      };
+    },
+
+    async listThreads(): Promise<ChannelThreadSummary[]> {
+      return (await api().listThreads(property())).map(threadSummary);
+    },
+  };
+}
+
+function threadSummary(thread: ChannexThreadResource): ChannelThreadSummary {
+  const last = thread.attributes.last_message_received_at ?? thread.attributes.updated_at;
+  return {
+    threadId: thread.id,
+    bookingId: thread.relationships?.booking?.data?.id ?? null,
+    title: thread.attributes.title ?? null,
+    provider: thread.attributes.provider ?? null,
+    lastMessageAt: last ? parseChannexTime(last) : null,
   };
 }

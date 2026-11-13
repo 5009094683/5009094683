@@ -6,4 +6,6 @@ export const CHANNEL_JOBS = {
   driftCheck: 'channel.drift_check',
   /** Bring in bookings made before the connection existed. Payload: `{ connectionId }`. */
   importBookings: 'channel.import_bookings',
+  /** Read one guest conversation into the inbox. Payload: `{ connectionId, threadId }`. */
+  pullMessages: 'channel.pull_messages',
 } as const;

@@ -179,6 +179,20 @@ export async function parseMime(source: Buffer | string): Promise<EmailMessage> 
     text: plain || fromHtml,
     ...(plain && fromHtml ? { alternativeText: fromHtml } : {}),
     authentication: senderCheck(results, fromAddress),
+    inReplyTo: mail.inReplyTo?.replace(/^<|>$/g, '') ?? null,
+    references: (Array.isArray(mail.references)
+      ? mail.references
+      : mail.references
+        ? mail.references.split(/\s+/)
+        : []
+    )
+      .map((id) => id.replace(/^<|>$/g, ''))
+      .filter(Boolean),
+    attachments: mail.attachments.map((a) => ({
+      name: a.filename ?? 'attachment',
+      contentType: a.contentType ?? null,
+      size: a.size ?? null,
+    })),
   };
 }
 

@@ -233,6 +233,8 @@ export const messages = pgTable(
     /** Drafted by the assistant and sent after a person approved it. */
     aiDrafted: boolean('ai_drafted').notNull().default(false),
     meta: jsonb('meta').$type<Record<string, unknown>>().notNull().default(emptyJson),
+    /** Order of arrival, to keep two messages with the same timestamp in the order they came. */
+    seq: bigserial('seq', { mode: 'number' }).notNull(),
     createdAt: createdAt(),
     sentAt: timestamptz('sent_at'),
     deliveredAt: timestamptz('delivered_at'),

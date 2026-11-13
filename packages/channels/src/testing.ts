@@ -7,6 +7,7 @@ import {
   type AriBatch,
   type BookingEvent,
   type ChannelAdapter,
+  type ChannelThread,
   type PushResult,
   type RemoteAri,
   type RemoteRestriction,
@@ -36,6 +37,11 @@ export class FakeChannel {
     bookings: 'webhook',
     messaging: false,
   };
+  /** Guest conversations in the channel's message box, by thread id. */
+  readonly threads = new Map<string, ChannelThread>();
+  /** What the property sent through the adapter. */
+  readonly sentMessages: { threadId: string | null; bookingId: string | null; text: string }[] = [];
+  failSend: Error | null = null;
   /** Runs inside every push, before it is recorded: lets a test act while a push is in flight. */
   onPush: ((batch: AriBatch) => Promise<void> | void) | null = null;
   pullCount = 0;
@@ -123,7 +129,62 @@ export class FakeChannel {
         }
         return { availability, restrictions };
       },
+      sendMessage: async (target, text) => {
+        if (this.failSend) throw this.failSend;
+        this.sentMessages.push({
+          threadId: target.threadId ?? null,
+          bookingId: target.bookingId ?? null,
+          text,
+        });
+        let thread = target.threadId ? this.threads.get(target.threadId) : undefined;
+        if (!thread && target.bookingId) {
+          thread =
+            [...this.threads.values()].find((t) => t.bookingId === target.bookingId) ??
+            this.openThread(target.bookingId);
+        }
+        if (!thread)
+          throw new ChannelError('No such conversation', { retryable: false, status: 404 });
+        const id = `fake-msg-${this.sentMessages.length}`;
+        thread.messages.push({ id, sender: 'property', text, attachments: [], at: new Date() });
+        return { messageId: id, threadId: thread.threadId };
+      },
+      fetchThread: async (threadId: string): Promise<ChannelThread | null> => {
+        const thread = this.threads.get(threadId);
+        return thread ? structuredClone(thread) : null;
+      },
+      listThreads: async () =>
+        [...this.threads.values()].map((t) => ({
+          threadId: t.threadId,
+          bookingId: t.bookingId,
+          title: t.title,
+          provider: t.provider,
+          lastMessageAt: t.messages[t.messages.length - 1]?.at ?? null,
+        })),
     };
+  }
+
+  /** Starts a conversation about a booking, as a guest opening the booking site's message box does. */
+  openThread(bookingId: string | null, title = 'Asha Rao'): ChannelThread {
+    const thread: ChannelThread = {
+      threadId: `thread-${this.threads.size + 1}-${bookingId ?? 'enquiry'}`,
+      bookingId,
+      title,
+      provider: 'BookingCom',
+      lastMessageAt: null,
+      messages: [],
+    };
+    this.threads.set(thread.threadId, thread);
+    return thread;
+  }
+
+  /** The guest writes in a conversation. */
+  guestWrites(threadId: string, text: string, at: Date = new Date()): string {
+    const thread = this.threads.get(threadId);
+    if (!thread) throw new Error(`No such thread: ${threadId}`);
+    const id = `fake-guest-${threadId}-${thread.messages.length + 1}`;
+    thread.messages.push({ id, sender: 'guest', text, attachments: [], at });
+    thread.lastMessageAt = at;
+    return id;
   }
 }
 

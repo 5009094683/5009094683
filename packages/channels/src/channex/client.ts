@@ -504,6 +504,93 @@ export class ChannexClient {
    * screen for one property. This endpoint is documented by Channex but is
    * not part of their published OpenAPI spec, hence the untyped call.
    */
+  // -------------------------------------------------------------------------
+  // Guest messages
+  //
+  // The message endpoints are documented in Channex's API guide but most are
+  // missing from the published OpenAPI spec, hence the untyped calls.
+
+  private async json<T>(
+    what: string,
+    method: 'GET' | 'POST',
+    path: string,
+    body?: unknown,
+  ): Promise<{ response: Response; body: T | undefined }> {
+    const request = new Request(`${this.baseUrl}${path}`, {
+      method,
+      headers: {
+        'user-api-key': this.options.apiKey,
+        accept: 'application/json',
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const response = await this.send(request);
+    const parsed = (await response.json().catch(() => undefined)) as T | undefined;
+    if (!response.ok && response.status !== 404) this.fail(what, response, parsed);
+    return { response, body: parsed };
+  }
+
+  async listThreads(propertyId: string): Promise<ChannexThreadResource[]> {
+    const { body } = await this.json<{ data?: ChannexThreadResource[] }>(
+      'Listing guest conversations',
+      'GET',
+      `/message_threads?filter[property_id]=${encodeURIComponent(propertyId)}&pagination[limit]=${PAGE_LIMIT}`,
+    );
+    return body?.data ?? [];
+  }
+
+  async getThread(threadId: string): Promise<ChannexThreadResource | null> {
+    const { response, body } = await this.json<{ data?: ChannexThreadResource }>(
+      'Reading a guest conversation',
+      'GET',
+      `/message_threads/${encodeURIComponent(threadId)}`,
+    );
+    return response.status === 404 ? null : (body?.data ?? null);
+  }
+
+  /** Every message of a thread, in whatever order the pages come; callers sort. */
+  async threadMessages(threadId: string): Promise<ChannexMessageResource[]> {
+    const out: ChannexMessageResource[] = [];
+    for (let page = 1; page <= 20; page++) {
+      const { response, body } = await this.json<{
+        data?: ChannexMessageResource[];
+        meta?: { total?: number };
+      }>(
+        'Reading guest messages',
+        'GET',
+        `/message_threads/${encodeURIComponent(threadId)}/messages?pagination[page]=${page}&pagination[limit]=${PAGE_LIMIT}`,
+      );
+      if (response.status === 404) break;
+      const data = body?.data ?? [];
+      out.push(...data);
+      if (data.length < PAGE_LIMIT || out.length >= (body?.meta?.total ?? Infinity)) break;
+    }
+    return out;
+  }
+
+  async sendThreadMessage(threadId: string, text: string): Promise<ChannexMessageResource> {
+    const { response, body } = await this.json<{ data?: ChannexMessageResource }>(
+      'Sending a message',
+      'POST',
+      `/message_threads/${encodeURIComponent(threadId)}/messages`,
+      { message: { message: text } },
+    );
+    if (!body?.data) this.fail('Sending a message', response, body);
+    return body.data;
+  }
+
+  async sendBookingMessage(bookingId: string, text: string): Promise<ChannexMessageResource> {
+    const { response, body } = await this.json<{ data?: ChannexMessageResource }>(
+      'Sending a message',
+      'POST',
+      `/bookings/${encodeURIComponent(bookingId)}/messages`,
+      { message: { message: text } },
+    );
+    if (!body?.data) this.fail('Sending a message', response, body);
+    return body.data;
+  }
+
   async oneTimeToken(propertyId: string, username: string): Promise<string> {
     const request = new Request(`${this.baseUrl}/auth/one_time_token`, {
       method: 'POST',
@@ -520,6 +607,30 @@ export class ChannexClient {
     if (!response.ok || !body?.data?.token) this.fail('Opening the channel screen', response, body);
     return body.data.token;
   }
+}
+
+/** A message thread as Channex returns it. Not part of the published OpenAPI spec; shaped from the API guide. */
+export interface ChannexThreadResource {
+  id: string;
+  attributes: {
+    title?: string | null;
+    provider?: string | null;
+    is_closed?: boolean;
+    last_message_received_at?: string | null;
+    updated_at?: string | null;
+  };
+  relationships?: { booking?: { data?: { id?: string } | null } };
+}
+
+export interface ChannexMessageResource {
+  id: string;
+  attributes: {
+    message?: string | null;
+    sender?: string | null;
+    attachments?: unknown[];
+    inserted_at?: string | null;
+  };
+  relationships?: { message_thread?: { data?: { id?: string } | null } };
 }
 
 /** Test hook: forget any locally remembered quota pauses. */
