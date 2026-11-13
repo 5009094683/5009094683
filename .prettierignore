@@ -10,3 +10,4 @@ README.md
 playwright-report
 test-results
 .auth
+packages/channels/src/channex/openapi.subset.json

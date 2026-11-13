@@ -1,0 +1,24 @@
+{
+  "name": "@pms/channels",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "channex:types": "node scripts/channex-openapi.mjs"
+  },
+  "dependencies": {
+    "@pms/config": "workspace:*",
+    "@pms/db": "workspace:*",
+    "@pms/domain": "workspace:*",
+    "drizzle-orm": "^0.45.4",
+    "openapi-fetch": "^0.17.0"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.13.0"
+  }
+}
