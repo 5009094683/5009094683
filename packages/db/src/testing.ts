@@ -41,17 +41,38 @@ export async function prepareTestTemplate(): Promise<void> {
   await runMigrations(withDatabase(baseUrl(), TEMPLATE_DB));
 }
 
+/**
+ * Drops a test database. An autovacuum worker that happens to be busy in it
+ * cannot be terminated by an ordinary role, which makes the drop fail for a
+ * moment; that is retried, and a database that still cannot be dropped is
+ * left for the next run's clean-up rather than failing the tests.
+ */
+async function dropDatabase(name: string): Promise<void> {
+  await admin(async (client) => {
+    for (let attempt = 0; attempt < 20; attempt++) {
+      try {
+        await client.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+        return;
+      } catch (err) {
+        const code = (err as { code?: string }).code;
+        // 42501: cannot terminate another role's backend. 55006: still in use.
+        if (code !== '42501' && code !== '55006') throw err;
+        await new Promise((r) => setTimeout(r, 150));
+      }
+    }
+  });
+}
+
 /** Removes databases left behind by test runs that were killed before cleanup. */
 export async function dropStaleTestDatabases(): Promise<void> {
-  await admin(async (client) => {
+  const names = await admin(async (client) => {
     const { rows } = await client.query<{ datname: string }>(
       `SELECT datname FROM pg_database WHERE datname LIKE 'pms_test_%' AND datname <> $1`,
       [TEMPLATE_DB],
     );
-    for (const row of rows) {
-      await client.query(`DROP DATABASE IF EXISTS "${row.datname}" WITH (FORCE)`);
-    }
+    return rows.map((r) => r.datname);
   });
+  for (const name of names) await dropDatabase(name);
 }
 
 export interface TestDatabase extends DbHandle {
@@ -83,7 +104,7 @@ export async function createTestDatabase(options: { max?: number } = {}): Promis
     name,
     async drop() {
       await handle.close();
-      await admin((client) => client.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`));
+      await dropDatabase(name);
     },
   };
 }

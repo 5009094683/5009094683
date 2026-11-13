@@ -51,6 +51,8 @@ export const channelConnections = pgTable(
     status: text('status').$type<ConnectionStatus>().notNull().default('pending'),
     config: jsonb('config').$type<ConnectionConfig>().notNull().default(emptyJson),
     secretsEnc: text('secrets_enc'),
+    /** The adapter's own notes between runs: feed snapshots, mailbox positions. Not settings. */
+    state: jsonb('state').$type<Record<string, unknown>>().notNull().default(emptyJson),
     lastPushAt: timestamptz('last_push_at'),
     lastPullAt: timestamptz('last_pull_at'),
     lastSuccessAt: timestamptz('last_success_at'),
@@ -191,11 +193,15 @@ export const bookingRevisions = pgTable(
     /** When the channel produced the revision; decides which of two revisions is newer. */
     revisionAt: timestamptz('revision_at').notNull(),
     raw: jsonb('raw').$type<Record<string, unknown>>().notNull(),
+    /** The message in the PMS's own terms, as the adapter read it. What gets applied, and re-applied on a retry. */
+    event: jsonb('event').$type<Record<string, unknown>>().notNull(),
     status: text('status').$type<RevisionStatus>().notNull().default('received'),
     appliedAt: timestamptz('applied_at'),
     ackedAt: timestamptz('acked_at'),
     ackAttempts: integer('ack_attempts').notNull().default(0),
     attempts: integer('attempts').notNull().default(0),
+    /** When a failed revision is tried again. Null once it is settled or retries are exhausted. */
+    nextAttemptAt: timestamptz('next_attempt_at'),
     error: text('error'),
     reservationId: uuid('reservation_id').references(() => reservations.id, {
       onDelete: 'set null',

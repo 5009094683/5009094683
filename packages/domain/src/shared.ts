@@ -4,6 +4,7 @@
  * apps import from here; everything else they take as types only.
  */
 export * from './dates';
+export * from './money';
 export {
   PERMISSIONS,
   ROLE_LABELS,

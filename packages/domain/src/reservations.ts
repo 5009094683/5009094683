@@ -603,7 +603,10 @@ export async function createReservation(
     }
 
     const guest = await findOrCreateGuest(tx, actor.orgId, input.guest);
-    const guestName = fullName(guest);
+    // The name as given for this booking; the profile may spell it differently.
+    const guestName = input.guest.firstName?.trim()
+      ? `${input.guest.firstName.trim()} ${input.guest.lastName?.trim() ?? ''}`.trim()
+      : fullName(guest);
     const holdMinutes = property.settings.bookingHoldMinutes ?? 15;
     const holdExpiresAt =
       status === 'tentative'

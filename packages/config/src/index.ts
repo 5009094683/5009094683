@@ -52,6 +52,24 @@ const schema = z.object({
   CHANNEX_BASE_URL: z.string().default('https://staging.channex.io/api/v1'),
   /** Shared secret Channex sends back on webhook calls (set as a webhook header). */
   CHANNEX_WEBHOOK_SECRET: optionalString,
+  /** Secret of the Channex signing key, when webhooks are HMAC-signed. */
+  CHANNEX_WEBHOOK_SIGNING_SECRET: optionalString,
+
+  /**
+   * Shortest pause between two pushes for one property. Channex allows 10
+   * requests a minute per property on each endpoint; the default stays inside that.
+   */
+  CHANNEX_MIN_PUSH_INTERVAL_MS: z.coerce.number().int().min(0).max(600_000).default(6_500),
+
+  /** Background jobs one worker process runs at a time. */
+  WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(64).default(4),
+  /** Restate the whole horizon to the channels once a night, as a safety net under the per-change pushes. */
+  SYNC_NIGHTLY_FULL: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  /** How many days ahead the daily comparison of channel values against the PMS looks. */
+  SYNC_DRIFT_CHECK_DAYS: z.coerce.number().int().min(1).max(500).default(60),
 
   OTA_SIM_URL: z.string().default('http://localhost:4100'),
   OTA_SIM_PORT: z.coerce.number().int().default(4100),

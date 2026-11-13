@@ -49,6 +49,28 @@ function normalizeEmail(email: string | null | undefined): string | null {
   return value ? value : null;
 }
 
+function nameTokens(name: string): Set<string> {
+  return new Set(
+    name
+      .toLowerCase()
+      .split(/[^\p{L}\p{N}]+/u)
+      .filter((t) => t.length > 1),
+  );
+}
+
+/**
+ * Whether a profile found by email or phone can be the person now booking.
+ * Some channels send one shared address or switchboard number for all their
+ * guests; without this check they would all be merged into the first one.
+ */
+function plausiblySamePerson(profile: GuestRow, input: GuestInput): boolean {
+  const given = nameTokens(`${input.firstName ?? ''} ${input.lastName ?? ''}`);
+  if (given.size === 0) return true;
+  const known = nameTokens(`${profile.firstName} ${profile.lastName}`);
+  if (known.size === 0) return true;
+  return [...given].some((t) => known.has(t));
+}
+
 /**
  * Finds the guest profile for a booker, or creates one. Matches on email,
  * then on phone, so returning guests accumulate one history. An existing
@@ -70,20 +92,22 @@ export async function findOrCreateGuest(
       .where(and(eq(guests.id, input.id), eq(guests.orgId, orgId)));
     if (!existing) throw notFound('Guest', input.id);
   } else if (email) {
-    [existing] = await tx
+    const candidates = await tx
       .select()
       .from(guests)
       .where(and(eq(guests.orgId, orgId), eq(guests.email, email), isNull(guests.anonymizedAt)))
       .orderBy(desc(guests.updatedAt))
-      .limit(1);
+      .limit(20);
+    existing = candidates.find((c) => plausiblySamePerson(c, input));
   }
   if (!existing && !input.id && phone) {
-    [existing] = await tx
+    const candidates = await tx
       .select()
       .from(guests)
       .where(and(eq(guests.orgId, orgId), eq(guests.phone, phone), isNull(guests.anonymizedAt)))
       .orderBy(desc(guests.updatedAt))
-      .limit(1);
+      .limit(20);
+    existing = candidates.find((c) => plausiblySamePerson(c, input));
   }
 
   if (existing) {

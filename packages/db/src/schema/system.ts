@@ -104,3 +104,15 @@ export const jobs = pgTable(
     check('jobs_status_check', sql.raw(`status IN (${sqlList(JOB_STATUSES)})`)),
   ],
 );
+
+/**
+ * One row per running worker process, refreshed every few seconds. Lets the
+ * back office say plainly when nothing is syncing because no worker is up.
+ */
+export const workerHeartbeats = pgTable('worker_heartbeats', {
+  workerId: text('worker_id').primaryKey(),
+  hostname: text('hostname'),
+  startedAt: timestamptz('started_at').notNull().defaultNow(),
+  lastSeenAt: timestamptz('last_seen_at').notNull().defaultNow(),
+  info: jsonb('info').$type<Record<string, unknown>>().notNull().default(emptyJson),
+});
