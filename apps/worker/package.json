@@ -19,8 +19,14 @@
     "@pms/db": "workspace:*",
     "@pms/domain": "workspace:*",
     "drizzle-orm": "^0.45.4",
+    "imapflow": "^2.11.0",
+    "mailparser": "^3.14.3",
+    "nodemailer": "^10.5.0",
+    "openapi-fetch": "^0.17.0",
+    "openid-client": "^6.8.9",
     "pg": "^8.23.1",
-    "pino": "^10.4.0"
+    "pino": "^10.4.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/pg": "^8.23.1",
