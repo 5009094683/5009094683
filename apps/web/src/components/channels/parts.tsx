@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import type { ComponentProps } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Notice } from '@/components/ui/misc';
 import { errorMessage } from '@/lib/api';
@@ -29,6 +29,26 @@ export function ButtonLink({ className, ...props }: ComponentProps<typeof Link>)
       )}
       {...props}
     />
+  );
+}
+
+/** The heading of one part of a connection's page, with a line on what the part is for. */
+export function SectionHeading({
+  id,
+  title,
+  description,
+}: {
+  id: string;
+  title: string;
+  description?: ReactNode;
+}) {
+  return (
+    <div className="mb-3">
+      <h2 id={id} className="text-base font-semibold text-ink">
+        {title}
+      </h2>
+      {description && <p className="mt-0.5 text-sm text-ink-soft">{description}</p>}
+    </div>
   );
 }
 

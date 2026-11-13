@@ -1,16 +1,27 @@
 'use client';
 
-import { CheckCircle2, Clock, PauseCircle, RefreshCw, Wrench, type LucideIcon } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  PauseCircle,
+  RefreshCw,
+  Wrench,
+  type LucideIcon,
+} from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Badge } from '@/components/ui/misc';
 import { cn } from '@/lib/cn';
 import { plural } from '@/lib/format';
-import { CONNECTION_STATUS, driftResult, formatAgo, formatUntil, isLive } from './labels';
+import { READ_EVERY_MS, calendarsOf, hasMailbox, kindOf } from './kinds';
+import { CONNECTION_STATUS, driftResult, formatAgo, formatUntil, isLive, sentence } from './labels';
 import { RelativeTime } from './parts';
-import type { Connection } from './types';
+import type { Connection, SyncLogRow } from './types';
 
 /** Changes that have waited this long are slow; the server raises an alert at the same point. */
 const SLOW_AFTER_MS = 10 * 60_000;
+/** A read is late once this many of the usual gaps between reads have passed without one. */
+const LATE_AFTER_READS = 3;
 
 export function ConnectionStatusBadge({ connection }: { connection: Connection }) {
   const status = CONNECTION_STATUS[connection.status];
@@ -23,26 +34,99 @@ interface SyncState {
   text: string;
 }
 
-function syncState(connection: Connection, now: Date): SyncState {
+const NOT_SET_UP = { icon: Wrench, iconClass: 'text-ink-faint' };
+
+/** Whether a calendar connection or a mailbox has anything to read, going by its summary. */
+function reads(connection: Connection): boolean {
+  if (connection.adapter === 'ical') return calendarsOf(connection).read;
+  return connection.adapter !== 'email' || hasMailbox(connection);
+}
+
+/** How reading is going for a calendar connection or a mailbox, neither of which sends anything. */
+function readState(
+  connection: Connection,
+  now: Date,
+  failing: boolean,
+  failingCalendars: string[],
+): SyncState {
+  const calendars = connection.adapter === 'ical';
+  if (calendars && calendarsOf(connection).count === 0) {
+    return { ...NOT_SET_UP, text: 'No calendar is set up yet' };
+  }
+  if (!reads(connection)) {
+    return {
+      ...NOT_SET_UP,
+      text: calendars
+        ? 'Nothing is read from the sites: no calendar here has the address of the calendar of a site'
+        : 'No mailbox to read is entered',
+    };
+  }
+  if (failing) {
+    return {
+      icon: AlertTriangle,
+      iconClass: 'text-danger-500',
+      text: calendars ? 'The calendars cannot be read' : 'The mailbox cannot be read',
+    };
+  }
+  // Some are read and some are not: the read as a whole counts as having worked.
+  const [failed] = failingCalendars;
+  if (calendars && failed) {
+    return {
+      icon: AlertTriangle,
+      iconClass: 'text-warning-500',
+      text:
+        failingCalendars.length === 1
+          ? `${failed.charAt(0).toUpperCase()}${failed.slice(1)} cannot be read. The calendar itself, below, says what went wrong.`
+          : `${failingCalendars.length} calendars cannot be read. Each of them, below, says what went wrong.`,
+    };
+  }
+  const last = connection.lastPullAt;
+  if (!last) {
+    return {
+      icon: Clock,
+      iconClass: 'text-info-500',
+      text: calendars
+        ? 'The calendars have not been read yet'
+        : 'The mailbox has not been read yet',
+    };
+  }
+  const every = READ_EVERY_MS[connection.adapter];
+  if (every && now.getTime() - new Date(last).getTime() > LATE_AFTER_READS * every) {
+    return {
+      icon: Clock,
+      iconClass: 'text-warning-500',
+      text: calendars
+        ? `The calendars were last read ${formatAgo(last, now)}. They are normally read every 5 minutes.`
+        : `The mailbox was last read ${formatAgo(last, now)}. It is normally read every minute.`,
+    };
+  }
+  return {
+    icon: CheckCircle2,
+    iconClass: 'text-success-500',
+    text: calendars ? 'The calendars are being read' : 'Booking emails are being read',
+  };
+}
+
+function syncState(
+  connection: Connection,
+  now: Date,
+  failing: boolean,
+  failingCalendars: string[],
+): SyncState {
+  const kind = kindOf(connection);
   switch (connection.status) {
     case 'pending':
       return {
-        icon: Wrench,
-        iconClass: 'text-ink-faint',
+        ...NOT_SET_UP,
         text: 'Set-up is not finished. Nothing is sent to the booking sites yet.',
       };
     case 'paused':
-      return {
-        icon: PauseCircle,
-        iconClass: 'text-warning-500',
-        text: 'Paused. Nothing is sent or fetched until it is resumed.',
-      };
+      return { icon: PauseCircle, iconClass: 'text-warning-500', text: kind.whenPaused };
     case 'disabled':
-      return {
-        icon: PauseCircle,
-        iconClass: 'text-ink-faint',
-        text: 'Switched off. Nothing is sent or fetched.',
-      };
+      return { icon: PauseCircle, iconClass: 'text-ink-faint', text: kind.whenOff };
+  }
+  if (READ_EVERY_MS[connection.adapter]) {
+    return readState(connection, now, failing, failingCalendars);
   }
   if (!connection.capabilities.ari) {
     return {
@@ -104,6 +188,29 @@ function LastError({ connection, now }: { connection: Connection; now: Date }) {
   );
 }
 
+/** Why a calendar connection or a mailbox could not be read, in the words the server recorded. */
+function ReadFailure({
+  connection,
+  failure,
+  now,
+}: {
+  connection: Connection;
+  failure: SyncLogRow;
+  now: Date;
+}) {
+  return (
+    <div className="rounded-md border border-danger-100 bg-danger-50 px-3 py-2 text-[13px] text-danger-700">
+      <p className="font-medium">The last read failed {formatAgo(failure.createdAt, now)}</p>
+      {failure.error && <p className="mt-0.5 break-words">{sentence(failure.error)}</p>}
+      <p className="mt-0.5">
+        {connection.adapter === 'ical'
+          ? 'Until a read works, bookings made on the sites do not arrive here. It is tried again by itself.'
+          : 'Until a read works, bookings in the emails do not arrive here. It is tried again by itself. If it keeps failing, check the mail server, the port, the user name, the password and the folder entered for the mailbox.'}
+      </p>
+    </div>
+  );
+}
+
 function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="min-w-0">
@@ -121,14 +228,85 @@ function When({ value, now }: { value: string | null; now: Date }) {
   );
 }
 
-/**
- * How a connection is doing: one line on what is waiting to go out, the last failure if any, and
- * when things last happened.
- */
-export function ConnectionOverview({ connection, now }: { connection: Connection; now: Date }) {
-  const state = syncState(connection, now);
-  const Icon = state.icon;
+/** When things last happened, for a connection past its set-up. */
+function Facts({
+  connection,
+  now,
+  failing,
+}: {
+  connection: Connection;
+  now: Date;
+  failing: boolean;
+}) {
   const { ari, bookings } = connection.capabilities;
+  if (connection.adapter === 'ical' || connection.adapter === 'email') {
+    if (!reads(connection)) return null;
+    return (
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+        {connection.adapter === 'ical' && (
+          <Fact label="Calendars">{calendarsOf(connection).count}</Fact>
+        )}
+        {/* The time kept is that of the last read that went through. */}
+        <Fact label={failing ? 'Last read that worked' : 'Last read'}>
+          <When value={connection.lastPullAt} now={now} />
+        </Fact>
+      </dl>
+    );
+  }
+  return (
+    <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+      {ari && (
+        <Fact label="Last sent">
+          <When value={connection.lastPushAt} now={now} />
+        </Fact>
+      )}
+      {bookings !== 'none' && (
+        <Fact label="Bookings last fetched">
+          <When value={connection.lastPullAt} now={now} />
+        </Fact>
+      )}
+      {ari && (
+        <Fact label="Last full send">
+          <When value={connection.lastFullSyncAt} now={now} />
+        </Fact>
+      )}
+      {ari && (
+        <Fact label="Last comparison">
+          <When value={connection.lastDriftCheckAt} now={now} />
+          {connection.lastDriftCheckAt && connection.lastDriftCount !== null && (
+            <span className="block text-xs text-ink-soft">
+              {driftResult(connection.lastDriftCount)}
+            </span>
+          )}
+        </Fact>
+      )}
+    </dl>
+  );
+}
+
+/**
+ * How a connection is doing: one line on what is waiting to go out or on how reading is going,
+ * the last failure if any, and when things last happened.
+ */
+export function ConnectionOverview({
+  connection,
+  now,
+  failingRead,
+  failingCalendars = [],
+}: {
+  connection: Connection;
+  now: Date;
+  /** The read that is failing now, where the log of the connection is at hand to tell. */
+  failingRead?: SyncLogRow;
+  /**
+   * The calendars whose last read did not work, each named as in a sentence, where the
+   * calendars of the connection are at hand to tell.
+   */
+  failingCalendars?: string[];
+}) {
+  const failing = failingRead !== undefined && isLive(connection) && reads(connection);
+  const state = syncState(connection, now, failing, failingCalendars);
+  const Icon = state.icon;
 
   return (
     <div className="flex flex-col gap-3">
@@ -137,8 +315,9 @@ export function ConnectionOverview({ connection, now }: { connection: Connection
         <span>{state.text}</span>
       </p>
       <LastError connection={connection} now={now} />
+      {failing && <ReadFailure connection={connection} failure={failingRead} now={now} />}
       {connection.status === 'pending' ? (
-        ari && (
+        connection.capabilities.ari && (
           <p className="text-[13px] text-ink-soft">
             {connection.mappedRoomTypes === 0
               ? 'No rooms are mapped yet.'
@@ -146,33 +325,7 @@ export function ConnectionOverview({ connection, now }: { connection: Connection
           </p>
         )
       ) : (
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
-          {ari && (
-            <Fact label="Last sent">
-              <When value={connection.lastPushAt} now={now} />
-            </Fact>
-          )}
-          {bookings !== 'none' && (
-            <Fact label="Bookings last fetched">
-              <When value={connection.lastPullAt} now={now} />
-            </Fact>
-          )}
-          {ari && (
-            <Fact label="Last full send">
-              <When value={connection.lastFullSyncAt} now={now} />
-            </Fact>
-          )}
-          {ari && (
-            <Fact label="Last comparison">
-              <When value={connection.lastDriftCheckAt} now={now} />
-              {connection.lastDriftCheckAt && connection.lastDriftCount !== null && (
-                <span className="block text-xs text-ink-soft">
-                  {driftResult(connection.lastDriftCount)}
-                </span>
-              )}
-            </Fact>
-          )}
-        </dl>
+        <Facts connection={connection} now={now} failing={failing} />
       )}
     </div>
   );

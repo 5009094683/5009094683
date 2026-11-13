@@ -7,14 +7,17 @@ import {
   LOG_DIRECTIONS,
   LOG_STATUS,
   formatWaited,
+  loggedBlocks,
   nameRooms,
   operationCount,
   operationLabel,
+  unknownRoomInEmail,
 } from './labels';
+import { KINDS } from './kinds';
 import { RelativeTime } from './parts';
-import type { SyncLogRow } from './types';
+import type { Kind, SyncLogRow } from './types';
 
-const COLUMNS = ['Time', 'Direction', 'What', 'Count', 'Result', 'Waited'];
+const COLUMNS = ['Time', 'Direction', 'What', 'Count', 'Result'];
 
 /**
  * The channel manager's own ids for what was sent: what its support asks for when something
@@ -29,29 +32,35 @@ function referencesOf(row: SyncLogRow): string[] {
 
 /** What was sent and received on a connection, newest first. */
 export function ActivityTable({
+  kind,
   log,
   roomNames,
   now,
 }: {
+  kind: Kind;
   log: SyncLogRow[];
   /** Titles of the channel manager's rooms by id, for errors that give only the id. */
   roomNames?: ReadonlyMap<string, string>;
   now: Date;
 }) {
+  const words = KINDS[kind].activity;
+  // What a calendar holds is recorded the moment it is read, so nothing ever waits.
+  const waited = kind !== 'ical';
+  const blocks = loggedBlocks(log, kind);
   return (
     <Card className="overflow-hidden">
       {log.length === 0 ? (
         <EmptyState
           icon={<History className="size-5" />}
-          title="Nothing has been sent or received yet"
-          description="Activity appears here once the connection is switched on."
+          title={words.emptyTitle}
+          description={words.emptyHint}
         />
       ) : (
         <div className="scrollbar-thin overflow-x-auto">
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead>
               <tr className="border-b border-line bg-sunken/60 text-xs font-medium text-ink-faint">
-                {COLUMNS.map((column) => (
+                {[...COLUMNS, ...(waited ? ['Waited'] : [])].map((column) => (
                   <th key={column} scope="col" className="px-4 py-2.5 font-medium">
                     {column}
                   </th>
@@ -75,7 +84,7 @@ export function ActivityTable({
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
-                      <p className="text-ink">{operationLabel(row)}</p>
+                      <p className="text-ink">{operationLabel(row, kind, blocks)}</p>
                       {row.error && (
                         <p
                           className={cn(
@@ -83,7 +92,8 @@ export function ActivityTable({
                             row.status === 'retry' ? 'text-warning-700' : 'text-danger-700',
                           )}
                         >
-                          {nameRooms(row.error, roomNames)}
+                          {(kind === 'email' && unknownRoomInEmail(row.error)?.text) ||
+                            nameRooms(row.error, roomNames)}
                         </p>
                       )}
                       {references.length > 0 && (
@@ -101,14 +111,16 @@ export function ActivityTable({
                       )}
                     </td>
                     <td className="tabular px-4 py-2.5 whitespace-nowrap text-ink-soft">
-                      {operationCount(row)}
+                      {operationCount(row, kind)}
                     </td>
                     <td className="px-4 py-2.5">
                       <Badge tone={status.tone}>{status.label}</Badge>
                     </td>
-                    <td className="tabular px-4 py-2.5 whitespace-nowrap text-ink-soft">
-                      {row.lagMs === null ? '' : formatWaited(row.lagMs)}
-                    </td>
+                    {waited && (
+                      <td className="tabular px-4 py-2.5 whitespace-nowrap text-ink-soft">
+                        {row.lagMs === null ? '' : formatWaited(row.lagMs)}
+                      </td>
+                    )}
                   </tr>
                 );
               })}

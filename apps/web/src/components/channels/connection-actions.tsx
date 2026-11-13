@@ -7,6 +7,7 @@ import {
   MoreHorizontal,
   Pause,
   Play,
+  RefreshCw,
   Send,
 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
@@ -17,20 +18,31 @@ import { useToast } from '@/components/ui/toast';
 import { api, errorMessage } from '@/lib/api';
 import { useAction } from '@/lib/hooks';
 import { useReturnFocus } from './focus';
+import { calendarsOf, hasMailbox, kindOf } from './kinds';
 import { isLive } from './labels';
 import type { Connection } from './types';
 
 type BackgroundAction = 'full-sync' | 'pull' | 'drift-check' | 'import-bookings';
 
-const BACKGROUND_ACTIONS: Record<BackgroundAction, { label: string; started: string }> = {
+const BACKGROUND_ACTIONS: Record<
+  Exclude<BackgroundAction, 'pull'>,
+  { label: string; started: string }
+> = {
   'full-sync': { label: 'Send everything again', started: 'Sending everything again' },
-  pull: { label: 'Fetch bookings now', started: 'Fetching bookings' },
   'drift-check': { label: 'Compare with the channels', started: 'Comparing with the channels' },
   'import-bookings': {
     label: 'Import existing bookings',
     started: 'Importing existing bookings',
   },
 };
+
+/** What a job is called, and what is said once it has started. Looking for bookings is named by the kind of connection. */
+function actionWords(
+  connection: Connection,
+  action: BackgroundAction,
+): { label: string; started: string } {
+  return action === 'pull' ? kindOf(connection).read : BACKGROUND_ACTIONS[action];
+}
 
 export interface ConnectionActions {
   /** What is in flight, if anything. */
@@ -67,12 +79,8 @@ export function useConnectionActions(
     try {
       await api<Connection>(path, { method: 'PATCH', body: { status: 'active' } });
       await refresh();
-      toast.success(
-        `${connection.propertyName} is live`,
-        connection.capabilities.ari
-          ? 'Availability and rates for the whole planning horizon are being sent.'
-          : undefined,
-      );
+      const done = kindOf(connection).switchedOn(connection.propertyName);
+      toast.success(done.title, done.detail);
     } catch (err) {
       setRefusal({ message: errorMessage(err), madeWhen: setUp });
       if (feedback === 'toast') toast.error(err);
@@ -87,7 +95,7 @@ export function useConnectionActions(
       const { queued } = await api<{ queued: boolean }>(`${path}/${action}`, { method: 'POST' });
       if (queued) {
         toast.success(
-          BACKGROUND_ACTIONS[action].started,
+          actionWords(connection, action).started,
           'This runs in the background. The page shows the result when it is done.',
         );
       } else {
@@ -117,16 +125,15 @@ function PauseDialog({
   onClose: () => void;
 }) {
   const toast = useToast();
+  const kind = kindOf(connection);
   const pause = useAction(async () => {
     await api<Connection>(`/channels/connections/${connection.id}`, {
       method: 'PATCH',
       body: { status: 'paused' },
     });
     await actions.refresh();
-    toast.success(
-      `${connection.propertyName} is paused`,
-      'Nothing is sent or fetched until it is resumed.',
-    );
+    const done = kind.paused(connection.propertyName);
+    toast.success(done.title, done.detail);
     onClose();
   });
 
@@ -135,7 +142,7 @@ function PauseDialog({
       open
       onClose={onClose}
       size="sm"
-      title={`Pause the connection for ${connection.propertyName}?`}
+      title={`Pause ${kind.named(connection.propertyName)}?`}
       footer={
         <>
           <Button onClick={onClose}>Keep it on</Button>
@@ -147,19 +154,8 @@ function PauseDialog({
     >
       <div className="flex flex-col gap-3 text-sm text-ink-soft">
         {pause.error && <Notice tone="danger">{pause.error}</Notice>}
-        {connection.capabilities.ari ? (
-          <p>
-            While it is paused, nothing is sent to the booking sites and bookings made there are not
-            fetched. The sites keep selling from the availability they last received, so a room can
-            be sold twice.
-          </p>
-        ) : (
-          <p>
-            While it is paused, bookings that come in this way are not fetched, so the calendar does
-            not show them.
-          </p>
-        )}
-        <p>Bookings made in the meantime arrive after you resume.</p>
+        <p>{kind.pauseWarning}</p>
+        <p>{kind.afterPause}</p>
       </div>
     </Dialog>
   );
@@ -217,7 +213,7 @@ export function StatusSwitch({
 }
 
 /** Jobs that can be asked for by hand. They only do something while the connection is live. */
-export function ConnectionMenu({
+function ConnectionMenu({
   connection,
   actions,
 }: {
@@ -231,18 +227,17 @@ export function ConnectionMenu({
 
   const item = (action: BackgroundAction, icon: ReactNode, enabled: boolean) => (
     <MenuItem icon={icon} disabled={!enabled} onSelect={() => void actions.run(action)}>
-      {BACKGROUND_ACTIONS[action].label}
+      {actionWords(connection, action).label}
     </MenuItem>
   );
 
-  if (!ari && bookings === 'none') return null;
   return (
     <Menu
       trigger={
         <Button
           size="icon"
           variant="ghost"
-          aria-label={`More actions for ${connection.propertyName}`}
+          aria-label={`More actions for ${kindOf(connection).named(connection.propertyName)}`}
           icon={<MoreHorizontal className="size-4" />}
           loading={actions.busy !== null && actions.busy !== 'switch-on'}
         />
@@ -263,5 +258,42 @@ export function ConnectionMenu({
         </MenuLabel>
       )}
     </Menu>
+  );
+}
+
+/**
+ * What can be asked of a connection by hand. One that sends availability has several jobs, kept
+ * in a menu. One that only reads has a single job, which gets a button of its own while the
+ * connection is live.
+ */
+export function ConnectionJobs({
+  connection,
+  actions,
+  placement,
+}: {
+  connection: Connection;
+  actions: ConnectionActions;
+  /** On a card there is room for a short name only. */
+  placement: 'card' | 'page';
+}) {
+  const { ari, bookings } = connection.capabilities;
+  if (ari) return <ConnectionMenu connection={connection} actions={actions} />;
+  if (bookings === 'none' || !isLive(connection)) return null;
+  // Nothing to ask for while there is nothing to read: no calendar with the address of a site's
+  // calendar, or no mailbox. A mailbox set for the whole installation is still read by itself.
+  if (connection.adapter === 'ical' && !calendarsOf(connection).read) return null;
+  if (connection.adapter === 'email' && !hasMailbox(connection)) return null;
+  const kind = kindOf(connection);
+  const onCard = placement === 'card';
+  return (
+    <Button
+      size="sm"
+      icon={<RefreshCw className="size-3.5" />}
+      loading={actions.busy === 'pull'}
+      aria-label={onCard ? `Read now: ${kind.named(connection.propertyName)}` : undefined}
+      onClick={() => void actions.run('pull')}
+    >
+      {onCard ? 'Read now' : kind.read.label}
+    </Button>
   );
 }

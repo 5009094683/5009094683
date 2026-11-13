@@ -7,34 +7,21 @@ import { Card, EmptyState, ErrorState, PageLoading } from '@/components/ui/misc'
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { ActivityTable } from './activity-table';
-import { ConnectionMenu, StatusSwitch, useConnectionActions } from './connection-actions';
+import { CalendarConnection } from './calendar-connection';
+import { calendarName, failingCalendars } from './calendar-status';
+import { ConnectionJobs, StatusSwitch, useConnectionActions } from './connection-actions';
 import { ConnectionOverview, ConnectionStatusBadge } from './connection-summary';
 import { HealthBanners } from './health-banners';
+import { kindOf, ownName } from './kinds';
+import { failingRead } from './labels';
+import { MailboxConnection } from './mailbox-connection';
 import { useMonitor, useNow } from './monitor';
-import { ButtonLink, StaleNotice } from './parts';
+import { ButtonLink, SectionHeading, StaleNotice } from './parts';
 import { ReceivedBookings } from './received-bookings';
 import { SetupSteps } from './setup-steps';
 import { roomNamesOf, useChannelManagerStructure } from './structure';
-import type { ConnectionDetail } from './types';
-
-function SectionHeading({
-  id,
-  title,
-  description,
-}: {
-  id: string;
-  title: string;
-  description?: string;
-}) {
-  return (
-    <div className="mb-3">
-      <h2 id={id} className="text-base font-semibold text-ink">
-        {title}
-      </h2>
-      {description && <p className="mt-0.5 text-sm text-ink-soft">{description}</p>}
-    </div>
-  );
-}
+import type { CalendarFeed, ConnectionDetail } from './types';
+import { UnsavedChangesGuard } from './unsaved';
 
 function Detail({
   detail,
@@ -51,6 +38,15 @@ function Detail({
   const actions = useConnectionActions(connection, refresh);
   const structure = useChannelManagerStructure(connection, canManage);
   const roomNames = useMemo(() => roomNamesOf(structure.data), [structure.data]);
+  const kind = kindOf(connection);
+  const KindIcon = kind.icon;
+  const name = ownName(connection);
+  // The same calendars the section below shows: a read counts as having worked when any
+  // calendar was read, so only they tell that one of them was not.
+  const calendars = useMonitor<{ feeds: CalendarFeed[] }>(
+    connection.adapter === 'ical' ? `/channels/connections/${connection.id}/ical/feeds` : null,
+  );
+  const unread = failingCalendars(calendars.data?.feeds ?? [], canManage).map(calendarName);
 
   return (
     <>
@@ -60,22 +56,31 @@ function Detail({
             {connection.propertyName}
           </h1>
           <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-ink-soft">
-            {connection.name}
+            <span className="inline-flex items-center gap-1.5">
+              <KindIcon className="size-4 text-ink-faint" aria-hidden />
+              {kind.label}
+            </span>
+            {name && <span className="text-ink-faint">{name}</span>}
             <ConnectionStatusBadge connection={connection} />
           </p>
         </div>
         {canManage && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <StatusSwitch connection={connection} actions={actions} placement="card" />
-            <ConnectionMenu connection={connection} actions={actions} />
+            <ConnectionJobs connection={connection} actions={actions} placement="page" />
           </div>
         )}
       </div>
 
-      <HealthBanners />
+      <HealthBanners kind={connection.adapter} />
 
       <Card className="px-4 py-4 sm:px-5">
-        <ConnectionOverview connection={connection} now={now} />
+        <ConnectionOverview
+          connection={connection}
+          now={now}
+          failingRead={failingRead(connection, log)}
+          failingCalendars={unread}
+        />
       </Card>
 
       {connection.adapter === 'channex' && (
@@ -97,19 +102,36 @@ function Detail({
           />
         </section>
       )}
+      {connection.adapter === 'ical' && (
+        <CalendarConnection
+          connection={connection}
+          canManage={canManage}
+          now={now}
+          onSaved={refresh}
+        />
+      )}
+      {connection.adapter === 'email' && (
+        <MailboxConnection
+          connection={connection}
+          mappings={mappings}
+          canManage={canManage}
+          onSaved={refresh}
+        />
+      )}
 
       {connection.capabilities.bookings !== 'none' && (
         <section aria-labelledby="bookings-heading" className="mt-8">
           <SectionHeading
             id="bookings-heading"
             title="Bookings received"
-            description="New bookings, changes and cancellations that arrived for this property, newest first."
+            description={kind.bookings.description}
           />
           <ReceivedBookings
             connectionId={connection.id}
             connections={[connection]}
             now={now}
-            emptyHint="They appear here within seconds of being made on a booking site."
+            emptyTitle={kind.bookings.emptyTitle}
+            emptyHint={kind.bookings.emptyHint}
           />
         </section>
       )}
@@ -118,9 +140,9 @@ function Detail({
         <SectionHeading
           id="activity-heading"
           title="Activity"
-          description="The latest 50 things sent and received. Waited is how long a change took to reach the other side."
+          description={kind.activity.description}
         />
-        <ActivityTable log={log} roomNames={roomNames} now={now} />
+        <ActivityTable log={log} kind={connection.adapter} roomNames={roomNames} now={now} />
       </section>
     </>
   );
@@ -138,38 +160,40 @@ export function ConnectionDetailView({ connectionId }: { connectionId: string })
   const refused = !allowed || (error instanceof ApiError && error.status === 403);
 
   return (
-    <div className="mx-auto max-w-5xl p-4 sm:p-6">
-      <Link
-        href="/channels"
-        className="mb-3 inline-flex items-center gap-1.5 text-sm text-ink-soft hover:text-ink"
-      >
-        <ArrowLeft className="size-4" aria-hidden /> Channels
-      </Link>
-      {refused ? (
-        <EmptyState
-          icon={<Lock className="size-5" />}
-          title="You do not have access to this connection"
-          description="Ask an administrator if you need to see how this property is connected to the booking sites."
-        />
-      ) : missing ? (
-        <EmptyState
-          icon={<Unplug className="size-5" />}
-          title="This connection does not exist"
-          description="It may have been removed, or the address may be wrong."
-          action={<ButtonLink href="/channels">Back to channels</ButtonLink>}
-        />
-      ) : !data ? (
-        error ? (
-          <ErrorState error={error} onRetry={() => void mutate()} />
+    <UnsavedChangesGuard>
+      <div className="mx-auto max-w-5xl p-4 sm:p-6">
+        <Link
+          href="/channels"
+          className="mb-3 inline-flex items-center gap-1.5 text-sm text-ink-soft hover:text-ink"
+        >
+          <ArrowLeft className="size-4" aria-hidden /> Channels
+        </Link>
+        {refused ? (
+          <EmptyState
+            icon={<Lock className="size-5" />}
+            title="You do not have access to this connection"
+            description="Ask an administrator if you need to see how this property is connected to the booking sites."
+          />
+        ) : missing ? (
+          <EmptyState
+            icon={<Unplug className="size-5" />}
+            title="This connection does not exist"
+            description="It may have been removed, or the address may be wrong."
+            action={<ButtonLink href="/channels">Back to channels</ButtonLink>}
+          />
+        ) : !data ? (
+          error ? (
+            <ErrorState error={error} onRetry={() => void mutate()} />
+          ) : (
+            <PageLoading />
+          )
         ) : (
-          <PageLoading />
-        )
-      ) : (
-        <>
-          {error && <StaleNotice error={error} onRetry={() => void mutate()} />}
-          <Detail detail={data} refresh={mutate} now={now} />
-        </>
-      )}
-    </div>
+          <>
+            {error && <StaleNotice error={error} onRetry={() => void mutate()} />}
+            <Detail detail={data} refresh={mutate} now={now} />
+          </>
+        )}
+      </div>
+    </UnsavedChangesGuard>
   );
 }

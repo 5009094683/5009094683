@@ -3,6 +3,9 @@ import type {
   ChannexStatus,
   ChannexStructure,
   ConnectionSummary,
+  IcalFeedInput,
+  IcalFeedView,
+  MailboxInput,
   ProvisionResult,
   RevisionSummary,
   WebhookRegistration,
@@ -37,3 +40,32 @@ export interface ConnectionDetail {
   mappings: Mappings;
   log: SyncLogRow[];
 }
+
+/** The kinds of connection a property can have. */
+export type Kind = Connection['adapter'];
+
+/**
+ * One calendar of a calendar connection. The two addresses are left out for people who may look
+ * at a connection but not change it.
+ */
+export type CalendarFeed = Omit<Serialized<IcalFeedView>, 'exportUrl'> & {
+  exportUrl: string | null;
+};
+export type CalendarFeedInput = IcalFeedInput;
+
+type MailboxFields = Omit<MailboxInput, 'password' | 'trustUnverifiedSenders'>;
+
+/**
+ * How a reservations mailbox is read, as the server gives it back. The password never comes
+ * back, only whether one is stored. The server has no type of its own for this answer, so it is
+ * built on the type of what is saved.
+ */
+export type MailboxSettings = {
+  [Field in keyof MailboxFields]-?: NonNullable<MailboxFields[Field]> | null;
+} & {
+  trustUnverifiedSenders: boolean;
+  hasPassword: boolean;
+  /** Where a mail service can hand over emails instead. Null where the installation has not set that up. */
+  forwardingUrl: string | null;
+};
+export type MailboxSaved = MailboxInput;

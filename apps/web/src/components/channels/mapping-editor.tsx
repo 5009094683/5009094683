@@ -72,7 +72,8 @@ export function mappingProgress(
   return complete ? 'done' : 'partial';
 }
 
-function RowLabel({
+/** A room type or a rate plan of ours, at the start of the row that says what it stands for. */
+export function RowLabel({
   htmlFor,
   icon,
   name,
@@ -106,11 +107,19 @@ function RowLabel({
   );
 }
 
-const GRID = 'grid grid-cols-1 items-center gap-x-4 gap-y-1 sm:grid-cols-2';
+/** Ours on the left, what it stands for on the right; stacked on a narrow screen. */
+export const GRID = 'grid grid-cols-1 items-center gap-x-4 gap-y-1 sm:grid-cols-2';
 /** On a narrow screen a rate plan and its select are stacked, and step in together. */
 const RATE_GRID = `${GRID} pl-6 sm:pl-0`;
 
-function ColumnHeadings() {
+/** What the two columns hold. Left out on a narrow screen, where each control is named by its row. */
+export function ColumnHeadings({
+  ours = 'Room types and rate plans here',
+  theirs = 'Rooms and rates in the channel manager',
+}: {
+  ours?: string;
+  theirs?: string;
+}) {
   return (
     <div
       aria-hidden
@@ -119,13 +128,13 @@ function ColumnHeadings() {
         'hidden border-b border-line bg-sunken/60 px-3 py-2 text-xs font-medium text-ink-faint sm:grid',
       )}
     >
-      <span>Room types and rate plans here</span>
-      <span>Rooms and rates in the channel manager</span>
+      <span>{ours}</span>
+      <span>{theirs}</span>
     </div>
   );
 }
 
-const unitCount = (type: PmsRoomType): string =>
+export const unitCount = (type: PmsRoomType): string =>
   plural(type.units.filter((unit) => unit.active).length, 'unit');
 
 /** The saved mapping, for people who may look but not change it. */

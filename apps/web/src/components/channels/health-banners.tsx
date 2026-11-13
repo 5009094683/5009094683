@@ -4,26 +4,44 @@ import { ExternalLink } from 'lucide-react';
 import { Notice } from '@/components/ui/misc';
 import { formatDateTime } from '@/lib/format';
 import { useMonitor } from './monitor';
-import type { ChannelsStatus } from './types';
+import type { ChannelsStatus, Kind } from './types';
 
-/** What stands between the PMS and the booking sites right now, shown only when something does. */
-export function HealthBanners() {
+/**
+ * What stands between the PMS and the booking sites right now, shown only when something does.
+ * On the page of one connection, only what concerns a connection of its kind: the state of the
+ * channel manager says nothing about calendars or a mailbox.
+ */
+export function HealthBanners({ kind }: { kind?: Kind }) {
   const { data } = useMonitor<ChannelsStatus>('/channels/status');
   if (!data) return null;
-  const { channex, worker, simulatorUrl } = data;
+  const { worker, simulatorUrl } = data;
+  const reading = kind !== undefined && kind !== 'channex';
+  // Left out, the notices about the channel manager have nothing to show.
+  const channex = reading ? { configured: true, environment: null } : data.channex;
   const testing = channex.environment === 'simulator' || channex.environment === 'staging';
   if (worker.alive && channex.configured && !testing) return null;
 
   return (
     <div className="mb-4 flex flex-col gap-2">
       {!worker.alive && (
-        <Notice tone="danger" title="Nothing is being sent to or fetched from the booking sites">
-          The sync worker, the background service that does the sending and fetching, is not
-          running.{' '}
+        <Notice
+          tone="danger"
+          title={
+            kind === 'ical'
+              ? 'The calendars of the sites are not being read'
+              : kind === 'email'
+                ? 'The mailbox is not being read'
+                : 'Nothing is being sent to or fetched from the booking sites'
+          }
+        >
+          The sync worker, the background service that does the{' '}
+          {reading ? 'reading' : 'sending and fetching'}, is not running.{' '}
           {worker.lastSeenAt
             ? `It last reported at ${formatDateTime(worker.lastSeenAt)}.`
             : 'It has not reported yet.'}{' '}
-          Changes made here are queued and go out as soon as it is back.
+          {reading
+            ? 'Reading starts again as soon as it is back.'
+            : 'Changes made here are queued and go out as soon as it is back.'}
         </Notice>
       )}
       {!channex.configured && (
