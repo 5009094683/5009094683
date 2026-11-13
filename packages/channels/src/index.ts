@@ -17,3 +17,6 @@ export * from './net';
 export * from './ical/calendar';
 export * from './ical/adapter';
 export * from './ical/feeds';
+export * from './email/parse';
+export * from './email/adapter';
+export * from './email/inbound';

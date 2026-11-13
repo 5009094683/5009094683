@@ -21,7 +21,7 @@ import { registerLive } from './plugins/live';
 import { auditRoutes } from './routes/audit';
 import { authRoutes } from './routes/auth';
 import { calendarRoutes } from './routes/calendar';
-import { channelRoutes, channelWebhookRoutes, icalRoutes } from './routes/channels';
+import { channelRoutes, channelWebhookRoutes, icalRoutes, mailboxRoutes } from './routes/channels';
 import { guestRoutes } from './routes/guests';
 import { orgRoutes } from './routes/org';
 import { propertyRoutes } from './routes/properties';
@@ -129,6 +129,7 @@ export async function buildApp(deps: AppDeps): Promise<App> {
   await typed.register(guestRoutes);
   await typed.register(channelRoutes);
   await typed.register(icalRoutes);
+  await typed.register(mailboxRoutes);
   await app.register(channelWebhookRoutes);
 
   // The API is still up when the sync worker is not, so it is the one to say so.

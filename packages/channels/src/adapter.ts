@@ -51,6 +51,13 @@ export interface ChannelAdapter {
   listBookings?(from: DateString): Promise<BookingEvent[]>;
 
   /**
+   * Reads a stored message again, for sources whose reading can improve (a
+   * parsed email). Used when staff ask for a message that could not be read
+   * to be applied again.
+   */
+  reparse?(raw: Record<string, unknown>): Promise<BookingEvent | null>;
+
+  /**
    * Sources that could not be read on the last pull although others could (one
    * calendar of several). Each is raised as its own alert and cleared when it
    * reads again.
@@ -146,6 +153,12 @@ export interface BookingEvent {
   /** Set when the source could only partly describe the booking (calendar feeds, parsed email). */
   needsReview?: string;
   /**
+   * Set when the source saw what is plainly a booking message but could not
+   * make out what it says, or must not act on it (an email whose sender
+   * cannot be verified). Nothing is recorded; staff are told, in these words.
+   */
+  unreadable?: string;
+  /**
    * Set when this is not a guest booking but dates the channel shows as
    * closed (a calendar entry marked "not available"). It is recorded as a
    * date block on the unit rather than as a reservation.
@@ -172,6 +185,11 @@ export interface BookingEventRoom {
   /** The channel's room type id, resolved through the connection's mappings. Null when the channel could not map the room. */
   externalRoomTypeId: string | null;
   externalRatePlanId: string | null;
+  /**
+   * The room as the source words it, for sources that give a name rather than
+   * an id (an email). Used to find the room type by name when no mapping does.
+   */
+  externalRoomName?: string | null;
   /** For sources tied to one unit (a calendar feed): the PMS ids directly, bypassing mappings. */
   internal?: { roomTypeId: string; unitId?: string };
   checkIn: DateString;

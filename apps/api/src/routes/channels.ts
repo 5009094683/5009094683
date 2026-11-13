@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { and, eq } from 'drizzle-orm';
@@ -22,6 +23,7 @@ import {
   getConnectionSummary,
   getMappings,
   handleChannexWebhook,
+  ingestInboundEmail,
   listChannexProperties,
   listConnections,
   listIcalFeeds,
@@ -30,11 +32,13 @@ import {
   reprocessRevision,
   requestFullSync,
   saveIcalFeeds,
+  saveMailbox,
   saveMappings,
   updateConnection,
   verifyChannexWebhook,
   workerStatus,
   type ChannexWebhookBody,
+  type EmailConnectionConfig,
 } from '@pms/channels';
 import {
   DomainError,
@@ -509,6 +513,66 @@ export async function icalRoutes(app: FastifyInstance): Promise<void> {
   );
 }
 
+/** The reservations mailbox: where a property's booking emails are read from. */
+export async function mailboxRoutes(app: FastifyInstance): Promise<void> {
+  const r = app.withTypeProvider<ZodTypeProvider>();
+
+  r.get(
+    '/channels/connections/:id/email/mailbox',
+    { schema: { tags: ['channels'], summary: 'Reservations mailbox settings', params: idParams } },
+    async (req) => {
+      const actor = await authorizeConnection(app.db, req, req.params.id, 'channels.manage');
+      const [row] = await app.db
+        .select()
+        .from(channelConnections)
+        .where(
+          and(eq(channelConnections.id, req.params.id), eq(channelConnections.orgId, actor.orgId)),
+        );
+      if (!row || row.adapter !== 'email') throw notFound('Mailbox connection', req.params.id);
+      const config = row.config as EmailConnectionConfig;
+      return {
+        host: config.mailbox?.host ?? null,
+        port: config.mailbox?.port ?? null,
+        user: config.mailbox?.user ?? null,
+        folder: config.mailbox?.folder ?? null,
+        recipient: config.recipient ?? null,
+        trustUnverifiedSenders: config.trustUnverifiedSenders ?? false,
+        // Whether a password is stored; the password itself is never sent back.
+        hasPassword: row.secretsEnc !== null,
+        // Mail services that hand over email by HTTP post it here, with the shared secret.
+        forwardingUrl: app.env.INBOUND_EMAIL_SECRET
+          ? `${app.env.API_PUBLIC_URL.replace(/\/+$/, '')}/webhooks/inbound-email/${row.id}`
+          : null,
+      };
+    },
+  );
+
+  r.put(
+    '/channels/connections/:id/email/mailbox',
+    {
+      schema: {
+        tags: ['channels'],
+        summary: 'Set how the reservations mailbox is read',
+        params: idParams,
+        body: z.object({
+          host: z.string().trim().max(200).nullable().optional(),
+          port: z.number().int().min(1).max(65535).nullable().optional(),
+          user: z.string().trim().max(200).nullable().optional(),
+          password: z.string().min(1).max(500).nullable().optional(),
+          folder: z.string().trim().max(200).nullable().optional(),
+          recipient: z.email().nullable().optional(),
+          trustUnverifiedSenders: z.boolean().optional(),
+        }),
+      },
+    },
+    async (req, reply) => {
+      const actor = await authorizeConnection(app.db, req, req.params.id, 'channels.manage');
+      await saveMailbox(app.db, actor, req.params.id, req.body);
+      return reply.status(204).send();
+    },
+  );
+}
+
 /**
  * Endpoints the channels call. They are authenticated by the caller's
  * signature or shared secret, not by a session, and need the request body
@@ -516,9 +580,9 @@ export async function icalRoutes(app: FastifyInstance): Promise<void> {
  */
 export async function channelWebhookRoutes(app: FastifyInstance): Promise<void> {
   app.removeContentTypeParser('application/json');
-  app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (_req, body, done) =>
-    done(null, body),
-  );
+  for (const type of ['application/json', 'message/rfc822', 'text/plain']) {
+    app.addContentTypeParser(type, { parseAs: 'buffer' }, (_req, body, done) => done(null, body));
+  }
 
   app.post(
     '/webhooks/channex',
@@ -544,6 +608,61 @@ export async function channelWebhookRoutes(app: FastifyInstance): Promise<void> 
       // If this throws (the database is down), the 5xx makes the channel manager deliver again later.
       const outcome = await handleChannexWebhook(app.db, body);
       return reply.status(200).send({ received: true, action: outcome.action });
+    },
+  );
+
+  // A mail service hands over one email: forwarded reservations mail, without a mailbox to read.
+  app.post(
+    '/webhooks/inbound-email/:connectionId',
+    {
+      config: { rateLimit: { max: 300, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['webhooks'],
+        summary: 'One reservation email, handed over by a mail service',
+      },
+    },
+    async (req, reply) => {
+      const secret = app.env.INBOUND_EMAIL_SECRET;
+      const { connectionId } = req.params as { connectionId: string };
+      const given =
+        (req.headers['x-inbound-email-secret'] as string | undefined) ??
+        (req.query as { secret?: string }).secret ??
+        '';
+      const expected = Buffer.from(secret ?? '');
+      const supplied = Buffer.from(given);
+      if (!secret || expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) {
+        throw new DomainError(
+          'unauthenticated',
+          'Inbound email is not set up, or the secret is wrong',
+        );
+      }
+      if (!/^[0-9a-f-]{36}$/i.test(connectionId))
+        throw notFound('Mailbox connection', connectionId);
+      const body = Buffer.isBuffer(req.body) ? req.body : Buffer.from('');
+      let source: Buffer | string = body;
+      if ((req.headers['content-type'] ?? '').includes('application/json')) {
+        // Services differ in what they call the raw message.
+        let json: Record<string, unknown>;
+        try {
+          json = JSON.parse(body.toString('utf8')) as Record<string, unknown>;
+        } catch {
+          throw validationError('The body is not valid JSON');
+        }
+        const raw = json.raw ?? json.RawEmail ?? json.email ?? json.mime ?? json['body-mime'];
+        if (typeof raw !== 'string' || !raw.trim()) {
+          throw validationError('The raw message is missing: send it as "raw"');
+        }
+        source = raw;
+      }
+      if (source.length === 0) throw validationError('The message is empty');
+      const outcome = await ingestInboundEmail(app.db, connectionId, source);
+      return reply
+        .status(200)
+        .send(
+          outcome.handled
+            ? { received: true, status: outcome.result.status, duplicate: outcome.result.duplicate }
+            : { received: true, ignored: outcome.reason },
+        );
     },
   );
 }

@@ -1,5 +1,6 @@
 import { hasAdapter, registerAdapter } from './adapter';
 import { channexAdapter } from './channex/adapter';
+import { emailAdapter } from './email/adapter';
 import { icalAdapter } from './ical/adapter';
 
 /**
@@ -10,4 +11,5 @@ import { icalAdapter } from './ical/adapter';
 export function registerDefaultAdapters(): void {
   if (!hasAdapter('channex')) registerAdapter('channex', channexAdapter);
   if (!hasAdapter('ical')) registerAdapter('ical', icalAdapter);
+  if (!hasAdapter('email')) registerAdapter('email', emailAdapter);
 }

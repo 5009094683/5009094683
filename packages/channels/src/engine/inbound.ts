@@ -213,11 +213,22 @@ async function resolveRooms(
   const rateByExternal = new Map(rateMappings.map((m) => [m.externalRatePlanId, m]));
   // A property that sells one thing (a villa) leaves no doubt about what was booked.
   const sellable = await tx
-    .select({ id: roomTypes.id })
+    .select({ id: roomTypes.id, name: roomTypes.name })
     .from(roomTypes)
-    .where(and(eq(roomTypes.propertyId, connection.propertyId), eq(roomTypes.active, true)))
-    .limit(2);
+    .where(and(eq(roomTypes.propertyId, connection.propertyId), eq(roomTypes.active, true)));
   const onlyRoomType = sellable.length === 1 ? sellable[0]!.id : undefined;
+  /** The one room type whose name is, contains, or is contained in the name the source used. */
+  const byName = (name: string | null | undefined): string | undefined => {
+    const wanted = name?.toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!wanted) return undefined;
+    const exact = sellable.filter((t) => t.name.toLowerCase() === wanted);
+    if (exact.length === 1) return exact[0]!.id;
+    const close = sellable.filter((t) => {
+      const own = t.name.toLowerCase();
+      return wanted.includes(own) || own.includes(wanted);
+    });
+    return close.length === 1 ? close[0]!.id : undefined;
+  };
 
   const sameCurrency =
     !event.currency || event.currency.toUpperCase() === property.currency.toUpperCase();
@@ -250,9 +261,10 @@ async function resolveRooms(
     } else {
       const mapped =
         (room.externalRoomTypeId ? roomByExternal.get(room.externalRoomTypeId) : undefined) ??
+        byName(room.externalRoomName) ??
         onlyRoomType;
       if (!mapped) {
-        result.unmapped.push(room.externalRoomTypeId ?? '(no room id)');
+        result.unmapped.push(room.externalRoomName ?? room.externalRoomTypeId ?? '(no room given)');
         continue;
       }
       roomTypeId = mapped;
@@ -710,6 +722,7 @@ async function applyEvent(
     };
   }
 
+  if (event.unreadable) return { status: 'failed', reservationId: null, note: event.unreadable };
   if (event.block) return applyBlockEvent(tx, actor, connection, event);
 
   if (event.status === 'cancelled') {
@@ -820,19 +833,34 @@ export async function applyRevision(db: Database, revisionRowId: string): Promis
           entityId: row.id,
           dedupeKey: `unmapped_booking:${bookingKey}`,
         });
+      } else if (settled.status === 'failed') {
+        // The message itself is the problem; trying again would change nothing.
+        await raiseAlert(tx, {
+          orgId: connection!.orgId,
+          propertyId: connection!.propertyId,
+          kind: 'booking_needs_review',
+          severity: 'critical',
+          title: `${property!.name}: a booking message could not be used`,
+          body: `${settled.note}\n\nUntil someone deals with it, the calendar may be missing a booking, a change or a cancellation.`,
+          entityType: 'booking_revision',
+          entityId: row.id,
+          dedupeKey: `unreadable:${row.id}`,
+        });
       } else {
         await resolveAlert(tx, connection!.orgId, `unmapped_booking:${bookingKey}`);
         await resolveAlert(tx, connection!.orgId, `inbound_failure:${bookingKey}`);
+        await resolveAlert(tx, connection!.orgId, `unreadable:${row.id}`);
       }
+      const problem = settled.status === 'unmapped' || settled.status === 'failed';
       await writeSyncLog(tx, {
         connectionId: connection!.id,
         propertyId: connection!.propertyId,
         direction: 'in',
         operation: `booking.${event.status}`,
-        status: settled.status === 'unmapped' ? 'error' : 'ok',
+        status: problem ? 'error' : 'ok',
         itemCount: 1,
         lagMs: Math.max(0, Date.now() - event.revisionAt.getTime()),
-        error: settled.status === 'unmapped' ? settled.note : undefined,
+        error: problem ? settled.note : undefined,
         detail: {
           revisionId: row.externalRevisionId,
           bookingId: event.bookingId,
@@ -849,7 +877,12 @@ export async function applyRevision(db: Database, revisionRowId: string): Promis
           payload: { connectionId: connection!.id },
         },
       ]);
-      return { status: settled.status, reservationId: settled.reservationId, changed: true };
+      return {
+        status: settled.status,
+        reservationId: settled.reservationId,
+        changed: true,
+        ...(settled.status === 'failed' ? { error: settled.note } : {}),
+      };
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -1312,6 +1345,23 @@ export async function reprocessRevision(
     propertyId: row.connection.propertyId,
     summary: `Re-applied booking message ${row.revision.externalRevisionId} from ${row.connection.name}`,
   });
+  // A message that could not be read is read again first: the reading may have improved,
+  // or a setting that held it back may have changed.
+  const stored = row.revision.event as unknown as StoredBookingEvent;
+  const adapter = adapterFor(row.connection);
+  if (stored.unreadable && adapter.reparse && row.revision.status !== 'applied') {
+    const again = await adapter.reparse(row.revision.raw);
+    if (again && !again.unreadable) {
+      await db
+        .update(bookingRevisions)
+        .set({
+          event: serializeBookingEvent(again) as unknown as Record<string, unknown>,
+          externalBookingId: again.bookingId,
+          channelCode: again.channelCode,
+        })
+        .where(eq(bookingRevisions.id, revisionRowId));
+    }
+  }
   return applyRevision(db, revisionRowId);
 }
 

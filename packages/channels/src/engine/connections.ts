@@ -256,7 +256,10 @@ export async function saveMappings(
       const ids = input.roomTypes.map((m) => m.roomTypeId);
       if (new Set(ids).size !== ids.length)
         throw validationError('A room type can be mapped only once');
-      const externals = input.roomTypes.map((m) => m.externalId.trim());
+      // A mailbox knows rooms by the words the channel uses, compared without case or spacing.
+      const clean = (id: string): string =>
+        connection.adapter === 'email' ? id.toLowerCase().replace(/\s+/g, ' ').trim() : id.trim();
+      const externals = input.roomTypes.map((m) => clean(m.externalId));
       if (externals.some((e) => !e))
         throw validationError('Every mapped room type needs the channel\u2019s room id');
       if (new Set(externals).size !== externals.length) {
@@ -278,7 +281,7 @@ export async function saveMappings(
           input.roomTypes.map((m) => ({
             connectionId,
             roomTypeId: m.roomTypeId,
-            externalRoomTypeId: m.externalId.trim(),
+            externalRoomTypeId: clean(m.externalId),
             externalName: m.externalName ?? null,
           })),
         );
@@ -390,6 +393,14 @@ export async function listConnections(
   connectionId?: string,
 ): Promise<ConnectionSummary[]> {
   if (propertyIds !== 'all' && propertyIds.length === 0) return [];
+  // The summary is put together from several tables. Read at one instant, it cannot
+  // show a state that never existed (a push noted as failed beside an empty work list).
+  if (typeof (db as { rollback?: unknown }).rollback !== 'function') {
+    return db.transaction((tx) => listConnections(tx, orgId, propertyIds, connectionId), {
+      isolationLevel: 'repeatable read',
+      accessMode: 'read only',
+    });
+  }
   const rows = await db
     .select({ connection: channelConnections, propertyName: properties.name })
     .from(channelConnections)

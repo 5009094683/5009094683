@@ -16,9 +16,12 @@
     "@pms/db": "workspace:*",
     "@pms/domain": "workspace:*",
     "drizzle-orm": "^0.45.4",
+    "imapflow": "^2.11.0",
+    "mailparser": "^3.14.3",
     "openapi-fetch": "^0.17.0"
   },
   "devDependencies": {
+    "@types/mailparser": "^3.9.0",
     "openapi-typescript": "^7.13.0"
   }
 }
