@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { channelConnections, properties, type Database } from '@pms/db';
 import { notFound, validationError, writeAudit, type Actor } from '@pms/domain';
-import { emailToEvent, parseMime, type EmailConnectionConfig } from './adapter';
+import { emailToEventWithFallback, parseMime, type EmailConnectionConfig } from './adapter';
 import { ingestBookingEvent, type IngestResult } from '../engine/inbound';
 import { requireConnection, updateConnection } from '../engine/connections';
 
@@ -33,11 +33,15 @@ export async function ingestInboundEmail(
   if (config.recipient && !message.to.includes(config.recipient.toLowerCase())) {
     return { handled: false, reason: 'other_recipient' };
   }
-  const event = emailToEvent(message, {
-    dayFirst: config.dayFirst ?? true,
-    currency: config.currency ?? 'INR',
-    trustUnverifiedSenders: config.trustUnverifiedSenders ?? false,
-  });
+  const event = await emailToEventWithFallback(
+    message,
+    {
+      dayFirst: config.dayFirst ?? true,
+      currency: config.currency ?? 'INR',
+      trustUnverifiedSenders: config.trustUnverifiedSenders ?? false,
+    },
+    { orgId: connection.orgId },
+  );
   if (!event) return { handled: false, reason: 'not_a_booking' };
   return { handled: true, result: await ingestBookingEvent(db, connection, event, 'webhook') };
 }

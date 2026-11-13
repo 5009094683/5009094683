@@ -365,6 +365,59 @@ export function emailToEvent(
   return toEvent(message, reading.reservation, options.trustUnverifiedSenders ?? false);
 }
 
+/** What a second reader makes of a booking notice: the same fields the pattern reader produces, less who sent it. */
+export type FallbackReading = Omit<ParsedReservationEmail, 'channelCode' | 'channelName'>;
+
+/**
+ * A second reader for booking notices the patterns could not make out: a
+ * language model, when the installation has one. It returns null when it
+ * cannot read the essentials either.
+ */
+export type EmailFallbackReader = (
+  message: EmailMessage,
+  context: { orgId: string; channelName: string; defaultCurrency: string },
+) => Promise<FallbackReading | null>;
+
+let fallbackReader: EmailFallbackReader | null = null;
+
+export function setEmailFallbackReader(reader: EmailFallbackReader | null): void {
+  fallbackReader = reader;
+}
+
+/**
+ * As `emailToEvent`, but a notice the patterns could not read is given to the
+ * second reader, if there is one. Whatever that reader produces is subject to
+ * the same sender checks, and the booking is marked for staff to check.
+ */
+export async function emailToEventWithFallback(
+  message: EmailMessage,
+  options: ReadOptions & { trustUnverifiedSenders?: boolean },
+  context: { orgId: string },
+): Promise<BookingEvent | null> {
+  const reading = readReservationEmail(message, options);
+  if (reading.kind !== 'unreadable' || !fallbackReader) return emailToEvent(message, options);
+  let second: FallbackReading | null = null;
+  try {
+    second = await fallbackReader(message, {
+      orgId: context.orgId,
+      channelName: reading.channelName,
+      defaultCurrency: options.currency,
+    });
+  } catch {
+    // The second reader being down leaves things as they were: an email for staff to read.
+  }
+  if (!second) return emailToEvent(message, options);
+  const event = toEvent(
+    message,
+    { ...second, channelCode: reading.channelCode, channelName: reading.channelName },
+    options.trustUnverifiedSenders ?? false,
+  );
+  if (event.needsReview) {
+    event.needsReview = `The usual reader could not make out this email, so the AI service read it. ${event.needsReview}`;
+  }
+  return event;
+}
+
 function readOptions(
   context: Pick<AdapterContext, 'config'>,
 ): ReadOptions & { trustUnverifiedSenders: boolean } {
@@ -433,7 +486,7 @@ export function emailAdapter(context: AdapterContext): ChannelAdapter {
           continue;
         }
         if (recipient && !message.to.includes(recipient)) continue;
-        const event = emailToEvent(message, options);
+        const event = await emailToEventWithFallback(message, options, { orgId: context.orgId });
         if (event) events.push(event);
       }
       state.uidValidity = uidValidity;
@@ -443,7 +496,7 @@ export function emailAdapter(context: AdapterContext): ChannelAdapter {
 
     async reparse(raw: Record<string, unknown>): Promise<BookingEvent | null> {
       if (typeof raw.text !== 'string' || typeof raw.from !== 'string') return null;
-      return emailToEvent(
+      return emailToEventWithFallback(
         {
           messageId: String(raw.messageId ?? ''),
           from: raw.from,
@@ -461,6 +514,7 @@ export function emailAdapter(context: AdapterContext): ChannelAdapter {
               : 'none',
         },
         options,
+        { orgId: context.orgId },
       );
     },
   };

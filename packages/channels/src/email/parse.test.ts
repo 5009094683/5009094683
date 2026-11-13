@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import { emailToEvent, parseMime } from './adapter';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import {
+  emailToEvent,
+  emailToEventWithFallback,
+  parseMime,
+  setEmailFallbackReader,
+  type FallbackReading,
+} from './adapter';
 import {
   channelOfSender,
   htmlToText,
@@ -424,6 +430,114 @@ describe('from email to booking event', () => {
     expect(
       emailToEvent(message({ subject: 'Invoice', text: 'Your invoice.' }), options),
     ).toBeNull();
+  });
+
+  describe('with a second reader', () => {
+    const vague = (overrides: Partial<EmailMessage> = {}) =>
+      message({
+        subject: 'New booking',
+        text: 'Great news! Lena Fischer is coming from the 12th to the 15th of January. Ref 998877.',
+        ...overrides,
+      });
+    const reading: FallbackReading = {
+      status: 'new',
+      reference: '998877',
+      guestName: 'Lena Fischer',
+      guestEmail: null,
+      guestPhone: null,
+      checkIn: '2027-01-12',
+      checkOut: '2027-01-15',
+      roomName: 'Deluxe Sea View Room',
+      rooms: 1,
+      adults: 2,
+      children: null,
+      currency: 'INR',
+      totalAmount: 945_000,
+      notes: null,
+    };
+    const asked: { subject: string; context: unknown }[] = [];
+    let answer: FallbackReading | null | Error = reading;
+
+    beforeEach(() => {
+      asked.length = 0;
+      answer = reading;
+      setEmailFallbackReader(async (email, context) => {
+        asked.push({ subject: email.subject, context });
+        if (answer instanceof Error) throw answer;
+        return answer;
+      });
+    });
+    afterEach(() => setEmailFallbackReader(null));
+
+    it('gives it only the notices the patterns could not read, and marks what it read', async () => {
+      const event = (await emailToEventWithFallback(vague(), options, { orgId: 'org-1' }))!;
+      expect(event).toMatchObject({
+        bookingId: 'BDC:998877',
+        status: 'new',
+        channelCode: 'BDC',
+        totalAmount: 945_000,
+        guest: { firstName: 'Lena', lastName: 'Fischer' },
+      });
+      expect(event.unreadable).toBeUndefined();
+      expect(event.rooms).toHaveLength(1);
+      expect(event.needsReview).toBe(
+        'The usual reader could not make out this email, so the AI service read it. Read from an email from Booking.com. Check the details against Booking.com.',
+      );
+      expect(asked).toEqual([
+        {
+          subject: 'New booking',
+          context: { orgId: 'org-1', channelName: 'Booking.com', defaultCurrency: 'INR' },
+        },
+      ]);
+
+      // What the patterns can read, and what is not about a booking, never reaches it.
+      asked.length = 0;
+      const readable = await emailToEventWithFallback(
+        message({
+          subject: 'New booking 4521887766',
+          text: 'Booking number: 4521887766\nCheck-in: 12 Jan 2027\nCheck-out: 15 Jan 2027',
+        }),
+        options,
+        { orgId: 'org-1' },
+      );
+      expect(readable).toMatchObject({ bookingId: 'BDC:4521887766' });
+      expect(
+        await emailToEventWithFallback(
+          message({ subject: 'Invoice', text: 'Your invoice.' }),
+          options,
+          { orgId: 'org-1' },
+        ),
+      ).toBeNull();
+      expect(asked).toEqual([]);
+    });
+
+    it('holds what it read to the same sender checks', async () => {
+      const forged = (await emailToEventWithFallback(vague({ authentication: 'fail' }), options, {
+        orgId: 'org-1',
+      }))!;
+      expect(forged.unreadable).toMatch(/may be forged/);
+      expect(forged.rooms).toEqual([]);
+
+      answer = { ...reading, status: 'cancelled', checkIn: null, checkOut: null };
+      const cancel = (await emailToEventWithFallback(vague({ authentication: 'none' }), options, {
+        orgId: 'org-1',
+      }))!;
+      expect(cancel.unreadable).toMatch(/asks to cancel booking 998877.*could not confirm/);
+    });
+
+    it('leaves the email for a person when it cannot read it either, or is down', async () => {
+      const byHand =
+        'An email from Booking.com ("New booking") looks like a booking notice, but no booking reference could be found. Open the email and enter the booking by hand.';
+      answer = null;
+      expect(
+        (await emailToEventWithFallback(vague(), options, { orgId: 'org-1' }))!.unreadable,
+      ).toBe(byHand);
+      answer = new Error('The AI service is not answering');
+      expect(
+        (await emailToEventWithFallback(vague(), options, { orgId: 'org-1' }))!.unreadable,
+      ).toBe(byHand);
+      expect(asked).toHaveLength(2);
+    });
   });
 });
 
