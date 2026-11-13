@@ -256,14 +256,27 @@ export async function propertyRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         tags: ['rates'],
         params: propertyParams,
-        body: z.object({ roomTypeId: uuid, code: z.string().min(1).max(20), ...ratePlanFields }),
+        body: z
+          .object({
+            roomTypeId: uuid,
+            code: z.string().min(1).max(20),
+            ...ratePlanFields,
+            baseRate: money.optional(),
+          })
+          .refine((plan) => plan.baseRate !== undefined || !!plan.parentRatePlanId, {
+            path: ['baseRate'],
+            message: 'A rate plan needs a base rate unless it follows another plan',
+          }),
       },
     },
     async (req, reply) => {
       const actor = await authorizeProperty(app.db, req, req.params.propertyId, 'rates.write');
-      return reply
-        .status(201)
-        .send(await createRatePlan(app.db, actor, req.params.propertyId, req.body));
+      return reply.status(201).send(
+        await createRatePlan(app.db, actor, req.params.propertyId, {
+          ...req.body,
+          baseRate: req.body.baseRate ?? 0,
+        }),
+      );
     },
   );
 

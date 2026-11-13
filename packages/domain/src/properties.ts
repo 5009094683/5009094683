@@ -1,5 +1,6 @@
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import {
+  organizations,
   properties,
   ratePlans,
   roomTypes,
@@ -148,10 +149,16 @@ export async function createProperty(
       .from(properties)
       .where(and(eq(properties.orgId, actor.orgId), eq(properties.code, code)));
     if (clash) throw conflict(`A property with code ${code} already exists`);
+    const [org] = await tx
+      .select({ currency: organizations.defaultCurrency, timezone: organizations.defaultTimezone })
+      .from(organizations)
+      .where(eq(organizations.id, actor.orgId));
     const [property] = await tx
       .insert(properties)
       .values({
         ...input,
+        currency: input.currency ?? org?.currency,
+        timezone: input.timezone ?? org?.timezone,
         gstin: input.gstin?.toUpperCase() ?? null,
         code,
         name: input.name.trim(),

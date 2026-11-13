@@ -64,6 +64,24 @@ describe('property setup over the API', () => {
     });
     expect(plan.statusCode).toBe(201);
 
+    // A plan that follows another needs no base rate of its own; any other plan does.
+    const follower = { roomTypeId, code: 'SEA-NRF', name: 'Non-refundable' };
+    const noRate = await admin.post(`/properties/${propertyId}/rate-plans`, follower);
+    expect(noRate.statusCode).toBe(400);
+    expect(noRate.json().error.message).toMatch(/base rate/);
+    const derived = await admin.post(`/properties/${propertyId}/rate-plans`, {
+      ...follower,
+      parentRatePlanId: plan.json().id,
+      derivedPercentBp: -1000,
+    });
+    expect(derived.statusCode).toBe(201);
+    const quoted = (
+      await admin.get(
+        `/properties/${propertyId}/rates?from=2027-01-01&to=2027-01-02&ratePlanIds=${derived.json().id}`,
+      )
+    ).json();
+    expect(quoted.days[0].rate).toBe(720_000);
+
     const config = (await admin.get(`/properties/${propertyId}`)).json();
     expect(config.property.name).toBe('Sea Breeze Candolim');
     expect(config.roomTypes[0].units.map((u: { name: string }) => u.name)).toEqual(['201', '202']);
