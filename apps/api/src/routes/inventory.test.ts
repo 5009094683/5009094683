@@ -142,6 +142,44 @@ describe('property setup over the API', () => {
     const invalid = await admin.get(`${base}/rates?from=2027-02-30&to=2027-03-02`);
     expect(invalid.statusCode).toBe(400);
   });
+
+  it('keeps every setting it is sent, and says so when one cannot be kept', async () => {
+    const base = `/properties/${hotel.property.id}`;
+    const settings = {
+      knowledge: 'Breakfast is from 7:30 to 10:30. Parking is behind the building.',
+      pricingAutopilotRoomTypes: [hotel.standard.roomType.id],
+      pricingMaxChangePercent: 30,
+      pricingRounding: 10_000,
+      pricingEvents: [
+        { from: '2027-12-24', to: '2027-12-31', name: 'Christmas', upliftPercent: 30 },
+      ],
+    };
+    const saved = await admin.patch(base, { settings });
+    expect(saved.statusCode).toBe(200);
+    // What was sent is what is kept: nothing is dropped on the way.
+    expect(saved.json().settings).toMatchObject(settings);
+    expect((await admin.get(base)).json().property.settings).toMatchObject(settings);
+
+    // Settings merge key by key: changing one leaves the others alone.
+    const one = await admin.patch(base, { settings: { pricingMaxChangePercent: 25 } });
+    expect(one.json().settings).toMatchObject({ ...settings, pricingMaxChangePercent: 25 });
+
+    const backwards = await admin.patch(base, {
+      settings: { pricingEvents: [{ from: '2027-12-31', to: '2027-12-24', name: 'Backwards' }] },
+    });
+    expect(backwards.statusCode).toBe(400);
+    expect(backwards.json().error.message).toBe('"Backwards" ends before it begins');
+    // A room type of another property cannot be put on autopilot here.
+    const elsewhere = await createTestHotel(ctx.t.db, ctx.org);
+    const foreign = await admin.patch(base, {
+      settings: { pricingAutopilotRoomTypes: [elsewhere.standard.roomType.id] },
+    });
+    expect(foreign.statusCode).toBe(400);
+    // A setting nobody has heard of is refused, not silently forgotten.
+    const unknown = await admin.patch(base, { settings: { pricingMagic: true } });
+    expect(unknown.statusCode).toBe(400);
+    expect(unknown.json().error.message).toContain('pricingMagic');
+  });
 });
 
 describe('reservations over the API', () => {

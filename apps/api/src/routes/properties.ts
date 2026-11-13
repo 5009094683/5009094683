@@ -71,6 +71,8 @@ const propertySettings = z
     amenities: z.array(z.string().max(80)).max(100).optional(),
     photos: z.array(z.string().max(500)).max(60).optional(),
   })
+  // A setting this does not know is refused: dropping it quietly would look like saving it.
+  .strict()
   .optional();
 
 const propertyFields = {
