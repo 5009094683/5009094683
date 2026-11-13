@@ -562,6 +562,8 @@ export async function queueWebhookTest(
   endpointId: string,
 ): Promise<WebhookDeliveryView> {
   const endpoint = await requireEndpoint(db, actor.orgId, endpointId);
+  // Nothing is sent to a webhook that is off, so a test would wait for ever.
+  if (!endpoint.active) throw invalidState('Switch the webhook on before sending a test');
   const [row] = await db
     .insert(webhookDeliveries)
     .values({
@@ -593,9 +595,20 @@ export async function retryWebhookDelivery(
     .where(and(eq(webhookDeliveries.id, deliveryId), eq(webhookDeliveries.orgId, actor.orgId)));
   if (!delivery) throw notFound('Delivery', String(deliveryId));
   if (delivery.status === 'delivered') throw invalidState('This delivery already got through');
+  if (delivery.status === 'pending') {
+    throw invalidState('This delivery is already waiting to be sent');
+  }
+  const endpoint = await requireEndpoint(db, actor.orgId, delivery.endpointId);
+  if (!endpoint.active) throw invalidState('Switch the webhook on before sending this again');
   await db
     .update(webhookDeliveries)
-    .set({ status: 'pending', attempts: 0, nextAttemptAt: new Date(), lastError: null })
+    .set({
+      status: 'pending',
+      attempts: 0,
+      nextAttemptAt: new Date(),
+      lastError: null,
+      lastStatusCode: null,
+    })
     .where(eq(webhookDeliveries.id, deliveryId));
 }
 
@@ -717,7 +730,13 @@ export async function deliverDueWebhooks(
         return;
       }
 
-      const givenUp = job.attempts >= WEBHOOK_MAX_ATTEMPTS;
+      // Deliveries of one batch run side by side: by now another of them may have switched
+      // the endpoint off, and what waits for an endpoint that is off is given up, not kept.
+      const [current] = await db
+        .select({ active: webhookEndpoints.active })
+        .from(webhookEndpoints)
+        .where(eq(webhookEndpoints.id, job.endpointId));
+      const givenUp = job.attempts >= WEBHOOK_MAX_ATTEMPTS || current?.active === false;
       if (givenUp) run.failed++;
       else run.retrying++;
       await db

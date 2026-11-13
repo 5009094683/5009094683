@@ -1,8 +1,8 @@
 import { createServer, type IncomingHttpHeaders } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { alerts, apiKeys, webhookDeliveries, webhookEndpoints } from '@pms/db';
+import { alerts, apiKeys, auditLog, webhookDeliveries, webhookEndpoints } from '@pms/db';
 import { createTestDatabase, type TestDatabase } from '@pms/db/testing';
 import { createApiKey, listApiKeys, resolveApiKey, revokeApiKey } from './api-keys';
 import { sha256Hex } from './crypto';
@@ -138,8 +138,18 @@ describe('API keys', () => {
     const revoked = await revokeApiKey(t.db, org.admin, apiKey.id);
     expect(revoked.revokedAt).toBeInstanceOf(Date);
     expect(await resolveApiKey(t.db, key, now)).toBeNull();
-    // Still listed, so the audit trail keeps making sense.
-    expect((await listApiKeys(t.db, org.orgId)).map((k) => k.id)).toContain(apiKey.id);
+    // Still listed, with who made it, so the audit trail keeps making sense.
+    const listed = (await listApiKeys(t.db, org.orgId)).find((k) => k.id === apiKey.id);
+    expect(listed).toMatchObject({ createdByName: expect.any(String) });
+    expect(listed!.revokedAt).toEqual(revoked.revokedAt);
+    // Revoking it again is the same revocation: same time, and one entry in the trail.
+    const again = await revokeApiKey(t.db, org.admin, apiKey.id);
+    expect(again.revokedAt).toEqual(revoked.revokedAt);
+    const entries = await t.db
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.entityId, apiKey.id), eq(auditLog.action, 'api_key.revoked')));
+    expect(entries).toHaveLength(1);
   });
 });
 
@@ -453,6 +463,28 @@ describe('webhooks', () => {
     await expect(retryWebhookDelivery(t.db, org.admin, delivery!.id)).rejects.toMatchObject({
       code: 'invalid_state',
     });
+
+    // One that is still waiting its turn is not put in the queue a second time.
+    await queue([event()]);
+    const [waiting] = await listWebhookDeliveries(t.db, org.orgId, endpoint.id, {
+      status: 'pending',
+    });
+    await expect(retryWebhookDelivery(t.db, org.admin, waiting!.id)).rejects.toThrow(
+      'This delivery is already waiting to be sent',
+    );
+    // And nothing is sent, tested or sent again while the webhook is switched off.
+    answer = 500;
+    await deliverDueWebhooks(t.db, send);
+    await updateWebhookEndpoint(t.db, org.admin, endpoint.id, { active: false }, open);
+    await expect(queueWebhookTest(t.db, org.admin, endpoint.id)).rejects.toThrow(
+      'Switch the webhook on before sending a test',
+    );
+    const [dropped] = await listWebhookDeliveries(t.db, org.orgId, endpoint.id, {
+      status: 'failed',
+    });
+    await expect(retryWebhookDelivery(t.db, org.admin, dropped!.id)).rejects.toThrow(
+      'Switch the webhook on before sending this again',
+    );
   });
 
   it('switches off an endpoint that only ever fails, tells staff, and starts clean when switched on', async () => {

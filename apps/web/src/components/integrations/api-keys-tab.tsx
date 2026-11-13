@@ -2,15 +2,13 @@
 
 import { KeyRound, Plus } from 'lucide-react';
 import { useRef, useState } from 'react';
-import useSWR, { type KeyedMutator } from 'swr';
-import type { AuditPage } from '@/components/settings/audit-table';
+import type { KeyedMutator } from 'swr';
 import { ConfirmDialog } from '@/components/settings/confirm-dialog';
 import { grantSummaries } from '@/components/settings/roles';
 import { Button } from '@/components/ui/button';
 import { Badge, Card, EmptyState } from '@/components/ui/misc';
 import { useToast } from '@/components/ui/toast';
-import { api, query } from '@/lib/api';
-import { useAuth } from '@/lib/auth';
+import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import type { Property } from '@/lib/types';
 import { ApiKeyDialog } from './api-key-dialog';
@@ -283,7 +281,6 @@ export function ApiKeysTab({
   onAdd: () => void;
   onAddingDone: () => void;
 }) {
-  const auth = useAuth();
   const toast = useToast();
   const now = useNow(30_000);
   const region = useRef<HTMLElement>(null);
@@ -295,19 +292,11 @@ export function ApiKeysTab({
     onAddingDone();
   };
 
-  // The answer does not say who created a key; the audit trail does, for those who may read it.
-  const audit = useSWR<AuditPage>(
-    data.keys.length > 0 && auth.canOrgWide('audit.read')
-      ? `/audit${query({ entityType: 'api_key', actionPrefix: 'api_key.created', limit: 200 })}`
-      : null,
-  );
-  const creators = new Map(audit.data?.entries.map((entry) => [entry.entityId, entry.actorLabel]));
-
   const listed: ListedKey[] = data.keys.map((key) => ({
     key,
     state: keyState(key, now),
     may: grantSummaries(key.grants, [], properties),
-    createdBy: creators.get(key.id),
+    createdBy: key.createdByName ?? undefined,
   }));
   const working = listed.filter((item) => item.state === 'active');
   const dead = listed.filter((item) => item.state !== 'active');
@@ -365,7 +354,6 @@ export function ApiKeysTab({
               (current) => current && { ...current, keys: [created.apiKey, ...current.keys] },
               { revalidate: false },
             );
-            void audit.mutate();
           }}
         />
       )}

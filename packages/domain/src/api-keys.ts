@@ -1,5 +1,5 @@
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
-import { API_KEY_ROLES, apiKeys, properties, type DbOrTx } from '@pms/db';
+import { and, desc, eq, isNull } from 'drizzle-orm';
+import { API_KEY_ROLES, apiKeys, properties, users, type DbOrTx } from '@pms/db';
 import { writeAudit } from './audit';
 import type { Actor, Grant } from './context';
 import { randomToken, sha256Hex } from './crypto';
@@ -27,9 +27,11 @@ export interface ApiKeyView {
   lastUsedAt: Date | null;
   revokedAt: Date | null;
   createdAt: Date;
+  /** Who made the key. Null when that person's account is gone. */
+  createdByName: string | null;
 }
 
-const view = (row: ApiKeyRow): ApiKeyView => ({
+const view = (row: ApiKeyRow, createdByName: string | null): ApiKeyView => ({
   id: row.id,
   name: row.name,
   prefix: row.prefix,
@@ -38,7 +40,14 @@ const view = (row: ApiKeyRow): ApiKeyView => ({
   lastUsedAt: row.lastUsedAt,
   revokedAt: row.revokedAt,
   createdAt: row.createdAt,
+  createdByName,
 });
+
+async function nameOf(db: DbOrTx, userId: string | null): Promise<string | null> {
+  if (!userId) return null;
+  const [user] = await db.select({ name: users.name }).from(users).where(eq(users.id, userId));
+  return user?.name ?? null;
+}
 
 export interface ApiKeyInput {
   name: string;
@@ -97,35 +106,43 @@ export async function createApiKey(
       summary: `Created the API key "${name}"`,
       changes: { grants: row!.grants, expiresAt: row!.expiresAt },
     });
-    return { key, apiKey: view(row!) };
+    return { key, apiKey: view(row!, await nameOf(tx, row!.createdBy)) };
   });
 }
 
 export async function listApiKeys(db: DbOrTx, orgId: string): Promise<ApiKeyView[]> {
   const rows = await db
-    .select()
+    .select({ key: apiKeys, createdByName: users.name })
     .from(apiKeys)
+    .leftJoin(users, eq(users.id, apiKeys.createdBy))
     .where(eq(apiKeys.orgId, orgId))
     .orderBy(desc(apiKeys.createdAt));
-  return rows.map(view);
+  return rows.map((row) => view(row.key, row.createdByName));
 }
 
 /** Stops a key working at once. It stays in the list, so the audit trail still makes sense. */
 export async function revokeApiKey(db: DbOrTx, actor: Actor, keyId: string): Promise<ApiKeyView> {
   return transact(db, async (tx) => {
+    const [before] = await tx
+      .select()
+      .from(apiKeys)
+      .where(and(eq(apiKeys.id, keyId), eq(apiKeys.orgId, actor.orgId)))
+      .for('update');
+    if (!before) throw notFound('API key', keyId);
+    // Revoking twice is one revocation: nothing changes and nothing new is recorded.
+    if (before.revokedAt) return view(before, await nameOf(tx, before.createdBy));
     const [row] = await tx
       .update(apiKeys)
-      .set({ revokedAt: sql`coalesce(${apiKeys.revokedAt}, now())` })
-      .where(and(eq(apiKeys.id, keyId), eq(apiKeys.orgId, actor.orgId)))
+      .set({ revokedAt: new Date() })
+      .where(eq(apiKeys.id, keyId))
       .returning();
-    if (!row) throw notFound('API key', keyId);
     await writeAudit(tx, actor, {
       action: 'api_key.revoked',
       entityType: 'api_key',
       entityId: keyId,
-      summary: `Revoked the API key "${row.name}"`,
+      summary: `Revoked the API key "${before.name}"`,
     });
-    return view(row);
+    return view(row!, await nameOf(tx, before.createdBy));
   });
 }
 
