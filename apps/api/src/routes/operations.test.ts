@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { properties } from '@pms/db';
+import { properties, type Role } from '@pms/db';
 import { addDays, todayIn } from '@pms/domain';
 import {
   createTestHotel,
@@ -29,7 +29,7 @@ beforeAll(async () => {
     .update(properties)
     .set({ businessDate: today })
     .where(eq(properties.id, hotel.property.id));
-  const signIn = async (role: Parameters<typeof createTestUser>[2]['role']) => {
+  const signIn = async (role: Role) => {
     const user = await createTestUser(ctx.t.db, ctx.org.orgId, {
       role,
       propertyId: hotel.property.id,
