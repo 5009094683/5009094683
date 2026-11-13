@@ -763,8 +763,24 @@ describe('online check-in', () => {
       .where(and(eq(auditLog.action, 'guest.id_viewed'), eq(auditLog.entityId, reservation.id)));
     expect(viewed).toHaveLength(1);
 
-    // The guest may correct it until the front desk has checked it.
-    await submitGuestCheckin(t.db, token, { ...form, arrivalTime: '18:00' });
+    // The guest may correct it until the front desk has checked it. A number left empty keeps
+    // the one saved; changing the kind of document needs the new number.
+    const corrected = await submitGuestCheckin(t.db, token, {
+      ...form,
+      arrivalTime: '18:00',
+      guests: [{ name: 'Asha R. Rao', nationality: 'IN', idType: 'aadhaar' }, { name: 'Ravi Rao' }],
+    });
+    expect(corrected.guests[0]).toMatchObject({ name: 'Asha R. Rao', idNumberEnding: '••••9012' });
+    expect(
+      (await getStaffCheckin(t.db, org.admin, reservation.id, { reveal: true })).guests[0]!
+        .idNumber,
+    ).toBe('1234 5678 9012');
+    await expect(
+      submitGuestCheckin(t.db, token, {
+        ...form,
+        guests: [{ name: 'Asha Rao', nationality: 'IN', idType: 'passport' }],
+      }),
+    ).rejects.toThrow(/identity document/);
     await verifyOnlineCheckin(t.db, org.admin, reservation.id);
     await expect(submitGuestCheckin(t.db, token, form)).rejects.toThrow(/already checked/);
     expect(await getGuestCheckin(t.db, token)).toMatchObject({ status: 'verified', open: false });

@@ -228,7 +228,6 @@ export async function submitGuestCheckin(
   if (!form.signatureName?.trim()) throw validationError('Please type your name to sign');
   if (form.guests.length === 0) throw validationError('Add at least one guest');
   if (form.guests.length > 30) throw validationError('Too many guests for one booking');
-  const cleaned = form.guests.map((g, i) => normaliseGuest(g, i, property.country));
 
   await transact(db, async (tx) => {
     const [locked] = await tx
@@ -245,6 +244,23 @@ export async function submitGuestCheckin(
     if (existing?.status === 'verified') {
       throw invalidState('The property has already checked your details');
     }
+    // The guest only ever sees the end of a saved number, so a correction cannot send it back.
+    // A number left empty keeps the one saved for that guest, as long as the document is the same kind.
+    const saved = existing?.dataEnc ? decryptJson<StoredCheckin>(existing.dataEnc).guests : [];
+    const cleaned = form.guests.map((guest, i) => {
+      const before = saved[i];
+      const sameDocument = before && (!guest.idType || guest.idType === before.idType);
+      return normaliseGuest(
+        {
+          ...guest,
+          idType: guest.idType ?? (sameDocument ? before.idType : null),
+          idNumber: guest.idNumber?.trim() || (sameDocument ? before.idNumber : null),
+          visaNumber: guest.visaNumber?.trim() || before?.visaNumber || null,
+        },
+        i,
+        property.country,
+      );
+    });
     const values = {
       status: 'submitted' as const,
       arrivalTime: clean(form.arrivalTime, 20),
