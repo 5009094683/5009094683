@@ -67,7 +67,12 @@ import {
 } from './online-checkin';
 import { MockGateway } from './payments/mock';
 import { updateProperty } from './properties';
-import { cancelReservation, createReservation, expireHolds } from './reservations';
+import {
+  cancelReservation,
+  confirmReservation,
+  createReservation,
+  expireHolds,
+} from './reservations';
 import { deleteStoredFile, MemoryFileStore, purgeExpiredFiles, sniffContentType } from './storage';
 import {
   createTestHotel,
@@ -800,6 +805,65 @@ describe('templates and automatic messages', () => {
     await updateProperty(t.db, org.admin, hotel.property.id, {
       settings: { bookingEngineEnabled: true, bookingPayment: 'none' },
     });
+  });
+
+  it('confirms a booking the front desk held for some days when it is confirmed, and not before', async () => {
+    const held = await createReservation(t.db, org.admin, {
+      propertyId: hotel.property.id,
+      status: 'tentative',
+      source: 'phone',
+      guest: { firstName: 'Option', lastName: 'Holder', email: 'option@example.com' },
+      rooms: [
+        {
+          roomTypeId: hotel.standard.roomType.id,
+          ratePlanId: hotel.standard.ratePlan.id,
+          checkIn: day(50),
+          checkOut: day(52),
+          adults: 2,
+        },
+      ],
+      holdUntil: new Date(Date.now() + 10 * 86_400_000),
+    });
+    expect(held.confirmedAt).toBeNull();
+    const about = async () =>
+      (await t.db.select().from(messages)).filter((m) => m.body.includes(held.code));
+    await runAutomations(t.db);
+    expect(await about()).toEqual([]);
+
+    // Three days on, the guest says yes.
+    await t.db
+      .update(reservations)
+      .set({ createdAt: new Date(Date.now() - 3 * 86_400_000) })
+      .where(eq(reservations.id, held.id));
+    const confirmed = await confirmReservation(t.db, org.admin, held.id);
+    expect(confirmed.confirmedAt!.getTime()).toBeGreaterThan(Date.now() - 60_000);
+    await runAutomations(t.db);
+    expect((await about()).map((m) => m.templateKey)).toEqual(['booking_confirmation']);
+
+    // A hold that lapses is no booking, so nothing is said about it either.
+    const lapsed = await createReservation(t.db, org.admin, {
+      propertyId: hotel.property.id,
+      status: 'tentative',
+      source: 'phone',
+      guest: { firstName: 'Never', lastName: 'Came', email: 'never@example.com' },
+      rooms: [
+        {
+          roomTypeId: hotel.standard.roomType.id,
+          ratePlanId: hotel.standard.ratePlan.id,
+          checkIn: day(60),
+          checkOut: day(61),
+          adults: 2,
+        },
+      ],
+      holdUntil: new Date(Date.now() + 3_600_000),
+    });
+    await expireHolds(t.db, org.admin, new Date(Date.now() + 2 * 3_600_000));
+    await runAutomations(t.db);
+    const [after] = await t.db.select().from(reservations).where(eq(reservations.id, lapsed.id));
+    expect(after).toMatchObject({ status: 'cancelled', confirmedAt: null });
+    expect(
+      (await t.db.select().from(messages)).filter((m) => m.body.includes(lapsed.code)),
+    ).toEqual([]);
   });
 
   it('sends the pre-arrival and post-stay messages on their day, from their hour, to whoever can be reached', async () => {

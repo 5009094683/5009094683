@@ -153,6 +153,11 @@ export const reservations = pgTable(
     notes: text('notes'),
     /** Tentative reservations release their inventory when this passes. */
     holdExpiresAt: timestamptz('hold_expires_at'),
+    /**
+     * When it became a firm booking: at once for most, and when it was confirmed for one that
+     * was held first. Empty while it is held, and for a hold that lapsed.
+     */
+    confirmedAt: timestamptz('confirmed_at'),
     groupId: uuid('group_id').references(() => reservationGroups.id, { onDelete: 'set null' }),
     companyId: uuid('company_id'),
     /** The promotional code the booking was made with, and what it took off the room charges before tax. */

@@ -1076,9 +1076,11 @@ async function dueReservations(
   let when;
   switch (rule.trigger) {
     case 'booking_confirmed':
+      // Counted from when it became a firm booking: one that was held for some days first is
+      // confirmed to the guest when it is confirmed, not never.
       when = sql`r.status = 'confirmed'
-        AND r.created_at > ${now.toISOString()}::timestamptz - interval '48 hours'
-        AND r.created_at >= ${rule.createdAt.toISOString()}::timestamptz`;
+        AND coalesce(r.confirmed_at, r.created_at) > ${now.toISOString()}::timestamptz - interval '48 hours'
+        AND coalesce(r.confirmed_at, r.created_at) >= ${rule.createdAt.toISOString()}::timestamptz`;
       break;
     case 'booking_cancelled':
       when = sql`r.status = 'cancelled'

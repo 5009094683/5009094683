@@ -393,10 +393,13 @@ export async function syncReservationSummary(
   // A fully cancelled reservation keeps showing the dates it was for.
   const basis = live.length > 0 ? live : rooms;
   const status = deriveReservationStatus(rooms.map((r) => r.status));
+  const firm = status === 'confirmed' || status === 'in_house' || status === 'checked_out';
   const [updated] = await tx
     .update(reservations)
     .set({
       status,
+      // The first time it is a firm booking is the moment it was confirmed.
+      ...(firm ? { confirmedAt: sql`coalesce(${reservations.confirmedAt}, now())` } : {}),
       checkIn: basis.map((r) => r.checkIn).sort()[0]!,
       checkOut: basis
         .map((r) => r.checkOut)
@@ -719,6 +722,7 @@ export async function createReservation(
             propertyId: property.id,
             code: await newReservationCode(tx),
             status,
+            confirmedAt: status === 'confirmed' ? new Date() : null,
             source: input.source,
             channelCode: input.channelCode ?? null,
             connectionId: input.connectionId ?? null,
