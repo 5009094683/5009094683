@@ -56,6 +56,12 @@ export interface CalendarGridProps {
   onOpenStay(stay: CalStay): void;
   onOpenBlock(block: CalBlock, property: CalProperty): void;
   onSelectRange(selection: RangeSelection): void;
+  /**
+   * Take a number of rooms of a type off sale without choosing which. Absent
+   * for a property where the user may not block dates.
+   */
+  onBlockRoomType?(property: CalProperty, roomType: CalRoomType): void;
+  canBlock?(propertyId: string): boolean;
   onChangeStay(stay: CalStay, property: CalProperty, change: StayChange): void;
   onChangeBlock(
     block: CalBlock,
@@ -700,27 +706,46 @@ export function CalendarGrid(props: CalendarGridProps) {
           className="relative z-10 flex border-b border-line bg-sunken/80"
           style={{ height: TYPE_ROW_H }}
         >
-          <button
-            type="button"
-            onClick={() => props.onToggle(roomType.id)}
-            aria-expanded={!isCollapsed}
-            className="sticky left-0 z-20 flex shrink-0 items-center gap-1.5 border-r border-line-strong bg-sunken px-3 text-left"
+          <div
+            className="group/type sticky left-0 z-20 flex shrink-0 items-stretch border-r border-line-strong bg-sunken"
             style={{ width: labelWidth }}
           >
-            {isCollapsed ? (
-              <ChevronRight className="size-3.5 shrink-0 text-ink-faint" aria-hidden />
-            ) : (
-              <ChevronDown className="size-3.5 shrink-0 text-ink-faint" aria-hidden />
-            )}
-            <span className="min-w-0">
-              <span className="block truncate text-[13px] font-semibold text-ink">
-                {roomType.name}
+            <button
+              type="button"
+              onClick={() => props.onToggle(roomType.id)}
+              aria-expanded={!isCollapsed}
+              className="flex min-w-0 flex-1 items-center gap-1.5 px-3 text-left"
+            >
+              {isCollapsed ? (
+                <ChevronRight className="size-3.5 shrink-0 text-ink-faint" aria-hidden />
+              ) : (
+                <ChevronDown className="size-3.5 shrink-0 text-ink-faint" aria-hidden />
+              )}
+              <span className="min-w-0">
+                <span className="block truncate text-[13px] font-semibold text-ink">
+                  {roomType.name}
+                </span>
               </span>
-            </span>
-            <span className="ml-auto shrink-0 text-[11px] text-ink-faint">
-              {roomType.units.length}
-            </span>
-          </button>
+              <span className="ml-auto shrink-0 text-[11px] text-ink-faint">
+                {roomType.units.length}
+              </span>
+            </button>
+            {/* A hotel sells rooms by type: some can be held back without saying which ones. */}
+            {props.onBlockRoomType &&
+              roomType.units.length > 1 &&
+              props.canBlock?.(property.id) && (
+                <button
+                  type="button"
+                  title={`Take rooms of ${roomType.name} off sale`}
+                  aria-label={`Take rooms of ${roomType.name} off sale`}
+                  onClick={() => props.onBlockRoomType?.(property, roomType)}
+                  className="mr-1 flex w-7 shrink-0 items-center justify-center self-center rounded text-ink-faint opacity-0 transition-opacity group-hover/type:opacity-100 hover:bg-line hover:text-ink focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+                  style={{ height: 24 }}
+                >
+                  <Lock className="size-3.5" aria-hidden />
+                </button>
+              )}
+          </div>
           <div className="flex" style={{ width: trackWidth }}>
             {roomType.days.map((day) => (
               <div

@@ -120,34 +120,100 @@ before connecting the rest.
 
 ### Certification
 
-Channex gives production access to a PMS after checking that it behaves
-correctly: that a full sync is two requests and not hundreds, that only what
-changed is sent, that limits are respected, that bookings are acknowledged.
-The test list is in their documentation ("PMS certification tests"); it is a
-set of rate, restriction and availability changes to make on a test property,
-and a booking to receive, change and cancel.
+Channex gives production access to a PMS only after checking that it behaves
+correctly. Their document "PMS Certification Tests"
+(<https://docs.channex.io/api-v.1-documentation/pms-certification-tests>) is
+the authority; read it before you start, because it changes. In short:
 
-This PMS was built to that list and passes each case against the bundled
-stand-in for Channex, which enforces the same limits. The run against
-Channex's own test system has to be done with **your** account, because the
-result is tied to it:
+1. You make a list of changes **in the PMS itself**, on a test property, and
+   note the reference Channex gave for each request ("task id").
+2. You send them the form with those references and a few answers.
+3. They review it, then ask for a **live call** in which someone at your end
+   shares their screen and makes changes in the PMS while they watch the
+   requests arrive. That call is what decides.
 
-1. Set the three settings above to the test system and restart.
-2. Create the test property Channex's document asks for (its name, two room
-   types and four rate plans) under Settings, Properties, and connect it as
-   above.
-3. Make each change the document lists under Rates. One "Save" is one request.
-4. For each test Channex asks for the ids of the requests. They are in the
-   connection's Activity table, under each "Sent" row, as "Channel manager
-   reference".
-5. For the booking tests, make, change and cancel a booking with the test
-   booking tool Channex provides; each shows under "Bookings received" as Recorded.
-6. Send Channex the form, then show them the PMS in the live call they ask for.
+They are explicit that the changes must come from the product's own screens:
+a script that sends the test values, or a screen built only for the test,
+fails the review. Nothing of that kind is in this PMS. Every request it sends
+comes from the same path: a change is saved, a line goes on the work list in
+the same transaction, and the sync worker sends it.
 
-Two answers they ask for in words: **rate limits**: pushes for a property are
-spaced to stay within ten a minute, and a "too many requests" answer is waited
-out for as long as it says and then retried; **what is sent**: only the dates
-that changed, merged into ranges, plus one full sync a night.
+The run has to be done with **your** Channex account, because the result is
+tied to it. Allow an hour.
+
+#### Before the run
+
+1. Set the three settings above to the test system and restart the API and
+   the worker.
+2. Under Settings, Properties, create the test property their document asks
+   for: named "Test Property - " and your company's name, currency USD, with
+   two room types, "Twin Room" and "Double Room", for two guests each. Give
+   Twin Room eight rooms and Double Room five. Give each room type two rate
+   plans: "Best Available Rate" at 100 and "Bed & Breakfast Rate" at 120.
+3. Connect it under Channels as described above ("Set up automatically"),
+   check the mapping, and switch it on. Channex also checks that the property
+   has a type and a time zone: both are sent when the PMS creates it.
+4. Make the property look lived-in before the first test: a few bookings,
+   different rates on weekends, a minimum stay here and there. Channex does
+   not want to see a full sync in which every night is the same.
+
+#### The tests, and where each is done
+
+Each request's reference is in Channels, the connection, Activity: every
+"Sent" row carries a "Channel manager reference". That is the id to put in
+the form. One save in the PMS is one row.
+
+| Their test                                 | Where to do it in the PMS                                                                                                                                   | What goes out                                                                                                          |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| 1. Full sync                               | Channels, the connection's menu, "Send everything again"                                                                                                    | Two requests: 500 days of availability for every room type, and 500 days of rates and restrictions for every rate plan |
+| 2. One date, one rate                      | Rates: click the night's rate, type the new one, Enter, then "Save changes"                                                                                 | One request with one entry                                                                                             |
+| 3. One date each on several rate plans     | Rates: change each night's rate in the grid, then "Save changes" once                                                                                       | One request with an entry for each                                                                                     |
+| 4. A run of dates on several rate plans    | Rates, "Bulk update": choose the plan, the dates and the rate, "Add to changes". Repeat for each plan with its own dates and rate. Then "Save changes" once | One request                                                                                                            |
+| 5. Minimum stay                            | Rates: click the Restrictions cell under each night, set the minimum stay, "Done". Then "Save changes" once                                                 | One request                                                                                                            |
+| 6. Stop sell                               | The same, ticking "Stop sell"                                                                                                                               | One request                                                                                                            |
+| 7. Several restrictions over runs of dates | "Bulk update" for each plan: dates, minimum stay, maximum stay, closed to arrival, closed to departure as asked, "Add to changes". Then "Save changes" once | One request                                                                                                            |
+| 8. Half a year                             | "Bulk update" for each plan with the long date range, "Add to changes"; "Save changes" once                                                                 | One request                                                                                                            |
+| 9. Availability on one date                | Calendar: make a booking for that night on each room type, or take rooms off sale as in test 10, so that the rooms left are the figure asked for            | One or two requests                                                                                                    |
+| 10. Availability over a run of dates       | Calendar: the lock on the room type's own row ("Take rooms of … off sale"), then the dates and the number of rooms                                          | One or two requests                                                                                                    |
+| 11. A booking made, changed and cancelled  | Made on the Booking.com test account Channex describes, or with their "Booking CRS" application                                                             | Each appears under Channels, "Bookings received" as Recorded, and Channex shows it as acknowledged                     |
+
+The bar at the foot of the Rates screen says how many changes are waiting and
+lists them under "Review". Nothing is sent until "Save changes"; then they go
+together, as one request, which is what tests 3 to 8 look for.
+
+Rates with decimals (their 456.23) are typed as they are.
+
+#### Their questions, and the answers for this PMS
+
+- **Can you stay within the rate limits?** Yes. Changes wait on a work list
+  and are sent by one worker. For each property at most one availability and
+  one rates request go out every 6.5 seconds, which keeps each under ten a
+  minute. The remaining allowance Channex reports with every answer is read:
+  when it reaches zero, sending pauses until it is refilled. A "too many requests" answer is
+  waited out for as long as it says, then sent again; nothing is dropped.
+- **Do you send only what changed?** Yes. A request carries the dates that
+  changed, merged into runs, for the room types and rate plans that changed.
+  The whole horizon is sent again once a night, between 2 and 5 in the
+  morning at the property, a couple of properties at a time, and when someone
+  asks for it by hand.
+- **Minimum stay: arrival, through, or both?** Both are sent, with the same
+  value.
+- **Which restrictions are supported?** Stop sell, closed to arrival, closed
+  to departure, minimum stay, maximum stay, and the rate itself.
+- **Several room types, and several rate plans on each?** Yes.
+- **Bookings**: taken from the booking revisions feed, announced by webhook
+  and also fetched every fifteen minutes; each is acknowledged once it is
+  recorded here.
+- **Card details with bookings?** Not needed. The PMS never asks for or
+  stores card numbers. It is not within PCI scope for that reason.
+
+#### The live call
+
+Have the person who will run rates day to day make the changes: it is their
+screen Channex wants to see. Keep Channels, Activity open in a second window;
+each save shows there within a few seconds with its reference. They may ask
+for changes that are not on the list ("make this night 250 and its minimum
+stay 3"): do it in the grid and save.
 
 ### After go-live: the menu on each connection
 

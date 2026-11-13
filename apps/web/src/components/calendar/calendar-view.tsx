@@ -419,6 +419,20 @@ export function CalendarView() {
             onOpenStay={setOpenStay}
             onOpenBlock={(block, property) => setEditBlock({ block, property })}
             onSelectRange={setSelection}
+            canBlock={(propertyId) =>
+              auth.can('blocks.write', propertyId) || auth.can('maintenance.write', propertyId)
+            }
+            onBlockRoomType={(property, roomType) => {
+              // Starts on the first day shown that is not in the past; the dialog takes it from there.
+              const first = from < today ? today : from;
+              setNewBlock({
+                property,
+                roomTypeId: roomType.id,
+                unitId: null,
+                from: first,
+                to: addDays(first, 1),
+              });
+            }}
             onChangeStay={onChangeStay}
             onChangeBlock={(block, property, change) => void onChangeBlock(block, property, change)}
           />
