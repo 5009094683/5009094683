@@ -24,10 +24,23 @@ const schema = z.object({
 
   API_HOST: z.string().default('0.0.0.0'),
   API_PORT: z.coerce.number().int().default(4000),
-  /** Origin the API is reachable on from browsers and from channel webhooks. */
-  API_PUBLIC_URL: z.string().default('http://localhost:4000'),
+  /**
+   * Base URL under which browsers and channel webhooks reach the API. By
+   * default the back office proxies `/api` to the API, so cookies stay
+   * same-origin with the web app.
+   */
+  API_PUBLIC_URL: z.string().default('http://localhost:3000/api'),
+  /** Where the web apps reach the API server-side (inside the cluster or on localhost). */
+  API_INTERNAL_URL: z.string().default('http://localhost:4000'),
   WEB_URL: z.string().default('http://localhost:3000'),
   BOOKING_URL: z.string().default('http://localhost:3001'),
+  /** Honour X-Forwarded-For. Turn off only when the API is exposed without a proxy in front. */
+  TRUST_PROXY: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  /** Serve interactive API documentation at /docs. Defaults to on outside production. */
+  API_DOCS: z.enum(['true', 'false']).optional(),
 
   /** Base64 of 32 random bytes. Encrypts stored secrets and guest identity data. */
   APP_ENCRYPTION_KEY: optionalString,
