@@ -1,0 +1,29 @@
+{
+  "name": "@pms/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false src/main.ts",
+    "start": "node dist/main.js",
+    "build": "tsup",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@pms/channels": "workspace:*",
+    "@pms/config": "workspace:*",
+    "@pms/db": "workspace:*",
+    "@pms/domain": "workspace:*",
+    "drizzle-orm": "^0.45.4",
+    "pg": "^8.23.1",
+    "pino": "^10.4.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1",
+    "pino-pretty": "^13.2.0",
+    "tsup": "^9.0.0"
+  }
+}
