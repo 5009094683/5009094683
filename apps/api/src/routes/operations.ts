@@ -25,6 +25,7 @@ import {
 import {
   CHARGE_KINDS,
   ROLE_PERMISSIONS,
+  can,
   checkIn,
   checkOut,
   closeFolio,
@@ -167,7 +168,9 @@ export async function operationsRoutes(app: FastifyInstance): Promise<void> {
         req.params.propertyId,
         'reservations.read',
       );
-      return frontDeskBoard(app.db, actor.orgId, req.params.propertyId, req.query.date);
+      return frontDeskBoard(app.db, actor.orgId, req.params.propertyId, req.query.date, {
+        hideBalances: !can(actor.grants, 'folio.read', req.params.propertyId),
+      });
     },
   );
 

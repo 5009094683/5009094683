@@ -166,6 +166,17 @@ describe('who may do what', () => {
     expect((await housekeeper.get(`/reservations/${r.id}/folios`)).statusCode).toBe(403);
     expect((await housekeeper.post(`/reservations/${r.id}/check-in`, {})).statusCode).toBe(403);
 
+    // The board says who is coming and going. What they owe is on it only for those who may see bills.
+    const boardFor = async (client: TestClient) =>
+      (await client.get(`/properties/${hotel.property.id}/front-desk`)).json().arrivals as {
+        code: string;
+        balance: number | null;
+      }[];
+    expect((await boardFor(housekeeper)).find((s) => s.code === r.code)).toMatchObject({
+      balance: null,
+    });
+    expect((await boardFor(reader)).find((s) => s.code === r.code)).toMatchObject({ balance: 0 });
+
     expect((await reader.get(`/properties/${hotel.property.id}/front-desk`)).statusCode).toBe(200);
     expect((await reader.get(`/reservations/${r.id}/folios`)).statusCode).toBe(200);
     expect((await reader.post(`/reservations/${r.id}/check-in`, {})).statusCode).toBe(403);

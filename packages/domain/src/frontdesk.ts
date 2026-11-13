@@ -512,8 +512,8 @@ export interface FrontDeskStay {
   children: number;
   arrivalTime: string | null;
   specialRequests: string | null;
-  /** Owed across the reservation's folios. */
-  balance: number;
+  /** Owed across the reservation's folios. Null for a reader who may not see bills. */
+  balance: number | null;
   currency: string;
   overbooked: boolean;
   needsReview: boolean;
@@ -545,6 +545,8 @@ export async function frontDeskBoard(
   orgId: string,
   propertyId: string,
   date?: DateString,
+  /** What a guest owes is part of their bill: leave it out for someone who may not see bills. */
+  options: { hideBalances?: boolean } = {},
 ): Promise<FrontDeskBoard> {
   const [property] = await db
     .select()
@@ -620,7 +622,7 @@ export async function frontDeskBoard(
       children: r.children,
       arrivalTime: r.arrival_time,
       specialRequests: r.special_requests,
-      balance: Number(r.balance ?? 0),
+      balance: options.hideBalances ? null : Number(r.balance ?? 0),
       currency: r.currency,
       overbooked: r.overbooked,
       needsReview: r.needs_review,

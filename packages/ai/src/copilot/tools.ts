@@ -286,7 +286,13 @@ export const COPILOT_TOOLS: CopilotTool[] = [
     kind: 'read',
     async run(context, input) {
       await propertyFor(context, input.propertyId, 'reservations.read');
-      const board = await frontDeskBoard(context.db, context.actor.orgId, input.propertyId);
+      const board = await frontDeskBoard(
+        context.db,
+        context.actor.orgId,
+        input.propertyId,
+        undefined,
+        { hideBalances: !can(context.actor.grants, 'folio.read', input.propertyId) },
+      );
       const brief = (s: (typeof board.arrivals)[number]) => ({
         guestName: s.guestName,
         code: s.code,
