@@ -50,6 +50,14 @@ first, so two requests wait for each other instead of one of them failing. The
 tests book the last room from many connections at once and from the website
 and a booking site at the same moment; exactly one wins every time.
 
+Rooms held for a group are counted as blocked, less the rooms the group has
+booked on that night. The count is derived, not adjusted by hand: a booking
+made for the group takes one room out of the hold and into "sold" in the same
+rebuild, so what everyone else can book does not move and nothing is sent to
+the booking sites; cancelling it puts the room back in the hold. Once the
+cut-off day is over the hold is released and whatever was not booked is on sale
+again.
+
 There is one deliberate exception. A booking a site has already confirmed to
 a guest is recorded even when nothing is free (two sites can sell the last room
 within the same second, before either hears of the other). It is recorded as
@@ -132,7 +140,8 @@ anyone reloading.
   same recurring job produce one.
 - **Schedules**: the worker's schedule loop queues what is due: polls, drift
   checks, the night audit at each property's own hour, automatic messages,
-  rate suggestions, review fetches, reports, retention, owner statements.
+  rate suggestions, review fetches, reports, retention, owner statements, and
+  the release of group rooms nobody booked by the cut-off.
 - **Health**: each worker writes a heartbeat. The API notices when none has
   been heard from and raises an urgent alert, since it is the part still up to
   say so.

@@ -27,6 +27,9 @@ are about to do.
   villas sold as a whole or by the bedroom, where selling one side closes the other.
 - A live calendar across all properties: drag to book, to move a stay, to block dates.
 - Rates and restrictions (minimum stay, closed to arrival or departure, stop sell) by date.
+- Group bookings: rooms held for a wedding, a tour or a conference stay off sale
+  everywhere until the group's guests book them or the cut-off day passes, and a
+  rooming list books a room for each guest in one go.
 - Two rules the database itself enforces, whatever the application does: a room
   is never given to two stays on the same night, and a room type is never sold
   beyond the rooms it has.

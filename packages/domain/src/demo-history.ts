@@ -30,7 +30,9 @@ import { DomainError } from './errors';
 import { listFolios, postCharge, recordPayment, reservationBalance } from './folios';
 import { checkIn, checkOut } from './frontdesk';
 import { setHousekeepingStatus } from './housekeeping';
+import { addRoomingList, createGroup } from './groups';
 import { receiveMessage, sendMessage } from './inbox';
+import { getAvailability } from './inventory';
 import { issueInvoice } from './invoices';
 import { reportIssue } from './maintenance';
 import { runNightAudit } from './nightaudit';
@@ -767,6 +769,81 @@ export async function seedDemoHistory(
     minNights: 4,
     stayTo: addDays(today, 120),
   });
+
+  // --- Groups: rooms held for an offsite and a wedding, some of them booked. ---
+  /** Holds up to `wanted` rooms, leaving at least one of the type on general sale. */
+  const holdable = async (setup: Setup, from: DateString, to: DateString, wanted: number) => {
+    const days = await getAvailability(db, {
+      propertyId: hotel.id,
+      range: { from, to },
+      roomTypeIds: [setup.roomTypeId],
+    });
+    const quantity = Math.min(wanted, Math.min(...days.map((d) => d.available)) - 1);
+    return quantity > 0 ? [{ roomTypeId: setup.roomTypeId, from, to, quantity }] : [];
+  };
+  const standard = hotelTypes.get('STD')!;
+  const deluxe = hotelTypes.get('DLX')!;
+  const offsiteFrom = addDays(today, 16);
+  const offsiteTo = addDays(offsiteFrom, 2);
+  const offsite = await createGroup(db, admin, {
+    propertyId: hotel.id,
+    name: 'Konkan Software Labs offsite',
+    contactName: 'Rhea Kapoor',
+    contactEmail: 'travel@konkanlabs.example',
+    cutoffDate: addDays(today, 9),
+    companyId: corporate.id,
+    notes: 'Meeting room from 9 to 6 on both days. Vegetarian lunch for twelve.',
+    holds: await holdable(standard, offsiteFrom, offsiteTo, 4),
+  });
+  await attempt(() =>
+    addRoomingList(db, admin, offsite.id, {
+      roomTypeId: standard.roomTypeId,
+      ratePlanId: standard.ratePlanId,
+      checkIn: offsiteFrom,
+      checkOut: offsiteTo,
+      nightlyRate: Math.round((standard.baseRate * 0.85) / 10_000) * 10_000,
+      guests: [
+        { firstName: 'Ishaan', lastName: 'Verma', email: 'ishaan.verma@konkanlabs.example' },
+        { firstName: 'Meera', lastName: 'Pillai', email: 'meera.pillai@konkanlabs.example' },
+      ],
+    }),
+  );
+  const weddingFrom = addDays(today, 26);
+  const weddingTo = addDays(weddingFrom, 3);
+  const weddingHolds = [
+    ...(await holdable(standard, weddingFrom, weddingTo, 3)),
+    ...(await holdable(deluxe, weddingFrom, weddingTo, 2)),
+  ];
+  const wedding = await createGroup(db, admin, {
+    propertyId: hotel.id,
+    name: 'Fernandes wedding',
+    contactName: 'Maria Fernandes',
+    contactPhone: '+91 98220 55501',
+    cutoffDate: addDays(today, 14),
+    notes: 'Family arrives the day before the ceremony. Late check-out asked for on the last day.',
+    holds: weddingHolds,
+  });
+  // The first of the family books one of the rooms held, of the better kind where one is held.
+  const familyRoom = weddingHolds.some((hold) => hold.roomTypeId === deluxe.roomTypeId)
+    ? deluxe
+    : standard;
+  await attempt(() =>
+    createReservation(db, admin, {
+      propertyId: hotel.id,
+      source: 'phone',
+      guest: { firstName: 'Joseph', lastName: 'Fernandes', phone: '+91 98220 55502' },
+      rooms: [
+        {
+          roomTypeId: familyRoom.roomTypeId,
+          ratePlanId: familyRoom.ratePlanId,
+          checkIn: weddingFrom,
+          checkOut: weddingTo,
+          adults: 2,
+        },
+      ],
+      groupId: wedding.id,
+    }),
+  );
 
   // --- The villas' owners, their contracts and last month's statements. ---
   const lastMonth = monthOf(addDays(monthOf(today).start, -1)).start.slice(0, 7);

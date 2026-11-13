@@ -14,6 +14,8 @@ import { createTestDatabase, type TestDatabase } from '@pms/db/testing';
 import { addDays, monthOf, todayIn } from './dates';
 import { seedDemoHistory, type DemoHistorySummary } from './demo-history';
 import { seedDemo } from './demo-seed';
+import { getGroup, listGroups } from './groups';
+import { findLedgerMismatches } from './inventory';
 import { taxRegister } from './registers';
 import { performanceReport, revenueReport } from './reports';
 
@@ -108,6 +110,30 @@ describe('three weeks of demo life', () => {
     expect(statements.map((s) => s.status).sort()).toEqual(['draft', 'issued']);
     expect(statements.find((s) => s.status === 'issued')!.number).toMatch(/^AZR\/OS\//);
     expect(statements[0]!.periodStart).toBe(monthOf(addDays(monthOf(today).start, -1)).start);
+  });
+
+  it('has two groups holding rooms at the hotel, each with a booking made', async () => {
+    const [hotel] = await t.db.select().from(properties).where(eq(properties.code, 'GOA'));
+    const groups = await listGroups(t.db, orgId, { propertyId: hotel!.id });
+    expect(groups.map((g) => g.name)).toEqual([
+      'Konkan Software Labs offsite',
+      'Fernandes wedding',
+    ]);
+    for (const group of groups) {
+      expect(group.heldNights).toBeGreaterThan(0);
+      expect(group.bookings).toBeGreaterThan(0);
+      expect(group.leftNights).toBeLessThan(group.heldNights);
+    }
+    // The rooms the offsite booked are billed to the company the group is for.
+    const offsite = await getGroup(t.db, orgId, groups[0]!.id);
+    expect(offsite.company?.name).toBe('Konkan Software Labs');
+    expect(offsite.reservations.map((r) => r.guestName)).toEqual(['Ishaan Verma', 'Meera Pillai']);
+    expect(
+      await findLedgerMismatches(t.db, {
+        propertyId: hotel!.id,
+        range: { from: today, to: addDays(today, 60) },
+      }),
+    ).toEqual([]);
   });
 
   it('has messages waiting in the inbox and nothing alarming on the alert list', async () => {
