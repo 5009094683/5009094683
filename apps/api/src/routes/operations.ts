@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { and, eq, inArray, isNull, or } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import {
   COMPANY_KINDS,
@@ -29,14 +29,17 @@ import {
   checkOut,
   closeFolio,
   companyStatement,
+  conflict,
   createCompany,
   createFolio,
   createHousekeepingTask,
+  DomainError,
   freeUnitsFor,
   frontDeskBoard,
   getFolio,
   getInvoice,
   housekeepingBoard,
+  invalidState,
   issueCreditNote,
   issueInvoice,
   listCompanies,
@@ -51,6 +54,7 @@ import {
   propertyScope,
   recordPayment,
   refreshHousekeepingTasks,
+  refundOnline,
   refundPayment,
   reopenFolio,
   reportIssue,
@@ -386,6 +390,52 @@ export async function operationsRoutes(app: FastifyInstance): Promise<void> {
           return row?.propertyId;
         },
       );
+      const [payment] = await app.db.select().from(payments).where(eq(payments.id, req.params.id));
+      // Money that came through the payment gateway goes back through it, unless staff say it was returned another way.
+      const viaGateway =
+        payment?.provider &&
+        payment.providerPaymentId &&
+        (req.body.method === undefined || req.body.method === 'online');
+      if (viaGateway) {
+        const gateway = app.gateway();
+        if (payment.provider !== gateway.name) {
+          throw invalidState(
+            `This payment was taken through ${payment.provider}, which is not the gateway in use. Refund it there, then record the refund here with another method.`,
+          );
+        }
+        const [left] = (
+          await app.db.execute<{ left: string }>(sql`
+            SELECT (p.amount + coalesce((SELECT sum(r.amount) FROM payments r
+              WHERE r.refund_of_payment_id = p.id AND r.status = 'captured'), 0))::text AS left
+            FROM payments p WHERE p.id = ${payment.id}`)
+        ).rows;
+        const amount = req.body.amount ?? Number(left?.left ?? 0);
+        if (amount <= 0) throw conflict('This payment has already been refunded in full');
+        const ok = await refundOnline(
+          app.db,
+          gateway,
+          payment.id,
+          { amount, reason: req.body.reason },
+          actor,
+        );
+        if (!ok) {
+          throw new DomainError(
+            'upstream_failed',
+            'The payment gateway did not accept the refund. Nothing was recorded; try again, or refund it in the gateway\u2019s own dashboard and record it here with another method.',
+          );
+        }
+        const [refund] = await app.db
+          .select()
+          .from(payments)
+          .where(eq(payments.refundOfPaymentId, payment.id))
+          .orderBy(desc(payments.createdAt))
+          .limit(1);
+        const [line] = await app.db
+          .select()
+          .from(folioLines)
+          .where(eq(folioLines.paymentId, refund!.id));
+        return reply.status(201).send({ payment: refund!, line: line! });
+      }
       return reply.status(201).send(await refundPayment(app.db, actor, req.params.id, req.body));
     },
   );

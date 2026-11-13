@@ -76,6 +76,9 @@ export async function startStack(options: StackOptions = {}): Promise<Stack> {
     handle: api.t,
     env: api.env,
     log: silentLogger,
+    // The same in-memory mail server and file store as the API, so tests can look at what was sent.
+    mailer: api.mailer,
+    files: api.files,
     timings: {
       syncIdleMs: 250,
       syncDebounceMs: 10,

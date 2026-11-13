@@ -26,8 +26,19 @@ import { authorize } from '../plugins/auth';
 
 const propertySettings = z
   .object({
+    nightAuditHour: z.number().int().min(0).max(23).nullable().optional(),
+    autoNoShow: z.boolean().optional(),
+    invoicePrefix: z
+      .string()
+      .regex(/^[A-Za-z0-9]{1,4}$/, 'Up to four letters or digits')
+      .optional(),
+    specifiedPremises: z.boolean().optional(),
     bookingHoldMinutes: z.number().int().min(5).max(120).optional(),
     bookingEngineEnabled: z.boolean().optional(),
+    bookingPayment: z.enum(['full', 'deposit', 'none']).optional(),
+    depositPercent: z.number().int().min(1).max(100).optional(),
+    bookingTerms: z.string().max(10_000).optional(),
+    arrivalInstructions: z.string().max(4000).optional(),
     childMaxAge: z.number().int().min(0).max(17).optional(),
     departureCleanMinutes: z.number().int().min(5).max(480).optional(),
     stayoverCleanMinutes: z.number().int().min(5).max(480).optional(),

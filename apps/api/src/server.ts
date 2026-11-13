@@ -24,6 +24,18 @@ const app = await buildApp({
     level: env.LOG_LEVEL ?? 'info',
     // Cookies and authorization headers must never reach the logs.
     redact: ['req.headers.cookie', 'req.headers.authorization', 'res.headers["set-cookie"]'],
+    serializers: {
+      // A guest link is a key to a booking, and secrets can ride in a query string: neither is logged.
+      req(request: { method: string; url: string; ip?: string; id?: string }) {
+        return {
+          method: request.method,
+          url: request.url
+            .replace(/(\/public\/bookings\/)[^/?]+/, '$1[guest-link]')
+            .replace(/([?&](?:secret|token|hub\.verify_token)=)[^&]+/g, '$1[hidden]'),
+          remoteAddress: request.ip,
+        };
+      },
+    },
     ...(env.isProduction
       ? {}
       : {

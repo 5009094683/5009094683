@@ -16,6 +16,7 @@ import {
   channexConfig,
   channexStatus,
   channexStructure,
+  channexWebhookState,
   connectionLog,
   createConnection,
   ensureChannexWebhook,
@@ -370,6 +371,20 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
     async (req) => {
       authorize(req, 'channels.manage');
       return { properties: await listChannexProperties(app.env) };
+    },
+  );
+
+  r.get(
+    '/channels/channex/webhook',
+    {
+      schema: {
+        tags: ['channels'],
+        summary: 'Whether the channel manager is set to announce bookings to this PMS',
+      },
+    },
+    async (req) => {
+      authorize(req, 'channels.read');
+      return channexWebhookState(app.env);
     },
   );
 

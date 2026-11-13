@@ -1,6 +1,6 @@
 import { parseEnv, type Env } from '@pms/config';
 import { createTestDatabase, type TestDatabase } from '@pms/db/testing';
-import { MemoryMailer } from '@pms/domain';
+import { MemoryFileStore, MemoryMailer, type PaymentGateway } from '@pms/domain';
 import { TEST_PASSWORD, createTestOrg, type TestOrg } from '@pms/domain/testing';
 import type { InjectOptions, LightMyRequestResponse } from 'fastify';
 import { buildApp, type App } from './app';
@@ -10,6 +10,7 @@ export interface TestApp {
   t: TestDatabase;
   org: TestOrg;
   mailer: MemoryMailer;
+  files: MemoryFileStore;
   env: Env;
   /** Signs in and returns a client that sends the session cookie. */
   login(email: string, password?: string): Promise<TestClient>;
@@ -56,11 +57,22 @@ function client(app: App, initialCookie?: string): TestClient {
   return self;
 }
 
-export async function createTestApp(envOverrides: Record<string, string> = {}): Promise<TestApp> {
+export async function createTestApp(
+  envOverrides: Record<string, string> = {},
+  deps: { gateway?: PaymentGateway } = {},
+): Promise<TestApp> {
   const t = await createTestDatabase();
   const env = parseEnv({ ...process.env, NODE_ENV: 'test', DATABASE_URL: t.url, ...envOverrides });
   const mailer = new MemoryMailer();
-  const app = await buildApp({ handle: t, env, mailer, logger: false });
+  const files = new MemoryFileStore();
+  const app = await buildApp({
+    handle: t,
+    env,
+    mailer,
+    files,
+    gateway: deps.gateway,
+    logger: false,
+  });
   await app.ready();
   const org = await createTestOrg(t.db);
 
@@ -77,6 +89,7 @@ export async function createTestApp(envOverrides: Record<string, string> = {}): 
     t,
     org,
     mailer,
+    files,
     env,
     login,
     admin: () => login(org.admin.label),
