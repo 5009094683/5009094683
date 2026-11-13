@@ -24,6 +24,11 @@ Things kept narrower than a role's general access:
 
 - **Identity document numbers** are shown only on request, only to roles with
   that permission (front desk, managers, admins), and each viewing is recorded.
+- **The guest register** (who arrived, with identity and visa details, as a
+  file for the police or the foreigners' registration portal) takes the same
+  permission at the property, and each time it is taken is recorded. Take it
+  before the retention period for identity details runs out: what has been
+  erased is no longer in it.
 - **Refunds** take their own permission (accountant, managers).
 - **Approving rate suggestions** takes its own permission (revenue, managers).
 - **A copy of a guest's data, erasing a guest, the audit trail**: only for

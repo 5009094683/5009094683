@@ -11,6 +11,8 @@ import {
   createReportSchedule,
   deleteReportSchedule,
   forbidden,
+  guestRegister,
+  guestRegisterCsv,
   listReportSchedules,
   notFound,
   paceReport,
@@ -19,14 +21,16 @@ import {
   reportCsv,
   revenueReport,
   sendScheduledReport,
+  taxRegister,
+  taxRegisterCsv,
   updateReportSchedule,
   type Actor,
   type ReportScheduleRow,
   type ReportWindow,
 } from '@pms/domain';
 import { perUser } from '../lib/limits';
-import { dateString, idParams, uuid, uuidList } from '../lib/schemas';
-import { scopedProperties } from '../lib/scope';
+import { dateString, idParams, propertyParams, uuid, uuidList } from '../lib/schemas';
+import { authorizeProperty, scopedProperties } from '../lib/scope';
 import { authorize } from '../plugins/auth';
 
 const windowQuery = z.object({
@@ -157,6 +161,66 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
    * cover properties whose reports its author may read: "every property"
    * takes a role that is not tied to one.
    */
+  // ---------------------------------------------------------------------------
+  // Registers for the authorities
+
+  r.get(
+    '/reports/tax-register',
+    {
+      config: perUser(30),
+      schema: {
+        tags: ['reports'],
+        summary:
+          'Every invoice and credit note issued in a period by service code and tax rate, for the tax return',
+        querystring: windowQuery,
+      },
+    },
+    async (req, reply) => {
+      // It names customers and what they were billed: for those who may see bills.
+      const { actor, propertyIds } = scopedProperties(req, 'folio.read', req.query.propertyIds);
+      const register = await taxRegister(app.db, actor.orgId, {
+        propertyIds,
+        from: req.query.from,
+        to: req.query.to,
+      });
+      return req.query.format === 'csv' ? sendCsv(reply, taxRegisterCsv(register)) : register;
+    },
+  );
+
+  r.get(
+    '/properties/:propertyId/guest-register',
+    {
+      config: perUser(10),
+      schema: {
+        tags: ['reports'],
+        summary:
+          'Everyone who arrived in a period with their identity and travel details, for the police or the foreigners\u2019 registration portal (recorded in the audit log)',
+        params: propertyParams,
+        querystring: z.object({
+          from: dateString,
+          to: dateString,
+          foreignOnly: z
+            .enum(['true', 'false'])
+            .optional()
+            .describe('Only guests from another country'),
+          format: z.enum(['json', 'csv']).optional(),
+        }),
+      },
+    },
+    async (req, reply) => {
+      const actor = await authorizeProperty(app.db, req, req.params.propertyId, 'guests.pii');
+      const register = await guestRegister(app.db, actor, {
+        propertyId: req.params.propertyId,
+        from: req.query.from,
+        to: req.query.to,
+        foreignOnly: req.query.foreignOnly === 'true',
+      });
+      return req.query.format === 'csv'
+        ? sendCsv(reply, guestRegisterCsv(register))
+        : reply.header('cache-control', 'private, no-store').send(register);
+    },
+  );
+
   const mayCover = (actor: Actor, propertyIds: string[] | null | undefined): void => {
     if (!propertyIds || propertyIds.length === 0) {
       if (!canAcrossOrganisation(actor.grants, 'reports.read')) {

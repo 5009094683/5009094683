@@ -64,6 +64,8 @@ are about to do.
   last week, last month and last year, where bookings came from and what each
   source cost, takings by day, travel agent commission. As spreadsheets, and by
   email on a schedule.
+- The tax register for the GST return, and the guest register for the police
+  or the foreigners' registration portal, as files.
 - Villa owners: contracts, costs, a statement each month, and a portal where
   an owner sees their own villa's bookings and statements and takes dates for themselves.
 - Companies and travel agents with credit limits, statements and commission.
@@ -101,4 +103,7 @@ are about to do.
 - **Door locks, restaurant tills and key encoders** are not driven directly.
   They can be connected through the API and webhooks.
 - **Filing with government portals** (guest registration, tax returns) is not
-  automatic. The data is there to export.
+  automatic. Two files are there to hand over or to load into the portal's or
+  the accountant's own tools: the tax register (every invoice and credit note
+  by service code and tax rate) and the guest register (who arrived, with
+  identity and visa details).

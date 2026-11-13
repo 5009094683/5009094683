@@ -98,6 +98,10 @@ POST /properties/{propertyId}/rates   { ratePlanId, from, to, change: { rate, mi
 # Figures
 GET  /reports/performance?from=2026-11-01&to=2026-12-01&groupBy=day
 GET  /reports/channel-mix?from=2026-11-01&to=2026-12-01&format=csv
+
+# For the authorities
+GET  /reports/tax-register?from=2026-11-01&to=2026-12-01&format=csv
+GET  /properties/{propertyId}/guest-register?from=2026-11-01&to=2026-12-01&foreignOnly=true&format=csv
 ```
 
 A booking made through the API is checked exactly like one made at the front

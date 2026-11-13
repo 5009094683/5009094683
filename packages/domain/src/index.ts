@@ -50,6 +50,7 @@ export * from './source-labels';
 export * from './reports';
 export * from './owners';
 export * from './report-exports';
+export * from './registers';
 export * from './api-keys';
 export * from './webhooks';
 export * from './privacy';

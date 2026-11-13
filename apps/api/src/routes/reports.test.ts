@@ -166,6 +166,91 @@ describe('reports', () => {
   });
 });
 
+describe('registers for the authorities', () => {
+  // A hotel of its own, so that what is booked and billed here does not show in the other reports.
+  let place: TestHotel;
+  /** Read-only there. */
+  let bills: TestClient;
+  let desk: TestClient;
+
+  beforeAll(async () => {
+    place = await createTestHotel(ctx.t.db, ctx.org, { standardRooms: 2 });
+    const signIn = async (role: Role) =>
+      ctx.login(
+        (await createTestUser(ctx.t.db, ctx.org.orgId, { role, propertyId: place.property.id }))
+          .email,
+      );
+    bills = await signIn('read_only');
+    desk = await signIn('front_desk');
+  });
+
+  it('give the tax register to those who may see bills, for their own properties', async () => {
+    const span = `from=${day(-1)}&to=${day(2)}`;
+    const stay = await createReservation(ctx.t.db, ctx.org.admin, {
+      propertyId: place.property.id,
+      source: 'direct',
+      guest: { firstName: 'Tax', lastName: 'Payer' },
+      rooms: [
+        {
+          roomTypeId: place.standard.roomType.id,
+          ratePlanId: place.standard.ratePlan.id,
+          checkIn: day(0),
+          checkOut: day(1),
+          adults: 1,
+        },
+      ],
+    });
+    const charge = await admin.post(`/reservations/${stay.id}/charges`, {
+      kind: 'room',
+      description: 'Room night',
+      unitAmount: 450_000,
+    });
+    expect(charge.statusCode).toBe(201);
+    const invoice = await admin.post(`/folios/${charge.json().folioId}/invoices`, {});
+    expect(invoice.statusCode).toBe(201);
+
+    const register = (await bills.get(`/reports/tax-register?${span}`)).json();
+    expect(register.rows).toMatchObject([
+      { number: invoice.json().number, taxable: 450_000, buyerName: 'Tax Payer' },
+    ]);
+    expect(register.total).toMatchObject({ invoices: 1, creditNotes: 0 });
+    const file = await bills.get(`/reports/tax-register?${span}&format=csv`);
+    expect(file.headers['content-type']).toBe('text/csv; charset=utf-8');
+    expect(file.headers['content-disposition']).toContain('tax-register-');
+    expect(file.body).toContain(invoice.json().number);
+
+    // Housekeeping does not see bills; someone at another property sees only that property's.
+    expect((await housekeeper.get(`/reports/tax-register?${span}`)).statusCode).toBe(403);
+    expect((await reader.get(`/reports/tax-register?${span}`)).json().rows).toEqual([]);
+    expect(
+      (await reader.get(`/reports/tax-register?${span}&propertyIds=${place.property.id}`))
+        .statusCode,
+    ).toBe(403);
+    expect((await rival.get(`/reports/tax-register?${span}`)).json().rows).toEqual([]);
+  });
+
+  it('give the guest register only to those who may see identity details there', async () => {
+    const path = `/properties/${place.property.id}/guest-register?from=${day(-1)}&to=${day(2)}`;
+    const taken = await desk.get(path);
+    expect(taken.statusCode).toBe(200);
+    expect(taken.headers['cache-control']).toBe('private, no-store');
+    expect(taken.json()).toMatchObject({ propertyId: place.property.id, rows: [] });
+    const file = await desk.get(`${path}&format=csv&foreignOnly=true`);
+    expect(file.headers['content-type']).toBe('text/csv; charset=utf-8');
+    expect(file.body.replace(/^\uFEFF/, '')).toMatch(/^Booking,Rooms,Arrival,Departure/);
+
+    // Reading bookings is not enough: this file has identity numbers in it.
+    expect((await bills.get(path)).statusCode).toBe(403);
+    // Nor is being front desk somewhere else.
+    expect((await frontDesk.get(path)).statusCode).toBe(403);
+    expect((await rival.get(path)).statusCode).toBe(404);
+    expect((await desk.get(path.replace(day(2), day(500)))).statusCode).toBe(400);
+
+    const audit = (await admin.get('/audit?actionPrefix=guest_register.exported')).json();
+    expect(audit.entries.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
 describe('reports sent by email', () => {
   const body = {
     name: 'Morning figures',
