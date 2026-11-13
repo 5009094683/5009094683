@@ -97,7 +97,18 @@ export async function reservationRoutes(app: FastifyInstance): Promise<void> {
         summary: 'Create a reservation of one or more rooms',
         body: z.object({
           propertyId: uuid,
-          status: z.enum(['tentative', 'confirmed']).optional(),
+          status: z
+            .enum(['tentative', 'confirmed'])
+            .optional()
+            .describe(
+              'tentative holds the rooms without confirming: the reservation is cancelled when the hold ends',
+            ),
+          holdUntil: z.iso
+            .datetime({ offset: true })
+            .optional()
+            .describe(
+              'With status tentative: when the hold ends, on the day of arrival at the latest. Left out, it ends after the hold time of the booking website.',
+            ),
           source: z.enum(RESERVATION_SOURCES).default('direct'),
           guest: guestInput,
           rooms: z.array(roomInput).min(1).max(60),
@@ -115,10 +126,16 @@ export async function reservationRoutes(app: FastifyInstance): Promise<void> {
       },
     },
     async (req, reply) => {
-      const { force, ...input } = req.body;
+      const { force, holdUntil, ...input } = req.body;
       const actor = await authorizeProperty(app.db, req, input.propertyId, 'reservations.write');
       const options = overrideOption(actor, input.propertyId, force);
-      return reply.status(201).send(await createReservation(app.db, actor, input, options));
+      const created = await createReservation(
+        app.db,
+        actor,
+        { ...input, holdUntil: holdUntil ? new Date(holdUntil) : null },
+        options,
+      );
+      return reply.status(201).send(created);
     },
   );
 
@@ -147,6 +164,10 @@ export async function reservationRoutes(app: FastifyInstance): Promise<void> {
           paymentCollect: z.enum(PAYMENT_COLLECT).optional(),
           needsReview: z.boolean().optional(),
           companyId: uuid.nullable().optional(),
+          holdUntil: z.iso
+            .datetime({ offset: true })
+            .optional()
+            .describe('Moves the end of the hold of a reservation that is still tentative'),
           expectedVersion: z.number().int().optional(),
         }),
       },
@@ -158,8 +179,14 @@ export async function reservationRoutes(app: FastifyInstance): Promise<void> {
         req.params.id,
         'reservations.write',
       );
-      const { expectedVersion, ...patch } = req.body;
-      return updateReservation(app.db, actor, req.params.id, patch, { expectedVersion });
+      const { expectedVersion, holdUntil, ...patch } = req.body;
+      return updateReservation(
+        app.db,
+        actor,
+        req.params.id,
+        { ...patch, ...(holdUntil ? { holdUntil: new Date(holdUntil) } : {}) },
+        { expectedVersion },
+      );
     },
   );
 

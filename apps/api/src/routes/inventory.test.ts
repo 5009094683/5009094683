@@ -297,6 +297,47 @@ describe('reservations over the API', () => {
     expect(cancelled.json().status).toBe('cancelled');
   });
 
+  it('holds rooms until a time the caller chooses, moves it, and confirms', async () => {
+    const hold = {
+      propertyId: hotel.property.id,
+      status: 'tentative',
+      source: 'phone',
+      guest: { firstName: 'Option', lastName: 'Holder' },
+      rooms: [stdRoom('2027-06-10', '2027-06-12')],
+    };
+    const until = new Date(Date.now() + 30 * 3_600_000).toISOString();
+    const held = await admin.post('/reservations', { ...hold, holdUntil: until });
+    expect(held.statusCode).toBe(201);
+    expect(held.json()).toMatchObject({ status: 'tentative', holdExpiresAt: until });
+
+    const later = new Date(Date.now() + 60 * 3_600_000).toISOString();
+    const moved = await admin.patch(`/reservations/${held.json().id}`, { holdUntil: later });
+    expect(moved.statusCode).toBe(200);
+    expect(moved.json().holdExpiresAt).toBe(later);
+
+    // Never past the day of arrival, never in the past, and never without a time zone.
+    const tooLate = await admin.patch(`/reservations/${held.json().id}`, {
+      holdUntil: '2027-06-11T09:00:00+05:30',
+    });
+    expect(tooLate.statusCode).toBe(400);
+    expect(tooLate.json().error.message).toContain('day of arrival at the latest');
+    for (const holdUntil of ['2020-01-01T00:00:00Z', '2027-06-09T12:00', 'tomorrow']) {
+      expect((await admin.post('/reservations', { ...hold, holdUntil })).statusCode).toBe(400);
+    }
+    // A confirmed reservation has no hold to give an end to.
+    const confirmedWithHold = await admin.post('/reservations', {
+      ...hold,
+      status: 'confirmed',
+      holdUntil: until,
+    });
+    expect(confirmedWithHold.statusCode).toBe(400);
+
+    const confirmed = await admin.post(`/reservations/${held.json().id}/confirm`, {});
+    expect(confirmed.json()).toMatchObject({ status: 'confirmed', holdExpiresAt: null });
+    const afterwards = await admin.patch(`/reservations/${held.json().id}`, { holdUntil: later });
+    expect(afterwards.statusCode).toBe(409);
+  });
+
   it('answers 409 with the sold-out nights when there is no room', async () => {
     for (let i = 0; i < 2; i++) {
       const ok = await admin.post('/reservations', {

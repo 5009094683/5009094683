@@ -297,4 +297,54 @@ test.describe('working on the calendar', () => {
     await expect(panel.getByText('Cancelled', { exact: true }).first()).toBeVisible();
     expect((await api.get<ReservationJson>(`/reservations/${stay.id}`)).status).toBe('cancelled');
   });
+
+  test('holds a villa without confirming, moves the end of the hold, then confirms it', async ({
+    page,
+  }) => {
+    const start = windowStart(7);
+    const unit = cottage.roomTypes[0]!.units[0]!;
+    const typeId = cottage.roomTypes[0]!.id;
+    await showCalendarFrom(page, start);
+
+    const row = page.locator(`[data-row="unit:${unit.id}"]`);
+    const y = await rowY(row);
+    await drag(
+      page,
+      { x: await dateX(page, addDays(start, 2)), y },
+      { x: await dateX(page, addDays(start, 3)), y },
+    );
+    await page.getByRole('menuitem', { name: 'New reservation' }).click();
+    const dialog = page.getByRole('dialog', { name: 'New reservation' });
+    await dialog.getByLabel('First name').fill('Option');
+    await dialog.getByLabel('Last name').fill('Holder');
+    await dialog.getByLabel('Hold the rooms without confirming yet').check();
+    // It starts out a day from now, for the person to change.
+    await expect(dialog.getByLabel('Hold until')).not.toHaveValue('');
+    await dialog.getByLabel('Hold until').fill(`${addDays(today, 3)}T18:00`);
+    await dialog.getByRole('button', { name: 'Hold the rooms' }).click();
+    await expect(dialog).toBeHidden();
+
+    // Held, the dates are as taken as if it were confirmed.
+    const stay = row.getByRole('button', { name: /Option Holder/ });
+    await expect(stay).toBeVisible();
+    await expect(
+      page.locator(`[data-availability="${typeId}:${addDays(start, 2)}"]`),
+    ).toHaveAttribute('data-available', '0');
+
+    await stay.click();
+    const panel = page.getByRole('dialog', { name: /^Reservation / });
+    await expect(panel.getByText('Held, not yet confirmed')).toBeVisible();
+    await expect(panel.getByText(/The hold is released at .*18:00/)).toBeVisible();
+
+    await panel.getByRole('button', { name: 'Change', exact: true }).click();
+    const change = page.getByRole('dialog', { name: 'Hold until' });
+    await change.getByLabel('Hold until').fill(`${addDays(today, 5)}T09:30`);
+    await change.getByRole('button', { name: 'Save' }).click();
+    await expect(change).toBeHidden();
+    await expect(panel.getByText(/The hold is released at .*09:30/)).toBeVisible();
+
+    await panel.getByRole('button', { name: 'Confirm', exact: true }).click();
+    await expect(panel.getByText('Confirmed', { exact: true }).first()).toBeVisible();
+    await expect(panel.getByText('Held, not yet confirmed')).toBeHidden();
+  });
 });

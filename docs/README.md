@@ -27,6 +27,8 @@ are about to do.
   villas sold as a whole or by the bedroom, where selling one side closes the other.
 - A live calendar across all properties: drag to book, to move a stay, to block dates.
 - Rates and restrictions (minimum stay, closed to arrival or departure, stop sell) by date.
+- A room can be held for a guest without confirming, until a time the front
+  desk chooses; not confirmed by then, it goes back on sale by itself.
 - Group bookings: rooms held for a wedding, a tour or a conference stay off sale
   everywhere until the group's guests book them or the cut-off day passes, and a
   rooming list books a room for each guest in one go.

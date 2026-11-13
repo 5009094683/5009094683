@@ -15,6 +15,7 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { plural } from '@/lib/format';
 import { useAction } from '@/lib/hooks';
+import { fromLocalInput, toLocalInput } from '@/lib/local-time';
 import type { Property } from '@/lib/types';
 import { RatePlanPicker } from './rate-plan-picker';
 import type { Promo, PromoKind } from './types';
@@ -71,22 +72,6 @@ const MAX_USES = 1_000_000;
 const USE_COUNTED =
   'A confirmed booking counts as a use. If it is cancelled, the use is given back.';
 
-const pad = (value: number) => String(value).padStart(2, '0');
-
-/** A stored moment as a `datetime-local` input wants it: `2026-12-01T09:30`, in the viewer's zone. */
-function localInput(iso: string | null): string {
-  if (!iso) return '';
-  const date = new Date(iso);
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-/** What a `datetime-local` input holds as the moment it means in the viewer's zone. */
-function moment(text: string): string | null {
-  if (!text) return null;
-  const date = new Date(text);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
-}
-
 function wholeNumber(text: string): number | null {
   return /^\d{1,9}$/.test(text.trim()) ? Number(text.trim()) : null;
 }
@@ -99,8 +84,8 @@ function initialValues(promo: Promo | undefined, propertyId: string, currency: s
     percent: promo?.kind === 'percent' ? percentText(promo.value) : '',
     amount: promo?.kind === 'amount' ? amountText(promo.value, promo.currency ?? currency) : '',
     currency: promo?.currency ?? currency,
-    bookFrom: localInput(promo?.bookFrom ?? null),
-    bookTo: localInput(promo?.bookTo ?? null),
+    bookFrom: toLocalInput(promo?.bookFrom ?? null),
+    bookTo: toLocalInput(promo?.bookTo ?? null),
     stayFrom: promo?.stayFrom ?? '',
     stayTo: promo?.stayTo ?? '',
     minNights: String(promo?.minNights ?? 1),
@@ -132,8 +117,8 @@ function read(values: Values, currency: string): { body: Body; errors: Errors } 
       errors.value = 'Enter an amount above zero.';
     } else value = minor;
   }
-  const bookFrom = moment(values.bookFrom);
-  const bookTo = moment(values.bookTo);
+  const bookFrom = fromLocalInput(values.bookFrom);
+  const bookTo = fromLocalInput(values.bookTo);
   if (bookFrom && bookTo && bookFrom >= bookTo) {
     errors.bookTo = 'This has to be later than the start.';
   }

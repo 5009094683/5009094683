@@ -51,6 +51,7 @@ import { announceRoomChange } from '@/lib/feedback';
 import { usePropertyDetail } from '@/lib/hooks';
 import { useLive } from '@/lib/live';
 import type { PropertyDetail, Reservation, ReservationRoom, RoomChange } from '@/lib/types';
+import { HoldUntilDialog } from './hold-until-dialog';
 
 function Section({
   title,
@@ -412,6 +413,7 @@ export function ReservationPanel({
   const [cancel, setCancel] = useState<{ roomId?: string } | null>(null);
   const [editGuest, setEditGuest] = useState(false);
   const [notes, setNotes] = useState<string | null>(null);
+  const [changeHold, setChangeHold] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
 
   useLive(/^reservation\./, (events) => {
@@ -545,25 +547,36 @@ export function ReservationPanel({
                   : 'Confirm it to keep the rooms.'}
               </span>
               {canWrite && (
-                <Button
-                  size="sm"
-                  variant="primary"
-                  loading={busy === 'confirm'}
-                  onClick={() =>
-                    void act(
-                      'confirm',
-                      `/reservations/${reservation.id}/confirm`,
-                      {},
-                      'Reservation confirmed',
-                    )
-                  }
-                >
-                  Confirm
-                </Button>
+                <span className="flex shrink-0 items-center gap-2">
+                  <Button size="sm" onClick={() => setChangeHold(true)}>
+                    Change
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    loading={busy === 'confirm'}
+                    onClick={() =>
+                      void act(
+                        'confirm',
+                        `/reservations/${reservation.id}/confirm`,
+                        {},
+                        'Reservation confirmed',
+                      )
+                    }
+                  >
+                    Confirm
+                  </Button>
+                </span>
               )}
             </div>
           </Notice>
         )}
+        <HoldUntilDialog
+          reservation={reservation}
+          open={changeHold}
+          onClose={() => setChangeHold(false)}
+          onDone={apply}
+        />
         {reservation.needsReview && reservation.reviewReason && (
           <Notice tone="warning" className="mt-3">
             {reservation.reviewReason}

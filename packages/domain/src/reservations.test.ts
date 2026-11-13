@@ -204,6 +204,64 @@ describe('reservation lifecycle', () => {
     ]);
   });
 
+  it('keeps a hold a person asked for until the time they chose, on the day of arrival at the latest', async () => {
+    const stay = dlx('2027-04-10', '2027-04-12');
+    const base = {
+      propertyId: hotel.property.id,
+      status: 'tentative' as const,
+      source: 'phone' as const,
+      guest: { firstName: 'Option', lastName: 'Holder' },
+      rooms: [stay],
+    };
+    const until = new Date(Date.now() + 26 * 3_600_000);
+    const hold = await createReservation(t.db, org.admin, { ...base, holdUntil: until });
+    expect(hold).toMatchObject({ status: 'tentative', holdExpiresAt: until });
+    // The quarter of an hour the booking website gives does not apply to it.
+    expect(await expireHolds(t.db, org.admin, new Date(Date.now() + 16 * 60_000))).toBe(0);
+
+    // It can be moved for as long as the reservation is held.
+    const later = new Date(Date.now() + 50 * 3_600_000);
+    const moved = await updateReservation(t.db, org.admin, hold.id, { holdUntil: later });
+    expect(moved.holdExpiresAt).toEqual(later);
+    expect(await expireHolds(t.db, org.admin, new Date(until.getTime() + 60_000))).toBe(0);
+    expect(await expireHolds(t.db, org.admin, new Date(later.getTime() + 60_000))).toBe(1);
+    expect((await loadReservation(t.db, org.orgId, hold.id)).status).toBe('cancelled');
+    await expect(updateReservation(t.db, org.admin, hold.id, { holdUntil: later })).rejects.toThrow(
+      'Only a reservation that is still held has a hold to change',
+    );
+
+    // Up to the end of the day of arrival where the property is, and no further.
+    const lastMoment = await createReservation(t.db, org.admin, {
+      ...base,
+      holdUntil: new Date('2027-04-10T23:30:00+05:30'),
+    });
+    expect(lastMoment.holdExpiresAt).toEqual(new Date('2027-04-10T18:00:00Z'));
+    await expect(
+      createReservation(t.db, org.admin, {
+        ...base,
+        holdUntil: new Date('2027-04-11T00:30:00+05:30'),
+      }),
+    ).rejects.toThrow('A hold ends on the day of arrival at the latest: 2027-04-10');
+    await expect(
+      updateReservation(t.db, org.admin, lastMoment.id, {
+        holdUntil: new Date('2027-04-11T00:30:00+05:30'),
+      }),
+    ).rejects.toThrow('A hold ends on the day of arrival at the latest');
+    await expect(
+      createReservation(t.db, org.admin, { ...base, holdUntil: new Date(Date.now() - 1000) }),
+    ).rejects.toThrow('The hold has to end at a time that is still to come');
+    await expect(
+      createReservation(t.db, org.admin, { ...base, status: 'confirmed', holdUntil: until }),
+    ).rejects.toThrow('Only a held reservation has a time at which the hold ends');
+
+    // Confirmed, it is an ordinary reservation with nothing left to lapse.
+    const confirmed = await confirmReservation(t.db, org.admin, lastMoment.id);
+    expect(confirmed).toMatchObject({ status: 'confirmed', holdExpiresAt: null });
+    await expect(
+      updateReservation(t.db, org.admin, lastMoment.id, { holdUntil: until }),
+    ).rejects.toThrow('Only a reservation that is still held has a hold to change');
+  });
+
   it('releases the room when a guest does not show up', async () => {
     const r = await createReservation(t.db, org.admin, {
       propertyId: hotel.property.id,

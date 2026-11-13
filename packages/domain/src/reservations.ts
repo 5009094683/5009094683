@@ -21,7 +21,15 @@ import { writeAudit } from './audit';
 import type { Actor } from './context';
 import { randomCode } from './crypto';
 import { requireOpenGroup } from './group-access';
-import { addDays, assertRange, diffDays, eachDate, type DateRange, type DateString } from './dates';
+import {
+  addDays,
+  assertRange,
+  diffDays,
+  eachDate,
+  todayIn,
+  type DateRange,
+  type DateString,
+} from './dates';
 import { DomainError, invalidState, notFound, validationError } from './errors';
 import {
   findOrCreateGuest,
@@ -91,6 +99,11 @@ export interface CreateReservationInput {
   specialRequests?: string | null;
   notes?: string | null;
   holdExpiresAt?: Date | null;
+  /**
+   * A hold a person asked for: when it lapses unless the reservation is confirmed first.
+   * Unlike `holdExpiresAt`, which the booking website sets itself, it is checked.
+   */
+  holdUntil?: Date | null;
   groupId?: string | null;
   companyId?: string | null;
   needsReview?: boolean;
@@ -623,6 +636,24 @@ async function flagOverbooking(
   });
 }
 
+/** The end of a hold a person chose: still to come, and on the day of arrival at the latest. */
+function chosenHoldEnd(
+  timezone: string,
+  arrival: DateString,
+  until: Date,
+  now: Date = new Date(),
+): Date {
+  if (Number.isNaN(until.getTime()) || until.getTime() <= now.getTime()) {
+    throw validationError('The hold has to end at a time that is still to come');
+  }
+  if (todayIn(timezone, until) > arrival) {
+    throw validationError(
+      `A hold ends on the day of arrival at the latest: ${arrival} for this reservation`,
+    );
+  }
+  return until;
+}
+
 // ---------------------------------------------------------------------------
 // Creating
 
@@ -637,6 +668,9 @@ export async function createReservation(
     throw validationError(`A reservation may have at most ${MAX_ROOMS} rooms`);
   input.rooms.forEach(validateStay);
   const status = input.status ?? 'confirmed';
+  if (input.holdUntil && status !== 'tentative') {
+    throw validationError('Only a held reservation has a time at which the hold ends');
+  }
 
   return transact(db, async (tx) => {
     const property = await requireProperty(tx, actor.orgId, input.propertyId);
@@ -660,10 +694,13 @@ export async function createReservation(
       ? `${input.guest.firstName.trim()} ${input.guest.lastName?.trim() ?? ''}`.trim()
       : fullName(guest);
     const holdMinutes = property.settings.bookingHoldMinutes ?? 15;
+    const arrival = input.rooms.map((r) => r.checkIn).sort()[0]!;
     const holdExpiresAt =
-      status === 'tentative'
-        ? (input.holdExpiresAt ?? new Date(Date.now() + holdMinutes * 60_000))
-        : null;
+      status !== 'tentative'
+        ? null
+        : input.holdUntil
+          ? chosenHoldEnd(property.timezone, arrival, input.holdUntil)
+          : (input.holdExpiresAt ?? new Date(Date.now() + holdMinutes * 60_000));
 
     const scopes: InventoryScope[] = priced.map((p) => ({
       roomTypeId: p.roomType.id,
@@ -833,6 +870,8 @@ export interface ReservationPatch {
   companyId?: string | null;
   channelReservationCode?: string | null;
   externalRevisionAt?: Date | null;
+  /** Moves the end of a hold. Only a reservation that is still held has one. */
+  holdUntil?: Date;
 }
 
 /** Changes details that do not affect inventory. */
@@ -845,9 +884,16 @@ export async function updateReservation(
 ): Promise<ReservationDetail> {
   return transact(db, async (tx) => {
     const before = await lockReservation(tx, actor.orgId, reservationId, options.expectedVersion);
-    const { guest: guestInput, ...fields } = patch;
+    const { guest: guestInput, holdUntil, ...fields } = patch;
     const set: Partial<typeof reservations.$inferInsert> = { ...fields };
     if (patch.needsReview === false) set.reviewReason = null;
+    if (holdUntil) {
+      if (before.status !== 'tentative') {
+        throw invalidState('Only a reservation that is still held has a hold to change');
+      }
+      const property = await requireProperty(tx, actor.orgId, before.propertyId);
+      set.holdExpiresAt = chosenHoldEnd(property.timezone, before.checkIn, holdUntil);
+    }
     if (patch.companyId && patch.companyId !== before.companyId) {
       await requireCompany(tx, actor.orgId, patch.companyId);
     }

@@ -11,8 +11,9 @@ import { Notice, Spinner } from '@/components/ui/misc';
 import { useToast } from '@/components/ui/toast';
 import { ApiError, api, errorMessage, query } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { formatDay, formatMoney, fromMinor, plural, toMinor } from '@/lib/format';
+import { formatDateTime, formatDay, formatMoney, fromMinor, plural, toMinor } from '@/lib/format';
 import { useDebounced, useProperties, usePropertyDetail } from '@/lib/hooks';
+import { fromLocalInput, toLocalInput } from '@/lib/local-time';
 import type { Availability, Guest, PropertyDetail, Quote, Reservation } from '@/lib/types';
 
 export interface ReservationPrefill {
@@ -51,6 +52,15 @@ const SOURCES = [
   { value: 'travel_agent', label: 'Travel agent' },
   { value: 'owner', label: 'Owner' },
 ] as const;
+
+const DAY_MS = 24 * 3_600_000;
+
+/** Where a hold starts out: a day from now, or the end of the day of arrival if that comes first. */
+function defaultHoldEnd(arrival: string | undefined, now: Date = new Date()): string {
+  const inADay = toLocalInput(new Date(now.getTime() + DAY_MS));
+  const latest = arrival && isValidDate(arrival) ? `${arrival}T23:59` : inADay;
+  return inADay < latest ? inADay : latest;
+}
 
 function defaultPlanId(detail: PropertyDetail | undefined, roomTypeId: string): string {
   const plans =
@@ -429,6 +439,9 @@ export function ReservationDialog({
   const [notes, setNotes] = useState('');
   const [specialRequests, setSpecialRequests] = useState('');
   const [force, setForce] = useState(false);
+  /** Held rather than confirmed, until the moment in `holdUntil` (as its input holds it). */
+  const [hold, setHold] = useState(false);
+  const [holdUntil, setHoldUntil] = useState('');
   const [refused, setRefused] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -447,6 +460,8 @@ export function ReservationDialog({
     setNotes('');
     setSpecialRequests('');
     setForce(false);
+    setHold(false);
+    setHoldUntil('');
     setRefused(false);
     setError(null);
     setChecks({});
@@ -484,6 +499,10 @@ export function ReservationDialog({
   const canOverride = propertyId ? auth.can('reservations.override', propertyId) : false;
   const anySoldOut = rooms.some((r) => (checks[r.key]?.soldOut.length ?? 0) > 0);
   const grandTotal = rooms.reduce((sum, r) => sum + (checks[r.key]?.total ?? 0), 0);
+  const arrival = rooms
+    .map((r) => r.checkIn)
+    .filter(isValidDate)
+    .sort()[0];
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -524,12 +543,18 @@ export function ReservationDialog({
           specialRequests: specialRequests.trim() || null,
           ...(group ? { groupId: group.id } : {}),
           ...(force ? { force: true } : {}),
+          ...(hold ? { status: 'tentative', holdUntil: fromLocalInput(holdUntil) } : {}),
         },
       });
-      toast.success(
-        `Reservation ${reservation.code} created`,
-        `${reservation.guestName}, ${formatDay(reservation.checkIn)} to ${formatDay(reservation.checkOut)}`,
-      );
+      const stay = `${reservation.guestName}, ${formatDay(reservation.checkIn)} to ${formatDay(reservation.checkOut)}`;
+      if (reservation.status === 'tentative' && reservation.holdExpiresAt) {
+        toast.success(
+          `Reservation ${reservation.code} held until ${formatDateTime(reservation.holdExpiresAt)}`,
+          `${stay}. Confirm it before then to keep the ${rooms.length === 1 ? 'room' : 'rooms'}.`,
+        );
+      } else {
+        toast.success(`Reservation ${reservation.code} created`, stay);
+      }
       onCreated?.(reservation);
       onClose();
     } catch (err) {
@@ -572,7 +597,7 @@ export function ReservationDialog({
             loading={busy}
             disabled={rooms.length === 0 || (anySoldOut && !force)}
           >
-            Create reservation
+            {hold ? 'Hold the rooms' : 'Create reservation'}
           </Button>
         </>
       }
@@ -670,6 +695,36 @@ export function ReservationDialog({
             label="Book anyway. This overbooks the property and raises an alert."
           />
         )}
+
+        <div className="flex flex-col gap-3">
+          <Checkbox
+            checked={hold}
+            onChange={(e) => {
+              setHold(e.target.checked);
+              if (e.target.checked && !holdUntil) setHoldUntil(defaultHoldEnd(arrival));
+            }}
+            label="Hold the rooms without confirming yet"
+          />
+          {hold && (
+            <Field
+              label="Hold until"
+              className="sm:max-w-xs"
+              hint="Not confirmed by then, the reservation is cancelled by itself and the rooms go back on sale. The day of arrival at the latest."
+            >
+              {(props) => (
+                <Input
+                  {...props}
+                  type="datetime-local"
+                  value={holdUntil}
+                  min={toLocalInput(new Date())}
+                  max={arrival ? `${arrival}T23:59` : undefined}
+                  onChange={(e) => setHoldUntil(e.target.value)}
+                  required
+                />
+              )}
+            </Field>
+          )}
+        </div>
 
         <fieldset className="rounded-lg border border-line p-3">
           <legend className="px-1 text-[13px] font-medium text-ink-soft">Guest</legend>
