@@ -48,6 +48,7 @@ import {
   nightAuditStatus,
   notFound,
   postCharge,
+  propertyScope,
   recordPayment,
   refreshHousekeepingTasks,
   refundPayment,
@@ -928,6 +929,8 @@ export async function operationsRoutes(app: FastifyInstance): Promise<void> {
           search: req.query.search,
           kind: req.query.kind,
           includeInactive: req.query.includeInactive === 'true',
+          // Money owed is shown only for the properties whose folios the caller may read.
+          accounts: propertyScope(actor.grants, 'folio.read'),
         }),
       };
     },
@@ -962,7 +965,12 @@ export async function operationsRoutes(app: FastifyInstance): Promise<void> {
     },
     async (req) => {
       const actor = authorize(req, 'folio.read');
-      return companyStatement(app.db, actor.orgId, req.params.id);
+      return companyStatement(
+        app.db,
+        actor.orgId,
+        req.params.id,
+        propertyScope(actor.grants, 'folio.read'),
+      );
     },
   );
 }

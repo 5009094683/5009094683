@@ -1,4 +1,4 @@
-import { and, asc, eq, ilike, or, sql } from 'drizzle-orm';
+import { and, asc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
 import { companies, type CompanyKind, type DbOrTx } from '@pms/db';
 import { diff, writeAudit } from './audit';
 import type { Actor } from './context';
@@ -147,15 +147,33 @@ export async function updateCompany(
 }
 
 export interface CompanyView extends CompanyRow {
-  /** Owed on account across all properties. */
+  /** Owed on account at the properties whose accounts the viewer may see. */
   outstanding: number;
+}
+
+/** Properties whose accounts a viewer may see: all of them, or a list. */
+export type AccountScope = 'all' | string[];
+
+function accountInScope(scope: AccountScope): SQL {
+  if (scope === 'all') return sql`true`;
+  if (scope.length === 0) return sql`false`;
+  return sql`f.property_id IN (${sql.join(
+    scope.map((id) => sql`${id}::uuid`),
+    sql`, `,
+  )})`;
 }
 
 /** Companies and travel agents, with what each owes on account. */
 export async function listCompanies(
   db: DbOrTx,
   orgId: string,
-  filter: { search?: string; kind?: CompanyKind; includeInactive?: boolean } = {},
+  filter: {
+    search?: string;
+    kind?: CompanyKind;
+    includeInactive?: boolean;
+    /** Whose accounts count towards `outstanding`. Default: every property. */
+    accounts?: AccountScope;
+  } = {},
 ): Promise<CompanyView[]> {
   const q = filter.search?.trim();
   const like = q ? `%${q.replace(/[%_\\]/g, '\\$&')}%` : null;
@@ -165,7 +183,7 @@ export async function listCompanies(
       outstanding: sql<string>`coalesce((
         SELECT sum(l.amount + l.tax_amount) FROM folio_lines l JOIN folios f ON f.id = l.folio_id
         WHERE f.company_id = "companies"."id" AND f.kind = 'company' AND f.reservation_id IS NULL
-          AND l.voided_at IS NULL), 0)::text`,
+          AND l.voided_at IS NULL AND ${accountInScope(filter.accounts ?? 'all')}), 0)::text`,
     })
     .from(companies)
     .where(
@@ -185,8 +203,9 @@ export async function getCompany(
   db: DbOrTx,
   orgId: string,
   companyId: string,
+  accounts: AccountScope = 'all',
 ): Promise<CompanyView> {
-  const [row] = (await listCompanies(db, orgId, { includeInactive: true })).filter(
+  const [row] = (await listCompanies(db, orgId, { includeInactive: true, accounts })).filter(
     (c) => c.id === companyId,
   );
   if (!row) throw notFound('Company', companyId);
@@ -205,17 +224,21 @@ export interface AccountEntry {
   ageDays: number;
 }
 
-/** A company's account: what was billed to it and what it has paid, oldest first. */
+/**
+ * A company's account: what was billed to it and what it has paid, oldest
+ * first, at the properties in `scope`.
+ */
 export async function companyStatement(
   db: DbOrTx,
   orgId: string,
   companyId: string,
+  scope: AccountScope = 'all',
 ): Promise<{
   company: CompanyView;
   entries: AccountEntry[];
   accounts: { folioId: string; propertyName: string; balance: number }[];
 }> {
-  const company = await getCompany(db, orgId, companyId);
+  const company = await getCompany(db, orgId, companyId, scope);
   const { rows } = await db.execute<{
     folio_id: string;
     property_id: string;
@@ -232,7 +255,7 @@ export async function companyStatement(
     JOIN folios f ON f.id = l.folio_id
     JOIN properties p ON p.id = f.property_id
     WHERE f.company_id = ${companyId} AND f.kind = 'company' AND f.reservation_id IS NULL
-      AND l.voided_at IS NULL AND p.org_id = ${orgId}
+      AND l.voided_at IS NULL AND p.org_id = ${orgId} AND ${accountInScope(scope)}
     ORDER BY l.business_date, l.seq
   `);
   const entries = rows.map((r) => ({

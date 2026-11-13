@@ -294,7 +294,40 @@ describe('night audit, housekeeping and maintenance over the API', () => {
     );
     const found = (await frontDesk.get('/companies?search=zenith')).json();
     expect(found.companies).toMatchObject([{ name: 'Zenith Pharma', outstanding: 0 }]);
-    const statement = await accountant.get(`/companies/${created.json().id}/statement`);
+    const companyId = created.json().id;
+    const statement = await accountant.get(`/companies/${companyId}/statement`);
     expect(statement.json()).toMatchObject({ entries: [], company: { name: 'Zenith Pharma' } });
+
+    // A stay billed to the company shows on its account.
+    const r = await book(20, 22);
+    const extra = { kind: 'extra', description: 'Airport transfer', unitAmount: 250_000 };
+    expect((await frontDesk.post(`/reservations/${r.id}/charges`, extra)).statusCode).toBe(201);
+    const [folio] = (await accountant.get(`/reservations/${r.id}/folios`)).json().folios;
+    const billed = await accountant.post(`/folios/${folio.id}/bill-company`, { companyId });
+    expect(billed.statusCode).toBe(200);
+    const owed = (await accountant.get('/companies?search=zenith')).json().companies[0];
+    expect(owed.outstanding).toBeGreaterThan(0);
+    expect(
+      (await accountant.get(`/companies/${companyId}/statement`)).json().entries,
+    ).not.toHaveLength(0);
+
+    // Someone who keeps the books of another property sees the company, not this property's money.
+    const elsewhere = await createTestHotel(ctx.t.db, ctx.org, { standardRooms: 1 });
+    const other = await createTestUser(ctx.t.db, ctx.org.orgId, {
+      role: 'accountant',
+      propertyId: elsewhere.property.id,
+    });
+    const otherAccountant = await ctx.login(other.email);
+    expect((await otherAccountant.get('/companies?search=zenith')).json().companies).toMatchObject([
+      { name: 'Zenith Pharma', outstanding: 0 },
+    ]);
+    expect((await otherAccountant.get(`/companies/${companyId}/statement`)).json()).toMatchObject({
+      entries: [],
+      accounts: [],
+      company: { outstanding: 0 },
+    });
+    expect((await admin.get('/companies?search=zenith')).json().companies[0].outstanding).toBe(
+      owed.outstanding,
+    );
   });
 });
