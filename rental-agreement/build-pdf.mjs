@@ -1,9 +1,11 @@
 #!/usr/bin/env node
-// Rebuilds pdf/rental-agreement-<language>.pdf for every content.<language>.js file,
-// using the Chrome, Chromium or Edge already installed on this computer.
+// Rebuilds the files in pdf/ — one per agreement and language — using the Chrome, Chromium
+// or Edge already installed on this computer.
 //
 //   node build-pdf.mjs
 //
+// An agreement is a <name>.html file with <name>.<language>.js wording files beside it;
+// its PDFs are named pdf/<name>-<language>.pdf.
 // Set the CHROME_PATH environment variable if the browser is not found automatically.
 
 import { spawnSync } from "node:child_process";
@@ -64,27 +66,35 @@ const browser = findBrowser();
 if (!browser) {
   console.error(
     "Chrome, Chromium or Edge was not found. Set CHROME_PATH to the browser's location,\n" +
-      "or open agreement.html in a browser and use Print > Save as PDF."
+      "or open an agreement in a browser and use Print > Save as PDF."
   );
   process.exit(1);
 }
 
-const languages = readdirSync(here)
-  .map((file) => /^content\.([\w-]+)\.js$/.exec(file))
-  .filter(Boolean)
-  .map((match) => match[1]);
+const files = readdirSync(here);
+const agreements = files
+  .filter((file) => file.endsWith(".html"))
+  .map((file) => file.slice(0, -".html".length))
+  .map((name) => ({
+    name,
+    languages: files
+      .filter((file) => file.startsWith(`${name}.`) && file.endsWith(".js"))
+      .map((file) => file.slice(name.length + 1, -".js".length))
+      .filter((language) => /^[\w-]+$/.test(language)),
+  }))
+  .filter((agreement) => agreement.languages.length > 0);
 
 // Returns a description of what went wrong, or null when the PDF was built.
-function buildPdf(language) {
-  const url = `${pathToFileURL(join(here, "agreement.html")).href}#${language}`;
-  const output = join(outputDir, `rental-agreement-${language}.pdf`);
+function buildPdf(name, language) {
+  const url = `${pathToFileURL(join(here, `${name}.html`)).href}#${language}`;
+  const output = join(outputDir, `${name}-${language}.pdf`);
 
   // First pass: read the rendered page to check that the language loaded and everything fits.
   // If the browser gives no output here, the checks are skipped and the PDF is still built.
   const dump = runBrowser(browser, ["--dump-dom", url]);
   const htmlTag = /<html[^>]*>/.exec(dump.stdout || "")?.[0];
   if (htmlTag && !htmlTag.includes(`lang="${language}"`)) {
-    return `content.${language}.js is not loaded. Add <script src="content.${language}.js"></script> to agreement.html.`;
+    return `${name}.${language}.js is not loaded. Add <script src="${name}.${language}.js"></script> to ${name}.html.`;
   }
 
   rmSync(output, { force: true });
@@ -103,13 +113,15 @@ function buildPdf(language) {
 mkdirSync(outputDir, { recursive: true });
 let failed = false;
 
-for (const language of languages) {
-  const problem = buildPdf(language);
-  if (problem) {
-    console.error(`ERROR  ${language}: ${problem}`);
-    failed = true;
-  } else {
-    console.log(`built  pdf/rental-agreement-${language}.pdf`);
+for (const { name, languages } of agreements) {
+  for (const language of languages) {
+    const problem = buildPdf(name, language);
+    if (problem) {
+      console.error(`ERROR  ${name} (${language}): ${problem}`);
+      failed = true;
+    } else {
+      console.log(`built  pdf/${name}-${language}.pdf`);
+    }
   }
 }
 

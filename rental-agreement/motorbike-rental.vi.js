@@ -1,31 +1,17 @@
 /*
-  NỘI DUNG TIẾNG VIỆT
+  HỢP ĐỒNG CHO THUÊ XE MÁY — nội dung tiếng Việt.
+  Nội dung dùng chung với các hợp đồng khác nằm trong common.vi.js.
 
-  Trong câu chữ có thể dùng:
-    **chữ đậm**          in đậm
-    {blank}              dòng trống để điền tay
-    {heart}              hình trái tim nhỏ
-    {helmetFee} {keyFee} {agreedBikeValue}   số tiền lấy từ config.js
+  Trong câu chữ có thể dùng **chữ đậm**, {blank} (dòng trống để điền tay), {heart},
+  và các con số lấy từ config.js như {helmetFee} {keyFee} {agreedBikeValue}.
 
   Thêm / bớt điều khoản: thêm / xoá một dòng trong danh sách "clauses".
 */
 window.AGREEMENT_CONTENT = window.AGREEMENT_CONTENT || {};
 
 window.AGREEMENT_CONTENT.vi = {
-  languageName: "Tiếng Việt",
-  fileTitle: "Hợp đồng cho thuê xe máy",
-  thousandsSeparator: ".",
-
   tagline: "Cho thuê xe máy",
-  nationalName: "Cộng hòa Xã hội Chủ nghĩa Việt Nam",
-  nationalMotto: "Độc lập – Tự do – Hạnh phúc",
   title: "Hợp đồng cho thuê xe máy",
-  agreementNumber: "Số:",
-  addressLabel: "Địa chỉ",
-  pageLabel: "Trang",
-
-  // Lời nhắn in cạnh tên công ty ở mục 1. Để "" nếu không muốn in.
-  lessorNote: "Với {heart} từ **Thu Hien**",
 
   sections: {
     lessor: "Bên cho thuê (Bên A)",
@@ -39,12 +25,9 @@ window.AGREEMENT_CONTENT.vi = {
   },
 
   fields: {
-    fullName: "Họ và tên",
-    birthDate: "Ngày sinh",
     phone: "Điện thoại",
     address: "Địa chỉ",
     emergencyPhone: "Điện thoại liên hệ khẩn cấp",
-    idNumber: "Số CCCD / Hộ chiếu",
     idIssueDate: "Cấp ngày",
     idExpiryDate: "Có giá trị đến",
     idIssuePlace: "Nơi cấp",
@@ -52,15 +35,12 @@ window.AGREEMENT_CONTENT.vi = {
     licenceNumber: "Số GPLX",
 
     model: "Loại xe",
-    otherModel: "Khác:",
-    plate: "Biển số",
     colour: "Màu sơn",
     condition: "Tình trạng xe",
     conditionText: "Xe hoạt động bình thường.",
     conditionNotes: "Ghi chú (vết xước, hư hỏng có sẵn):",
     accessories: "Phụ kiện kèm theo",
     accessoryItems: ["mũ bảo hiểm", "áo mưa", "giấy tờ xe (bản sao)"],
-    otherAccessory: "Khác:",
     pickup: "Nhận xe (giờ · ngày)",
     return: "Trả xe (giờ · ngày)",
     totalDays: "Tổng thời gian thuê",
@@ -69,10 +49,6 @@ window.AGREEMENT_CONTENT.vi = {
     rate: "Giá thuê",
     perDay: "VNĐ / ngày",
     totalFee: "Tổng tiền thuê",
-    currency: "VNĐ",
-    paidBy: "Thanh toán bằng",
-    cash: "Tiền mặt",
-    transfer: "Chuyển khoản",
     deposit: "Tài sản thế chấp / Đặt cọc (Bên A giữ)",
   },
 
@@ -82,15 +58,10 @@ window.AGREEMENT_CONTENT.vi = {
     "Bên A xác nhận đã nhận lại xe và phụ kiện. Bên B đã nhận lại tài sản thế chấp/đặt cọc và hoàn tất các chi phí.",
 
   signature: {
-    partyA: "Bên A",
-    partyB: "Bên B",
     roleA: "Bên cho thuê",
     roleB: "Bên thuê",
-    hint: "Ký, ghi rõ họ tên",
   },
 
-  termsTitle: "Các điều khoản pháp lý",
-  articleLabel: "Điều",
   articles: [
     {
       title: "Nghĩa vụ và trách nhiệm Bên thuê (Bên B)",
@@ -131,10 +102,4 @@ window.AGREEMENT_CONTENT.vi = {
       ],
     },
   ],
-
-  toolbar: {
-    print: "In / Lưu PDF",
-    hint: "Khổ A4 · in 2 mặt",
-    overflow: "Nội dung bị tràn khỏi trang {pages} — hãy rút gọn câu chữ.",
-  },
 };

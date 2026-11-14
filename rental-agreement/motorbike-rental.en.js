@@ -1,31 +1,17 @@
 /*
-  ENGLISH WORDING
+  MOTORBIKE RENTAL AGREEMENT — English wording.
+  Wording shared with the other agreements is in common.en.js.
 
-  Inside any text you can use:
-    **bold text**        printed in bold
-    {blank}              an empty line to fill in by hand
-    {heart}              a small heart symbol
-    {helmetFee} {keyFee} {agreedBikeValue}   amounts taken from config.js
+  Inside any text you can use **bold text**, {blank} (an empty line to fill in by hand),
+  {heart}, and numbers from config.js such as {helmetFee} {keyFee} {agreedBikeValue}.
 
   To add or remove a clause, add or delete a line in a "clauses" list.
 */
 window.AGREEMENT_CONTENT = window.AGREEMENT_CONTENT || {};
 
 window.AGREEMENT_CONTENT.en = {
-  languageName: "English",
-  fileTitle: "Motorbike Rental Agreement",
-  thousandsSeparator: ",",
-
   tagline: "Motorbike Rental",
-  nationalName: "Socialist Republic of Vietnam",
-  nationalMotto: "Independence – Freedom – Happiness",
   title: "Motorbike Rental Agreement",
-  agreementNumber: "No.",
-  addressLabel: "Address",
-  pageLabel: "Page",
-
-  // Friendly note printed beside the company name in section 1. Use "" to print nothing.
-  lessorNote: "With {heart} from **Thu Hien**",
 
   sections: {
     lessor: "Rental company (Party A)",
@@ -39,12 +25,9 @@ window.AGREEMENT_CONTENT.en = {
   },
 
   fields: {
-    fullName: "Full name",
-    birthDate: "Date of birth",
     phone: "Phone",
     address: "Address",
     emergencyPhone: "Emergency contact number",
-    idNumber: "ID card / Passport No.",
     idIssueDate: "Date of issue",
     idExpiryDate: "Date of expiry",
     idIssuePlace: "Place of issue",
@@ -52,15 +35,12 @@ window.AGREEMENT_CONTENT.en = {
     licenceNumber: "Licence No.",
 
     model: "Motorbike model",
-    otherModel: "Other:",
-    plate: "Licence plate",
     colour: "Colour",
     condition: "Condition",
     conditionText: "Motorbike in normal working order.",
     conditionNotes: "Notes (existing scratches, damage):",
     accessories: "Accessories included",
     accessoryItems: ["helmet(s)", "raincoat(s)", "vehicle papers (copy)"],
-    otherAccessory: "Other:",
     pickup: "Pick-up (time · date)",
     return: "Return (time · date)",
     totalDays: "Total rental period",
@@ -69,10 +49,6 @@ window.AGREEMENT_CONTENT.en = {
     rate: "Rental rate",
     perDay: "VND / day",
     totalFee: "Total rental fee",
-    currency: "VND",
-    paidBy: "Paid by",
-    cash: "Cash",
-    transfer: "Bank transfer",
     deposit: "Collateral / deposit (held by Party A)",
   },
 
@@ -82,15 +58,10 @@ window.AGREEMENT_CONTENT.en = {
     "Party A confirms it has received back the motorbike and accessories. Party B has received back the collateral/deposit and has paid all charges.",
 
   signature: {
-    partyA: "Party A",
-    partyB: "Party B",
     roleA: "Rental company",
     roleB: "Renter",
-    hint: "Signature & full name",
   },
 
-  termsTitle: "Terms & Conditions",
-  articleLabel: "Article",
   articles: [
     {
       title: "Obligations and responsibilities of the Renter (Party B)",
@@ -131,10 +102,4 @@ window.AGREEMENT_CONTENT.en = {
       ],
     },
   ],
-
-  toolbar: {
-    print: "Print / Save PDF",
-    hint: "A4 · print double-sided",
-    overflow: "Content does not fit on page {pages} — shorten the text.",
-  },
 };

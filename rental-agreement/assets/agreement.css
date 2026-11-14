@@ -81,6 +81,13 @@ body {
   font-size: 13px;
 }
 
+.toolbar-home {
+  margin-right: 4px;
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
 .toolbar-languages {
   display: flex;
   gap: 4px;
@@ -121,8 +128,11 @@ body {
 }
 
 .page {
-  /* 1 = normal. agreement.js lowers it per page when the content would not fit otherwise. */
+  /* 1 = normal. agreement.js lowers --fit per page when the content would not fit otherwise.
+     Boxes and text follow --fit; empty space follows --gap-fit, which shrinks three times as
+     fast, so a crowded page gives up white space before it gives up text size. */
   --fit: 1;
+  --gap-fit: calc(var(--fit) * 3 - 2);
 
   display: flex;
   flex-direction: column;
@@ -276,12 +286,12 @@ body {
 /* ---------- Title block ---------- */
 
 .masthead {
-  padding-top: calc(5.6mm * var(--fit));
+  padding-top: calc(5.6mm * var(--gap-fit));
   text-align: center;
 }
 
 .national {
-  margin-bottom: calc(3.4mm * var(--fit));
+  margin-bottom: calc(3.4mm * var(--gap-fit));
   font-size: 9pt;
   line-height: 1.45;
 }
@@ -320,7 +330,7 @@ body {
 }
 
 .title-terms {
-  margin: 6.6mm 0 5mm;
+  margin: calc(6.6mm * var(--gap-fit)) 0 calc(5mm * var(--gap-fit));
   font-size: 15pt;
   text-align: center;
 }
@@ -339,14 +349,14 @@ body {
 /* ---------- Sections ---------- */
 
 .section {
-  margin-top: calc(var(--section-gap) * var(--fit));
+  margin-top: calc(var(--section-gap) * var(--gap-fit));
 }
 
 .section-head {
   display: flex;
   align-items: center;
   gap: 2.2mm;
-  margin: 0 0 calc(1.7mm * var(--fit));
+  margin: 0 0 calc(1.7mm * var(--gap-fit));
   color: var(--accent);
   font-size: 9.5pt;
   font-weight: 700;
@@ -396,7 +406,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 6mm;
-  padding: calc(2.8mm * var(--fit)) 3.6mm;
+  padding: calc(2.8mm * var(--gap-fit)) 3.6mm;
   border-left: 0.9mm solid var(--accent);
   border-radius: 0 1.5mm 1.5mm 0;
   background: var(--tint);
@@ -590,8 +600,24 @@ body {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  max-height: 60mm;
   margin-bottom: 4mm;
+}
+
+/* Tick boxes for the customer to confirm, printed above a signature. */
+.declarations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.2mm 8mm;
+  margin: 0 0 2.4mm;
+  font-size: 9pt;
+}
+
+.declarations .check {
+  align-items: flex-start;
+}
+
+.declarations .box {
+  margin-top: 0.3mm;
 }
 
 .statement {
@@ -599,12 +625,14 @@ body {
   text-wrap: balance;
 }
 
+/* The boxes take the space left on the page, between these two heights. */
 .signatures {
   display: grid;
   flex: 1;
   grid-template-columns: 1fr 1fr;
   gap: 6mm;
   min-height: calc(27mm * var(--fit));
+  max-height: 46mm;
 }
 
 .signature {
@@ -640,14 +668,14 @@ body {
 
 .terms {
   font-size: calc(var(--terms-size) * var(--fit));
-  line-height: 1.45;
+  line-height: calc(1.45 - (1 - var(--fit)) * 0.6);
   text-wrap: pretty;
 }
 
 .article {
   display: grid;
   grid-template-columns: 15mm 1fr;
-  padding: calc(2.8mm * var(--fit)) 0 calc(3mm * var(--fit));
+  padding: calc(2.8mm * var(--gap-fit)) 0 calc(3mm * var(--gap-fit));
   border-top: var(--hairline) solid var(--line);
 }
 
@@ -724,6 +752,39 @@ body {
   min-width: 36mm;
 }
 
+/* Signature line under the terms. */
+.acceptance {
+  display: flex;
+  align-items: flex-end;
+  gap: 6mm;
+  margin-bottom: 3mm;
+  padding-top: calc(5mm * var(--gap-fit));
+  border-top: var(--hairline) solid var(--line);
+  font-size: 9pt;
+}
+
+.acceptance-statement {
+  font-weight: 600;
+}
+
+.acceptance-field {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 1.5mm;
+  color: var(--muted);
+}
+
+/* The signature line takes whatever width is left between the statement and the date. */
+.acceptance-signature {
+  flex: 1;
+}
+
+.acceptance-field .blank {
+  flex: 1;
+  min-width: 30mm;
+  margin: 0;
+}
+
 /* ---------- Footer ---------- */
 
 .page-footer {
@@ -744,4 +805,97 @@ body {
 
 .page-number {
   flex: none;
+}
+
+/* ---------- Start page (index.html), screen only ---------- */
+
+.home {
+  max-width: 250mm;
+  margin: 0 auto;
+  padding: 12mm 8mm 16mm;
+}
+
+/* On a narrow screen the contacts drop below the company name instead of squeezing beside it. */
+.home .brand {
+  flex-wrap: wrap;
+  row-gap: 4mm;
+}
+
+.home .brand-contacts dd {
+  white-space: nowrap;
+}
+
+.home-title {
+  margin: 12mm 0 2mm;
+  font-size: 22pt;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.home-title span,
+.home-card h2 span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.6em;
+  font-weight: 500;
+}
+
+.home-intro {
+  margin: 0 0 8mm;
+  color: var(--muted);
+  font-size: 10.5pt;
+  line-height: 1.5;
+}
+
+.home-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(68mm, 1fr));
+  gap: 6mm;
+}
+
+.home-card {
+  display: flex;
+  flex-direction: column;
+  padding: 7mm;
+  border-top: 1mm solid var(--accent);
+  border-radius: 2mm;
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+}
+
+.home-card h2 {
+  margin: 0 0 3mm;
+  color: var(--accent);
+  font-size: 14pt;
+  line-height: 1.25;
+}
+
+.home-card p {
+  margin: 0 0 6mm;
+  font-size: 10pt;
+  line-height: 1.5;
+}
+
+.home-links {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2.5mm;
+  margin-top: auto;
+}
+
+.home-links a {
+  padding: 2.6mm 3mm;
+  border: 1px solid var(--accent);
+  border-radius: 1.6mm;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10pt;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+}
+
+.home-links a.home-pdf {
+  background: #fff;
+  color: var(--accent);
 }

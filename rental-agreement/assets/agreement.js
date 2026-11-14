@@ -2,10 +2,11 @@
   "use strict";
 
   const config = window.AGREEMENT_CONFIG || {};
-  const contents = window.AGREEMENT_CONTENT || {};
   const company = config.company || {};
   const contacts = company.contacts || [];
-  const languages = Object.keys(contents);
+  const commonWording = window.AGREEMENT_COMMON || {};
+  const ownWording = window.AGREEMENT_CONTENT || {};
+  const languages = Object.keys(ownWording);
   const root = document.documentElement;
   const pages = Array.from(document.querySelectorAll(".page"));
 
@@ -19,6 +20,87 @@
   const GUIDES = {
     time: "<i></i><b>:</b><i></i>",
     date: '<i></i>/<i></i>/<i class="wide"></i>',
+  };
+
+  // Built-in emblem (mountains and a winding road), used when config.js has no logo.
+  const EMBLEM = `
+    <svg class="defs" aria-hidden="true">
+      <clipPath id="emblem-clip"><circle cx="24" cy="24" r="24"/></clipPath>
+      <symbol id="emblem" viewBox="0 0 48 48">
+        <circle cx="24" cy="24" r="24" fill="currentColor"/>
+        <g fill="#fff" clip-path="url(#emblem-clip)">
+          <circle cx="35.5" cy="12.5" r="3" opacity=".9"/>
+          <path d="M1 34C6 25 9.5 18 13 18s7 7 10 16Z" opacity=".5"/>
+          <path d="M26 34c3.5-6.5 6.5-11 9.5-11S42 28 47 34Z" opacity=".5"/>
+          <path d="M11 34C16 21.5 20 10.5 24 10.5S32 21.5 37 34Z"/>
+          <path d="M23.2 33.5C23.2 36.6 29 36.4 29 39.2 29 42.3 17.5 42.5 15 49H27C27.5 44.5 34 43.5 34 39.2 34 35.4 24.8 36 24.8 33.5Z"/>
+        </g>
+        <circle cx="24" cy="24" r="23.3" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      </symbol>
+    </svg>`;
+
+  // Shown on screen only, above the pages.
+  const TOOLBAR = `
+    <div class="toolbar">
+      <a class="toolbar-home" href="index.html" data-t="toolbar.home"></a>
+      <div class="toolbar-languages" id="language-switch"></div>
+      <span class="toolbar-warning" id="overflow-warning" hidden></span>
+      <span class="toolbar-hint" data-t="toolbar.hint"></span>
+      <button type="button" id="print-button" data-t="toolbar.print"></button>
+    </div>`;
+
+  // Blocks that look the same in every agreement. A page asks for one with data-part="name".
+  const PARTS = {
+    brand: `
+      <div class="brand-identity">
+        <span class="brand-logo"></span>
+        <div>
+          <div class="brand-name" data-c="company.name"></div>
+          <div class="brand-tagline" data-t="tagline"></div>
+        </div>
+      </div>
+      <dl class="brand-contacts" data-contacts></dl>`,
+
+    "brand-compact": `
+      <div class="brand-identity">
+        <span class="brand-logo"></span>
+        <div class="brand-name" data-c="company.name"></div>
+      </div>
+      <div class="running-title" data-t="title"></div>`,
+
+    masthead: `
+      <div class="national" data-if="showNationalHeader">
+        <div class="national-name" data-t="nationalName"></div>
+        <div class="national-motto" data-t="nationalMotto"></div>
+      </div>
+      <h1 class="title" data-t="title"></h1>
+      <div class="agreement-number" data-if="showAgreementNumber">
+        <span data-t="agreementNumber"></span><span class="blank"></span>
+      </div>`,
+
+    "party-a": `
+      <div>
+        <div class="party-a-name" data-c="company.name"></div>
+        <div class="party-a-address" data-if="hasAddress">
+          <span data-t="addressLabel"></span>: <b data-c="company.address"></b>
+        </div>
+      </div>
+      <div class="party-a-note" data-t="companyNote"></div>`,
+
+    signatures: `
+      <div class="signature">
+        <div class="signature-party"><strong data-t="signature.partyA"></strong><span data-t="signature.roleA"></span></div>
+        <div class="signature-hint" data-t="signature.hint"></div>
+      </div>
+      <div class="signature">
+        <div class="signature-party"><strong data-t="signature.partyB"></strong><span data-t="signature.roleB"></span></div>
+        <div class="signature-hint" data-t="signature.hint"></div>
+      </div>`,
+
+    acceptance: `
+      <span class="acceptance-statement" data-t="acceptance.statement"></span>
+      <span class="acceptance-field acceptance-signature"><span data-t="acceptance.signature"></span><span class="blank"></span></span>
+      <span class="acceptance-field"><span data-t="acceptance.date"></span><span class="guide" data-guide="date"></span></span>`,
   };
 
   const flags = {
@@ -35,6 +117,23 @@
 
   const escapeHtml = (value) =>
     String(value).replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
+
+  const isGroup = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+
+  // Line by line, an agreement's own wording wins over the wording shared by all agreements.
+  function merge(shared, own) {
+    const result = { ...shared };
+    Object.keys(own).forEach((key) => {
+      result[key] =
+        isGroup(shared[key]) && isGroup(own[key]) ? merge(shared[key], own[key]) : own[key];
+    });
+    return result;
+  }
+
+  const contents = {};
+  languages.forEach((language) => {
+    contents[language] = merge(commonWording[language] || {}, ownWording[language]);
+  });
 
   function amount(value, text) {
     if (value === null) return BLANK;
@@ -63,21 +162,33 @@
       .join("");
   }
 
-  function bikeModelsHtml(text) {
-    const boxes = (config.bikeModels || []).map(
-      (model) => `<span class="check"><i class="box"></i>${escapeHtml(model)}</span>`
-    );
-    boxes.push(
-      `<span class="check write-in"><i class="box"></i>${escapeHtml(text.fields.otherModel)}${BLANK}</span>`
-    );
-    return boxes.join("");
+  // A list comes from the wording files, or from config.js when it is the same in every language.
+  function listItems(path, text) {
+    const items = lookup(text, path) ?? lookup(config, path);
+    return Array.isArray(items) ? items : [];
   }
 
-  function accessoriesHtml(text) {
-    const items = (text.fields.accessoryItems || []).map(
-      (item) => `<span class="count"><i class="count-box"></i>${escapeHtml(item)}</span>`
+  // data-other="..." adds a last entry with a line to write on.
+  function otherLabel(element, text) {
+    const label = element.dataset.other && lookup(text, element.dataset.other);
+    return label ? rich(label, text) : "";
+  }
+
+  function ticksHtml(element, text) {
+    const items = listItems(element.dataset.ticks, text).map(
+      (item) => `<span class="check"><i class="box"></i><span>${rich(item, text)}</span></span>`
     );
-    items.push(`<span class="write-in">${escapeHtml(text.fields.otherAccessory)}${BLANK}</span>`);
+    const other = otherLabel(element, text);
+    if (other) items.push(`<span class="check write-in"><i class="box"></i>${other}${BLANK}</span>`);
+    return items.join("");
+  }
+
+  function countsHtml(element, text) {
+    const items = listItems(element.dataset.counts, text).map(
+      (item) => `<span class="count"><i class="count-box"></i>${rich(item, text)}</span>`
+    );
+    const other = otherLabel(element, text);
+    if (other) items.push(`<span class="write-in">${other}${BLANK}</span>`);
     return items.join("");
   }
 
@@ -108,7 +219,7 @@
       <div class="page-number">${escapeHtml(text.pageLabel)} ${pageNumber}/${pages.length}</div>`;
   }
 
-  // The language comes from the address, e.g. agreement.html#en; the first loaded one is the default.
+  // The language comes from the address, e.g. tour-package.html#en; the first loaded one is the default.
   function currentLanguage() {
     const requested = location.hash.slice(1);
     return languages.includes(requested) ? requested : languages[0];
@@ -155,25 +266,21 @@
     const text = contents[language];
 
     root.lang = language;
-    document.title = [text.fileTitle, company.name].filter(Boolean).join(" – ");
+    document.title = [text.title, company.name].filter(Boolean).join(" – ");
 
     all("[data-t]").forEach((element) => {
       const value = lookup(text, element.dataset.t);
       element.innerHTML = value == null ? "" : rich(value, text);
     });
-    all("[data-c]").forEach((element) => {
-      element.textContent = lookup(config, element.dataset.c) || "";
+    all("[data-ticks]").forEach((element) => {
+      element.innerHTML = ticksHtml(element, text);
     });
-    all("[data-contacts]").forEach((element) => {
-      element.innerHTML = contactsHtml();
+    all("[data-counts]").forEach((element) => {
+      element.innerHTML = countsHtml(element, text);
     });
-    all('[data-list="bikeModels"]').forEach((element) => {
-      element.innerHTML = bikeModelsHtml(text);
+    all("#terms").forEach((element) => {
+      element.innerHTML = termsHtml(text);
     });
-    all('[data-list="accessories"]').forEach((element) => {
-      element.innerHTML = accessoriesHtml(text);
-    });
-    document.getElementById("terms").innerHTML = termsHtml(text);
     pages.forEach((page, index) => {
       page.querySelector(".page-footer").innerHTML = footerHtml(text, index + 1);
     });
@@ -184,8 +291,17 @@
     fitPages();
   }
 
-  function setup() {
+  // Everything that does not depend on the language. Also used by the start page (index.html).
+  function setupBrand() {
     if (config.accentColor) root.style.setProperty("--accent", config.accentColor);
+
+    document.body.insertAdjacentHTML("afterbegin", EMBLEM);
+
+    // A misspelt part name is printed on the page so it is easy to spot.
+    all("[data-part]").forEach((element) => {
+      const name = element.dataset.part;
+      element.innerHTML = PARTS[name] || escapeHtml(`[data-part="${name}"?]`);
+    });
 
     // data-if="name" keeps an element when that option is on, data-if="!name" when it is off.
     // Any true/false setting added to config.js can be used as a name.
@@ -204,6 +320,20 @@
       element.innerHTML = company.logo
         ? `<img src="${escapeHtml(company.logo)}" alt="">`
         : '<svg viewBox="0 0 48 48" aria-hidden="true"><use href="#emblem"/></svg>';
+    });
+
+    all("[data-c]").forEach((element) => {
+      element.textContent = lookup(config, element.dataset.c) || "";
+    });
+    all("[data-contacts]").forEach((element) => {
+      element.innerHTML = contactsHtml();
+    });
+  }
+
+  function setupAgreement() {
+    document.body.insertAdjacentHTML("afterbegin", TOOLBAR);
+    pages.forEach((page) => {
+      page.insertAdjacentHTML("beforeend", '<footer class="page-footer"></footer>');
     });
 
     document.getElementById("language-switch").innerHTML = languages
@@ -230,9 +360,14 @@
     window.addEventListener("load", fitPages);
   }
 
-  if (languages.length === 0) {
-    document.body.textContent = "No content.<language>.js file is loaded in agreement.html.";
+  if (pages.length === 0) {
+    setupBrand();
     return;
   }
-  setup();
+  if (languages.length === 0) {
+    document.body.textContent = "No <agreement>.<language>.js wording file is loaded on this page.";
+    return;
+  }
+  setupBrand();
+  setupAgreement();
 })();
