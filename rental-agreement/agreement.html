@@ -51,7 +51,7 @@
             <div class="brand-tagline" data-t="tagline"></div>
           </div>
         </div>
-        <dl class="brand-contacts" data-contacts="stacked"></dl>
+        <dl class="brand-contacts" data-contacts></dl>
       </header>
 
       <div class="masthead">
@@ -68,8 +68,13 @@
       <section class="section">
         <h2 class="section-head"><span class="section-number"></span><span data-t="sections.lessor"></span></h2>
         <div class="party-a">
-          <div class="party-a-name" data-c="company.name"></div>
-          <div class="party-a-details" data-contacts="inline"></div>
+          <div>
+            <div class="party-a-name" data-c="company.name"></div>
+            <div class="party-a-address" data-if="hasAddress">
+              <span data-t="addressLabel"></span>: <b data-c="company.address"></b>
+            </div>
+          </div>
+          <div class="party-a-note" data-t="lessorNote"></div>
         </div>
       </section>
 
@@ -77,20 +82,25 @@
         <h2 class="section-head"><span class="section-number"></span><span data-t="sections.renter"></span></h2>
         <div class="fields">
           <div class="row">
-            <div class="field" style="--span: 8"><span class="label" data-t="fields.fullName"></span></div>
-            <div class="field" style="--span: 4"><span class="label" data-t="fields.birthYear"></span></div>
-          </div>
-          <div class="row">
+            <div class="field" style="--span: 6"><span class="label" data-t="fields.fullName"></span></div>
+            <div class="field" style="--span: 2"><span class="label" data-t="fields.birthYear"></span></div>
             <div class="field" style="--span: 4"><span class="label" data-t="fields.phone"></span></div>
-            <div class="field" style="--span: 8"><span class="label" data-t="fields.address"></span></div>
           </div>
           <div class="row">
-            <div class="field" style="--span: 5"><span class="label" data-t="fields.idNumber"></span></div>
-            <div class="field" style="--span: 3">
+            <div class="field" style="--span: 8"><span class="label" data-t="fields.address"></span></div>
+            <div class="field" style="--span: 4"><span class="label" data-t="fields.emergencyPhone"></span></div>
+          </div>
+          <div class="row">
+            <div class="field" style="--span: 4"><span class="label" data-t="fields.idNumber"></span></div>
+            <div class="field" style="--span: 2.5">
               <span class="label" data-t="fields.idIssueDate"></span>
               <span class="guide" data-guide="date"></span>
             </div>
-            <div class="field" style="--span: 4"><span class="label" data-t="fields.idIssuePlace"></span></div>
+            <div class="field" style="--span: 2.5">
+              <span class="label" data-t="fields.idExpiryDate"></span>
+              <span class="guide" data-guide="date"></span>
+            </div>
+            <div class="field" style="--span: 3"><span class="label" data-t="fields.idIssuePlace"></span></div>
           </div>
           <div class="row">
             <div class="field" style="--span: 4"><span class="label" data-t="fields.licenceClass"></span></div>

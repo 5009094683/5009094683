@@ -4,6 +4,7 @@
   Inside any text you can use:
     **bold text**        printed in bold
     {blank}              an empty line to fill in by hand
+    {heart}              a small heart symbol
     {helmetFee} {keyFee} {agreedBikeValue}   amounts taken from config.js
 
   To add or remove a clause, add or delete a line in a "clauses" list.
@@ -23,6 +24,9 @@ window.AGREEMENT_CONTENT.en = {
   addressLabel: "Address",
   pageLabel: "Page",
 
+  // Friendly note printed beside the company name in section 1. Use "" to print nothing.
+  lessorNote: "With {heart} from **Thu Hien**",
+
   sections: {
     lessor: "Rental company (Party A)",
     renter: "Renter (Party B)",
@@ -39,8 +43,10 @@ window.AGREEMENT_CONTENT.en = {
     birthYear: "Year of birth",
     phone: "Phone",
     address: "Address",
+    emergencyPhone: "Emergency contact number",
     idNumber: "ID card / Passport No.",
     idIssueDate: "Date of issue",
+    idExpiryDate: "Date of expiry",
     idIssuePlace: "Place of issue",
     licenceClass: "Driving licence class",
     licenceNumber: "Licence No.",

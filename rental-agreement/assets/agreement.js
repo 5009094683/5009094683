@@ -13,6 +13,9 @@
   const FIT_STEP = 0.02;
 
   const BLANK = '<span class="blank"></span>';
+  // Drawn rather than typed so it prints the same on every computer, whatever fonts it has.
+  const HEART =
+    '<svg class="heart" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.4C7.6 17.6 2.2 13.6 2.2 8.5A5.2 5.2 0 0 1 12 6.1 5.2 5.2 0 0 1 21.8 8.5C21.8 13.6 16.4 17.6 12 21.4Z"/></svg>';
   const GUIDES = {
     time: "<i></i><b>:</b><i></i>",
     date: '<i></i>/<i></i>/<i class="wide"></i>',
@@ -22,6 +25,7 @@
     showNationalHeader: config.showNationalHeader !== false,
     showAgreementNumber: config.showAgreementNumber !== false,
     hasBikeModels: Array.isArray(config.bikeModels) && config.bikeModels.length > 0,
+    hasAddress: Boolean(company.address),
   };
 
   const all = (selector) => Array.from(document.querySelectorAll(selector));
@@ -46,26 +50,17 @@
         const value = config[key];
         let filled;
         if (key === "blank") filled = BLANK;
+        else if (key === "heart") filled = HEART;
         else if (typeof value === "number" || value === null) filled = amount(value, text);
         else return match;
         return (before && "&nbsp;") + filled + (after && "&nbsp;");
       });
   }
 
-  function contactsStacked() {
+  function contactsHtml() {
     return contacts
       .map((contact) => `<dt>${escapeHtml(contact.label)}</dt><dd>${escapeHtml(contact.value)}</dd>`)
       .join("");
-  }
-
-  function contactsInline(text, withAddress) {
-    const parts = contacts.map(
-      (contact) => `${escapeHtml(contact.label)}: <b>${escapeHtml(contact.value)}</b>`
-    );
-    if (withAddress && company.address) {
-      parts.push(`${escapeHtml(text.addressLabel)}: <b>${escapeHtml(company.address)}</b>`);
-    }
-    return parts.map((part) => `<span class="contact">${part}</span>`).join("");
   }
 
   function bikeModelsHtml(text) {
@@ -109,7 +104,7 @@
 
   function footerHtml(text, pageNumber) {
     return `
-      <div class="page-footer-contacts"><b>${escapeHtml(company.name || "")}</b>${contactsInline(text, false)}</div>
+      <b>${escapeHtml(company.name || "")}</b>
       <div class="page-number">${escapeHtml(text.pageLabel)} ${pageNumber}/${pages.length}</div>`;
   }
 
@@ -169,11 +164,8 @@
     all("[data-c]").forEach((element) => {
       element.textContent = lookup(config, element.dataset.c) || "";
     });
-    all('[data-contacts="stacked"]').forEach((element) => {
-      element.innerHTML = contactsStacked();
-    });
-    all('[data-contacts="inline"]').forEach((element) => {
-      element.innerHTML = contactsInline(text, true);
+    all("[data-contacts]").forEach((element) => {
+      element.innerHTML = contactsHtml();
     });
     all('[data-list="bikeModels"]').forEach((element) => {
       element.innerHTML = bikeModelsHtml(text);

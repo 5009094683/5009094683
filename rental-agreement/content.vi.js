@@ -4,6 +4,7 @@
   Trong câu chữ có thể dùng:
     **chữ đậm**          in đậm
     {blank}              dòng trống để điền tay
+    {heart}              hình trái tim nhỏ
     {helmetFee} {keyFee} {agreedBikeValue}   số tiền lấy từ config.js
 
   Thêm / bớt điều khoản: thêm / xoá một dòng trong danh sách "clauses".
@@ -23,6 +24,9 @@ window.AGREEMENT_CONTENT.vi = {
   addressLabel: "Địa chỉ",
   pageLabel: "Trang",
 
+  // Lời nhắn in cạnh tên công ty ở mục 1. Để "" nếu không muốn in.
+  lessorNote: "Với {heart} từ **Thu Hien**",
+
   sections: {
     lessor: "Bên cho thuê (Bên A)",
     renter: "Bên thuê (Bên B)",
@@ -39,8 +43,10 @@ window.AGREEMENT_CONTENT.vi = {
     birthYear: "Sinh năm",
     phone: "Điện thoại",
     address: "Địa chỉ",
+    emergencyPhone: "Điện thoại liên hệ khẩn cấp",
     idNumber: "Số CCCD / Hộ chiếu",
     idIssueDate: "Cấp ngày",
+    idExpiryDate: "Có giá trị đến",
     idIssuePlace: "Nơi cấp",
     licenceClass: "Giấy phép lái xe hạng",
     licenceNumber: "Số GPLX",

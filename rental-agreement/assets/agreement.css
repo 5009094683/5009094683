@@ -33,6 +33,7 @@
   --guide: #7a8682;
   --tint: #eef4f2;
   --tint: color-mix(in srgb, var(--accent) 7%, #fff);
+  --heart: #d83a3a; /* the {heart} symbol */
 
   --text-size: 9.5pt;
   --terms-size: 9.2pt;
@@ -402,23 +403,35 @@ body {
 }
 
 .party-a-name {
-  flex: none;
   font-size: 11pt;
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
 }
 
-.party-a-details {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.6mm 5mm;
+.party-a-address {
+  margin-top: 0.5mm;
   font-size: 9pt;
 }
 
-.party-a-details b {
+.party-a-address b {
   font-weight: 600;
+}
+
+.party-a-note {
+  flex: none;
+  font-size: 10pt;
+}
+
+.party-a-note strong {
+  font-weight: 600;
+}
+
+.heart {
+  width: 0.95em;
+  height: 0.95em;
+  fill: var(--heart);
+  vertical-align: -0.13em;
 }
 
 /* ---------- Form boxes ---------- */
@@ -442,7 +455,9 @@ body {
 .field {
   position: relative;
   display: flex;
-  flex: var(--span, 12) 1 0;
+  /* Growing from a width that is already in proportion keeps each box at exactly its share
+     of the row, so dividers line up between rows. */
+  flex: var(--span, 12) 1 calc(var(--span, 12) * 5mm);
   flex-direction: column;
   min-width: 0;
   padding: 1.3mm 2.2mm 1.5mm;
@@ -721,12 +736,6 @@ body {
   border-top: var(--hairline) solid var(--line);
   color: var(--muted);
   font-size: 7.5pt;
-}
-
-.page-footer-contacts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 4mm;
 }
 
 .page-footer b {

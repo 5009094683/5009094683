@@ -14,14 +14,14 @@ window.AGREEMENT_CONFIG = {
   company: {
     name: "Cao Bằng Travel Guide",
 
-    // Shown in the page header, in the "Party A" box and in the footer.
+    // Shown at the top right of page 1 only.
     // Add, remove or reorder lines freely, e.g. { label: "Email", value: "..." }.
     contacts: [
       { label: "Zalo", value: "0914 674 724" },
       { label: "WhatsApp", value: "+(84) 0352 476 994" },
     ],
 
-    // Optional. Leave "" to hide the address line.
+    // Optional. Printed under the company name in section 1. Leave "" to hide it.
     address: "",
 
     // Optional. Path to your own logo image, e.g. "assets/my-logo.png".
