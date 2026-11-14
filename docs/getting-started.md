@@ -9,7 +9,9 @@ without accounts anywhere.
 - Node.js 22 and pnpm 10 (`corepack enable` gives you pnpm).
 - PostgreSQL 16 on `localhost:5432`, with a role `pms` (password `pms`) that
   may create databases, and a database `pms`. On Debian or Ubuntu,
-  `scripts/cloud-agent-install.sh` installs PostgreSQL and creates both.
+  `scripts/cloud-agent-install.sh` installs PostgreSQL, creates both and
+  installs the dependencies; `scripts/cloud-agent-start.sh` starts PostgreSQL
+  and brings the tables up to date. Both are safe to run again.
 
 ## Run it
 
