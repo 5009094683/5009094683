@@ -39,12 +39,12 @@ for the run, so that what is measured is this system and not the wait.
 ## A recorded run
 
 On the development machine (8 cores; PostgreSQL, the API, the worker and the
-simulator all on it), 13 November 2026:
+simulator all on it), 14 November 2026:
 
 | Step                             | Result                                                |
 | -------------------------------- | ----------------------------------------------------- |
-| Website search, 3,000 requests   | 318 a second; 95 in 100 within 201 ms                 |
-| Calendar, 600 requests           | 95 in 100 within 100 ms                               |
+| Website search, 3,000 requests   | 319 a second; 95 in 100 within 198 ms                 |
+| Calendar, 600 requests           | 95 in 100 within 64 ms                                |
 | 300 bookings from booking sites  | All recorded and every other site closed in 7 seconds |
 | 200 rate changes                 | 95 in 100 within 32 ms                                |
 | The last room, 60 guests at once | Sold once, refused 59 times, closed on every site     |
