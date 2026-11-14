@@ -825,7 +825,7 @@ describe('bookings that cannot be placed', () => {
       applied: 0,
       failed: 0,
     });
-    const again = await ingestBookingEvent(t.db, c.connection, event, 'pull');
+    const again = await ingestBookingEvent(t.db, c.connection, event, 'poll');
     expect(again).toMatchObject({ status: 'set_aside', duplicate: true, reservationId: null });
     expect(await openAlerts(key)).toHaveLength(0);
     expect(await reservationFor(c.connection.id, event.bookingId)).toBeUndefined();
