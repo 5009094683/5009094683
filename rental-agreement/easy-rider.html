@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Easy Rider Service Agreement</title>
+  <link rel="stylesheet" href="assets/agreement.css">
+</head>
+<body>
+  <!--
+    EASY RIDER SERVICE AGREEMENT — layout of the form.
+    (The customer rides as a passenger behind one of the company's drivers.)
+
+    No wording is typed in this file.
+      data-t="..."       pulls text from easy-rider.<language>.js, or from common.<language>.js
+      data-c="..."       pulls a value from config.js
+      data-if="..."      keeps the element only when that config.js option is on
+      data-part="..."    inserts a block shared by all agreements (header, title, signature boxes...)
+      data-ticks="..."   prints a list as tick boxes; data-counts="..." prints it as boxes for a number
+    Edit this file only to add, remove or rearrange boxes on the form.
+    A box is <div class="field" style="--span: N">; N is its share of the row width (a row adds up to 12).
+  -->
+
+  <main id="agreement">
+
+    <!-- ============ PAGE 1 — the form ============ -->
+    <section class="page">
+      <header class="brand" data-part="brand"></header>
+      <div class="masthead" data-part="masthead"></div>
+
+      <section class="section">
+        <h2 class="section-head"><span class="section-number"></span><span data-t="sections.provider"></span></h2>
+        <div class="party-a" data-part="party-a"></div>
+      </section>
+
+      <section class="section">
+        <h2 class="section-head"><span class="section-number"></span><span data-t="sections.passenger"></span></h2>
+        <div class="fields">
+          <div class="row">
+            <div class="field" style="--span: 6"><span class="label" data-t="fields.fullName"></span></div>
+            <div class="field" style="--span: 2.5">
+              <span class="label" data-t="fields.birthDate"></span>
+              <span class="guide" data-guide="date"></span>
+            </div>
+            <div class="field" style="--span: 3.5"><span class="label" data-t="fields.nationality"></span></div>
+          </div>
+          <div class="row">
+            <div class="field" style="--span: 4"><span class="label" data-t="fields.idNumber"></span></div>
+            <div class="field" style="--span: 4"><span class="label" data-t="fields.phoneChat"></span></div>
+            <div class="field" style="--span: 4"><span class="label" data-t="fields.hotel"></span></div>
+          </div>
+          <div class="row">
+            <div class="field" style="--span: 5"><span class="label" data-t="fields.emergencyContact"></span></div>
+            <div class="field" style="--span: 7"><span class="label" data-t="fields.health"></span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2 class="section-head"><span class="section-number"></span><span data-t="sections.trip"></span></h2>
+        <div class="fields">
+          <div class="row">
+            <div class="field" style="--span: 8.5"><span class="label" data-t="fields.route"></span></div>
+            <div class="field" style="--span: 3.5"><span class="label" data-t="fields.duration"></span></div>
+          </div>
+          <div class="row">
+            <div class="field" style="--span: 4.25">
+              <span class="label" data-t="fields.start"></span>
+              <div class="guides">
+                <span class="guide" data-guide="time"></span>
+                <span class="guide" data-guide="date"></span>
+              </div>
+            </div>
+            <div class="field" style="--span: 4.25">
+              <span class="label" data-t="fields.end"></span>
+              <div class="guides">
+                <span class="guide" data-guide="time"></span>
+                <span class="guide" data-guide="date"></span>
+              </div>
+            </div>
+            <div class="field" style="--span: 3.5"><span class="label" data-t="fields.pickupDropoff"></span></div>
+          </div>
+          <div class="row">
+            <div class="field" style="--span: 4.25"><span class="label" data-t="fields.driver"></span></div>
+            <div class="field" style="--span: 4.25"><span class="label" data-t="fields.driverPhone"></span></div>
+            <div class="field" style="--span: 3.5"><span class="label" data-t="fields.plate"></span></div>
+          </div>
+          <div class="row">
+            <div class="field" style="--span: 12">
+              <span class="label" data-t="fields.included"></span>
+              <div class="choices" data-ticks="fields.includedItems" data-other="fields.other"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2 class="section-head"><span class="section-number"></span><span data-t="sections.price"></span></h2>
+        <div class="fields">
+          <div class="row">
+            <div class="field" style="--span: 3">
+              <span class="label" data-t="fields.pricePerDay"></span>
+              <span class="unit" data-t="fields.currency"></span>
+            </div>
+            <div class="field" style="--span: 3">
+              <span class="label" data-t="fields.totalPrice"></span>
+              <span class="unit" data-t="fields.currency"></span>
+            </div>
+            <div class="field" style="--span: 3">
+              <span class="label" data-t="fields.depositPaid"></span>
+              <span class="unit" data-t="fields.currency"></span>
+            </div>
+            <div class="field" style="--span: 3">
+              <span class="label" data-t="fields.balanceDue"></span>
+              <span class="unit" data-t="fields.currency"></span>
+            </div>
+          </div>
+          <div class="row">
+            <div class="field" style="--span: 7">
+              <span class="label" data-t="fields.paidBy"></span>
+              <div class="choices" data-ticks="fields.paymentMethods"></div>
+            </div>
+            <div class="field" style="--span: 5">
+              <span class="label" data-t="fields.balanceDate"></span>
+              <span class="guide" data-guide="date"></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section section-sign">
+        <h2 class="section-head">
+          <span class="section-number"></span><span data-t="sections.confirm"></span>
+          <span class="section-when" data-t="sections.confirmWhen"></span>
+        </h2>
+        <div class="declarations" data-ticks="declarations"></div>
+        <p class="statement" data-t="confirmStatement"></p>
+        <div class="signatures" data-part="signatures"></div>
+      </section>
+    </section>
+
+    <!-- ============ PAGE 2 — terms ============ -->
+    <section class="page">
+      <header class="brand brand-compact" data-part="brand-compact"></header>
+
+      <h1 class="title title-terms" data-t="termsTitle"></h1>
+
+      <!-- The articles are generated from the "articles" list in easy-rider.<language>.js -->
+      <div class="terms" id="terms"></div>
+
+      <div class="acceptance" data-part="acceptance"></div>
+    </section>
+
+  </main>
+
+  <script src="config.js"></script>
+  <script src="common.vi.js"></script>
+  <script src="common.en.js"></script>
+  <script src="easy-rider.vi.js"></script>
+  <script src="easy-rider.en.js"></script>
+  <script src="assets/agreement.js"></script>
+</body>
+</html>
