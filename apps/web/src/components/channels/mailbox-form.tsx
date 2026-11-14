@@ -287,7 +287,7 @@ export function MailboxForm({
         The mailbox is read about once a minute. Reading changes nothing in it: no email is marked
         as read, moved or deleted.{' '}
         {removesMailbox(current, saved)
-          ? 'Saved like this, no mailbox is entered here any more, so nothing is read, unless whoever runs the server has set one mailbox for the whole installation.'
+          ? 'Saved like this, no mailbox is entered here any more and its password is forgotten, so nothing is read, unless whoever runs the server has set one mailbox for the whole installation.'
           : anotherMailbox(current, saved)
             ? 'This is another mailbox than the saved one, so reading starts afresh with its last 24 hours.'
             : 'The first read takes the emails of the last 24 hours.'}
