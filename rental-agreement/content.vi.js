@@ -40,7 +40,7 @@ window.AGREEMENT_CONTENT.vi = {
 
   fields: {
     fullName: "Họ và tên",
-    birthYear: "Sinh năm",
+    birthDate: "Ngày sinh",
     phone: "Điện thoại",
     address: "Địa chỉ",
     emergencyPhone: "Điện thoại liên hệ khẩn cấp",

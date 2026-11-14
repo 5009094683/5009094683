@@ -40,7 +40,7 @@ window.AGREEMENT_CONTENT.en = {
 
   fields: {
     fullName: "Full name",
-    birthYear: "Year of birth",
+    birthDate: "Date of birth",
     phone: "Phone",
     address: "Address",
     emergencyPhone: "Emergency contact number",
