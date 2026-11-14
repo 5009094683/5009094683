@@ -1,0 +1,13 @@
+node_modules
+dist
+.next
+.next-e2e
+coverage
+pnpm-lock.yaml
+packages/db/migrations
+packages/channels/src/channex/generated.ts
+README.md
+playwright-report
+test-results
+.auth
+packages/channels/src/channex/openapi.subset.json

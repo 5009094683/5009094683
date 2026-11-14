@@ -1,0 +1,101 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    'Noto Sans', sans-serif;
+  --font-display: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+
+  --color-canvas: #faf8f5;
+  --color-surface: #ffffff;
+  --color-sunken: #f1eee8;
+  --color-line: #e6e1d8;
+  --color-line-strong: #cfc8bb;
+  --color-ink: #1d2327;
+  --color-ink-soft: #4c5760;
+  --color-ink-faint: #7e8891;
+
+  --color-brand-50: #eefaf7;
+  --color-brand-100: #d5f2eb;
+  --color-brand-200: #aee4d8;
+  --color-brand-500: #259987;
+  --color-brand-600: #197b6e;
+  --color-brand-700: #17635a;
+  --color-brand-800: #164f49;
+  /* Text and icons on the brand colour. A property with a light brand colour sets a dark one. */
+  --color-on-brand: #ffffff;
+
+  --color-danger-50: #fef2f2;
+  --color-danger-600: #c9353a;
+  --color-danger-700: #a52a2f;
+  --color-warning-50: #fff8eb;
+  --color-warning-700: #a15c07;
+  --color-success-50: #edf9f0;
+  --color-success-700: #1f7340;
+  --color-info-50: #eff5ff;
+  --color-info-700: #2256b8;
+
+  --shadow-card: 0 1px 2px rgb(40 30 16 / 0.05), 0 2px 8px rgb(40 30 16 / 0.06);
+  --shadow-pop: 0 12px 32px -8px rgb(40 30 16 / 0.22), 0 2px 8px rgb(40 30 16 / 0.08);
+}
+
+html {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  /* Room for the bar that stays at the top of the results on small screens. */
+  scroll-padding-top: 5rem;
+}
+
+/* The page behind an open dialog stays where it is. */
+html:has(dialog[open]) {
+  overflow: hidden;
+}
+
+body {
+  min-height: 100dvh;
+  font-family: var(--font-sans);
+}
+
+/*
+ * A property with a pale brand colour sets --color-focus to one that can be seen.
+ * In the base layer, so that a utility on an element can change it: a heading that is given
+ * focus only so that a screen reader starts reading there shows no ring.
+ */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-focus, var(--color-brand-600));
+    outline-offset: 2px;
+  }
+}
+
+/* Tailwind's reset leaves these with the arrow cursor. */
+button:not(:disabled),
+summary,
+label:has(input[type='checkbox']) {
+  cursor: pointer;
+}
+
+/* A <details> used as a "show more" row: our own chevron instead of the marker. */
+summary {
+  list-style: none;
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

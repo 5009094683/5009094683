@@ -1,0 +1,7674 @@
+{
+ "components": {
+  "parameters": {
+   "BookingRevisions.BookingRevisionFeedParams.filterPropertyId": {
+    "explode": false,
+    "in": "query",
+    "name": "filter[property_id]",
+    "required": false,
+    "schema": {
+     "$ref": "#/components/schemas/Common.Scalars.id"
+    }
+   },
+   "BookingRevisions.BookingRevisionFeedParams.orderInsertedAt": {
+    "explode": false,
+    "in": "query",
+    "name": "order[inserted_at]",
+    "required": false,
+    "schema": {
+     "$ref": "#/components/schemas/Common.Pagination.OrderDirection"
+    }
+   },
+   "Bookings.BookingListParams.arrivalDateGte": {
+    "explode": false,
+    "in": "query",
+    "name": "filter[arrival_date][gte]",
+    "required": false,
+    "schema": {
+     "format": "date",
+     "type": "string"
+    }
+   },
+   "Bookings.BookingListParams.arrivalDateLte": {
+    "explode": false,
+    "in": "query",
+    "name": "filter[arrival_date][lte]",
+    "required": false,
+    "schema": {
+     "format": "date",
+     "type": "string"
+    }
+   },
+   "Bookings.BookingListParams.departureDateGte": {
+    "explode": false,
+    "in": "query",
+    "name": "filter[departure_date][gte]",
+    "required": false,
+    "schema": {
+     "format": "date",
+     "type": "string"
+    }
+   },
+   "Bookings.BookingListParams.departureDateLte": {
+    "explode": false,
+    "in": "query",
+    "name": "filter[departure_date][lte]",
+    "required": false,
+    "schema": {
+     "format": "date",
+     "type": "string"
+    }
+   },
+   "Bookings.BookingListParams.insertedAtGte": {
+    "explode": false,
+    "in": "query",
+    "name": "filter[inserted_at][gte]",
+    "required": false,
+    "schema": {
+     "type": "string"
+    }
+   },
+   "Bookings.BookingListParams.insertedAtLte": {
+    "explode": false,
+    "in": "query",
+    "name": "filter[inserted_at][lte]",
+    "required": false,
+    "schema": {
+     "type": "string"
+    }
+   },
+   "Bookings.BookingListParams.orderInsertedAt": {
+    "explode": false,
+    "in": "query",
+    "name": "order[inserted_at]",
+    "required": false,
+    "schema": {
+     "$ref": "#/components/schemas/Common.Pagination.OrderDirection"
+    }
+   },
+   "Common.Pagination.PaginationParams.limit": {
+    "explode": false,
+    "in": "query",
+    "name": "pagination[limit]",
+    "required": false,
+    "schema": {
+     "$ref": "#/components/schemas/Common.Scalars.positiveInt",
+     "maximum": 100
+    }
+   },
+   "Common.Pagination.PaginationParams.page": {
+    "explode": false,
+    "in": "query",
+    "name": "pagination[page]",
+    "required": false,
+    "schema": {
+     "$ref": "#/components/schemas/Common.Scalars.positiveInt"
+    }
+   },
+   "Properties.PropertyListParams.city": {
+    "explode": false,
+    "in": "query",
+    "name": "filter[city]",
+    "required": false,
+    "schema": {
+     "type": "string"
+    }
+   },
+   "Properties.PropertyListParams.country": {
+    "explode": false,
+    "in": "query",
+    "name": "filter[country]",
+    "required": false,
+    "schema": {
+     "$ref": "#/components/schemas/Common.Scalars.country"
+    }
+   },
+   "Properties.PropertyListParams.orderInsertedAt": {
+    "explode": false,
+    "in": "query",
+    "name": "order[inserted_at]",
+    "required": false,
+    "schema": {
+     "$ref": "#/components/schemas/Common.Pagination.OrderDirection"
+    }
+   },
+   "Properties.PropertyListParams.orderTitle": {
+    "explode": false,
+    "in": "query",
+    "name": "order[title]",
+    "required": false,
+    "schema": {
+     "$ref": "#/components/schemas/Common.Pagination.OrderDirection"
+    }
+   },
+   "Properties.PropertyListParams.title": {
+    "explode": false,
+    "in": "query",
+    "name": "filter[title]",
+    "required": false,
+    "schema": {
+     "type": "string"
+    }
+   },
+   "RatePlans.RatePlanListParams.orderInsertedAt": {
+    "explode": false,
+    "in": "query",
+    "name": "order[inserted_at]",
+    "required": false,
+    "schema": {
+     "$ref": "#/components/schemas/Common.Pagination.OrderDirection"
+    }
+   },
+   "Restrictions.AvailabilityListParams.date": {
+    "explode": false,
+    "in": "query",
+    "name": "filter[date]",
+    "required": false,
+    "schema": {
+     "format": "date",
+     "type": "string"
+    }
+   },
+   "Restrictions.AvailabilityListParams.dateGte": {
+    "explode": false,
+    "in": "query",
+    "name": "filter[date][gte]",
+    "required": false,
+    "schema": {
+     "format": "date",
+     "type": "string"
+    }
+   },
+   "Restrictions.AvailabilityListParams.dateLte": {
+    "explode": false,
+    "in": "query",
+    "name": "filter[date][lte]",
+    "required": false,
+    "schema": {
+     "format": "date",
+     "type": "string"
+    }
+   },
+   "Restrictions.AvailabilityListParams.propertyId": {
+    "explode": false,
+    "in": "query",
+    "name": "filter[property_id]",
+    "required": true,
+    "schema": {
+     "$ref": "#/components/schemas/Common.Scalars.id"
+    }
+   },
+   "Restrictions.RestrictionListParams.date": {
+    "explode": false,
+    "in": "query",
+    "name": "filter[date]",
+    "required": false,
+    "schema": {
+     "format": "date",
+     "type": "string"
+    }
+   },
+   "Restrictions.RestrictionListParams.dateGte": {
+    "explode": false,
+    "in": "query",
+    "name": "filter[date][gte]",
+    "required": false,
+    "schema": {
+     "format": "date",
+     "type": "string"
+    }
+   },
+   "Restrictions.RestrictionListParams.dateLte": {
+    "explode": false,
+    "in": "query",
+    "name": "filter[date][lte]",
+    "required": false,
+    "schema": {
+     "format": "date",
+     "type": "string"
+    }
+   },
+   "Restrictions.RestrictionListParams.propertyId": {
+    "explode": false,
+    "in": "query",
+    "name": "filter[property_id]",
+    "required": true,
+    "schema": {
+     "$ref": "#/components/schemas/Common.Scalars.id"
+    }
+   },
+   "Restrictions.RestrictionListParams.restrictions": {
+    "explode": false,
+    "in": "query",
+    "name": "filter[restrictions]",
+    "required": true,
+    "schema": {
+     "items": {
+      "$ref": "#/components/schemas/Restrictions.RestrictionKind"
+     },
+     "type": "array"
+    }
+   },
+   "RoomTypes.RoomTypeListParams.propertyId": {
+    "explode": false,
+    "in": "query",
+    "name": "filter[property_id]",
+    "required": false,
+    "schema": {
+     "$ref": "#/components/schemas/Common.Scalars.id"
+    }
+   },
+   "Webhooks.WebhookListParams.isActive": {
+    "explode": false,
+    "in": "query",
+    "name": "filter[is_active]",
+    "required": false,
+    "schema": {
+     "type": "boolean"
+    }
+   },
+   "Webhooks.WebhookListParams.orderInsertedAt": {
+    "explode": false,
+    "in": "query",
+    "name": "order[inserted_at]",
+    "required": false,
+    "schema": {
+     "$ref": "#/components/schemas/Common.Pagination.OrderDirection"
+    }
+   },
+   "Webhooks.WebhookListParams.propertyId": {
+    "explode": false,
+    "in": "query",
+    "name": "filter[property_id]",
+    "required": false,
+    "schema": {
+     "$ref": "#/components/schemas/Common.Scalars.id"
+    }
+   }
+  },
+  "schemas": {
+   "Authentication.CurrentUserRelationships": {
+    "properties": {
+     "organization": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Authentication.OrganizationRelationship"
+       }
+      ]
+     },
+     "user_ui_setting": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Authentication.UserUiSettingRelationship"
+       }
+      ]
+     }
+    },
+    "required": [
+     "user_ui_setting"
+    ],
+    "type": "object"
+   },
+   "Authentication.CurrentUserResource": {
+    "properties": {
+     "attributes": {
+      "$ref": "#/components/schemas/Authentication.User"
+     },
+     "relationships": {
+      "$ref": "#/components/schemas/Authentication.CurrentUserRelationships"
+     },
+     "type": {
+      "enum": [
+       "user"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "type",
+     "attributes",
+     "relationships"
+    ],
+    "type": "object"
+   },
+   "Authentication.EmbeddedUser": {
+    "properties": {
+     "attributes": {
+      "$ref": "#/components/schemas/Authentication.EmbeddedUserAttributes"
+     },
+     "id": {
+      "$ref": "#/components/schemas/Common.Scalars.id"
+     },
+     "type": {
+      "enum": [
+       "user"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "type",
+     "id",
+     "attributes"
+    ],
+    "type": "object"
+   },
+   "Authentication.EmbeddedUserAttributes": {
+    "properties": {
+     "email": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.email"
+       }
+      ]
+     },
+     "id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "email"
+    ],
+    "type": "object"
+   },
+   "Authentication.Organization": {
+    "properties": {
+     "id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "role": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "title",
+     "role"
+    ],
+    "type": "object"
+   },
+   "Authentication.OrganizationRelationship": {
+    "properties": {
+     "data": {
+      "properties": {
+       "attributes": {
+        "$ref": "#/components/schemas/Authentication.Organization"
+       },
+       "id": {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       },
+       "type": {
+        "enum": [
+         "organization"
+        ],
+        "type": "string"
+       }
+      },
+      "required": [
+       "attributes",
+       "id",
+       "type"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
+   "Authentication.PreferredLanguage": {
+    "enum": [
+     "ar",
+     "de",
+     "el",
+     "en",
+     "es",
+     "fr",
+     "hu",
+     "it",
+     "nl",
+     "pt",
+     "pt_BR",
+     "ru",
+     "sv",
+     "th"
+    ],
+    "type": "string"
+   },
+   "Authentication.SystemRole": {
+    "enum": [
+     "user",
+     "admin",
+     "api"
+    ],
+    "type": "string"
+   },
+   "Authentication.User": {
+    "properties": {
+     "email": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.email"
+       }
+      ]
+     },
+     "id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "is_api_key_allowed": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     },
+     "preferred_language": {
+      "$ref": "#/components/schemas/Authentication.PreferredLanguage"
+     },
+     "settings": {
+      "$ref": "#/components/schemas/Authentication.UserSettings"
+     },
+     "signed_agreement_version": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.positiveInt"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "system_role": {
+      "$ref": "#/components/schemas/Authentication.SystemRole"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "email",
+     "settings",
+     "preferred_language",
+     "is_api_key_allowed",
+     "signed_agreement_version",
+     "system_role"
+    ],
+    "type": "object"
+   },
+   "Authentication.UserSettings": {
+    "properties": {
+     "allow_airbnb_rate_plans": {
+      "type": "boolean"
+     },
+     "block_booking_export": {
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "Authentication.UserUiSetting": {
+    "properties": {
+     "id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "show_notifications": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "user_id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     }
+    },
+    "required": [
+     "id",
+     "user_id",
+     "show_notifications"
+    ],
+    "type": "object"
+   },
+   "Authentication.UserUiSettingRelationship": {
+    "properties": {
+     "data": {
+      "properties": {
+       "attributes": {
+        "$ref": "#/components/schemas/Authentication.UserUiSetting"
+       },
+       "id": {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       },
+       "type": {
+        "enum": [
+         "user_ui_setting"
+        ],
+        "type": "string"
+       }
+      },
+      "required": [
+       "attributes",
+       "id",
+       "type"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
+   "BookingRevisions.AcknowledgeStatus": {
+    "enum": [
+     "pending",
+     "acknowledged"
+    ],
+    "type": "string"
+   },
+   "BookingRevisions.BookingCollectedTax": {
+    "properties": {
+     "is_inclusive": {
+      "type": "boolean"
+     },
+     "is_withheld": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     },
+     "nights": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       }
+      ]
+     },
+     "persons": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       }
+      ]
+     },
+     "price_mode": {
+      "type": "string"
+     },
+     "price_per_unit": {
+      "type": "string"
+     },
+     "total_price": {
+      "type": "string"
+     },
+     "type": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "version": {
+      "anyOf": [
+       {
+        "format": "int32",
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "name",
+     "type",
+     "total_price",
+     "is_inclusive"
+    ],
+    "type": "object"
+   },
+   "BookingRevisions.BookingCustomer": {
+    "properties": {
+     "address": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "city": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "company": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "country": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.country"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "language": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "mail": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.email"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "meta": {
+      "anyOf": [
+       {
+        "type": "object",
+        "unevaluatedProperties": {}
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "name": {
+      "type": "string"
+     },
+     "phone": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "state": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "surname": {
+      "type": "string"
+     },
+     "zip": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "name",
+     "surname",
+     "mail",
+     "phone",
+     "language",
+     "country",
+     "city",
+     "address",
+     "zip"
+    ],
+    "type": "object"
+   },
+   "BookingRevisions.BookingGuarantee": {
+    "properties": {
+     "card_number": {
+      "type": "string"
+     },
+     "card_type": {
+      "$ref": "#/components/schemas/BookingRevisions.CardType"
+     },
+     "cardholder_name": {
+      "type": "string"
+     },
+     "cvv": {
+      "type": "string"
+     },
+     "expiration_date": {
+      "type": "string"
+     },
+     "is_virtual": {
+      "type": "boolean"
+     },
+     "meta": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/BookingRevisions.BookingGuaranteeMeta"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "token": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "card_number",
+     "card_type",
+     "cardholder_name",
+     "cvv",
+     "expiration_date",
+     "is_virtual"
+    ],
+    "type": "object"
+   },
+   "BookingRevisions.BookingGuaranteeMeta": {
+    "properties": {
+     "virtual_card_currency_code": {
+      "type": "string"
+     },
+     "virtual_card_current_balance": {
+      "type": "string"
+     },
+     "virtual_card_decimal_places": {
+      "type": "string"
+     },
+     "virtual_card_effective_date": {
+      "type": "string"
+     },
+     "virtual_card_expiration_date": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "BookingRevisions.BookingGuest": {
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "surname": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "surname"
+    ],
+    "type": "object"
+   },
+   "BookingRevisions.BookingOccupancy": {
+    "properties": {
+     "adults": {
+      "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+     },
+     "ages": {
+      "anyOf": [
+       {
+        "items": {
+         "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "children": {
+      "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+     },
+     "infants": {
+      "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+     }
+    },
+    "required": [
+     "adults",
+     "children",
+     "infants"
+    ],
+    "type": "object"
+   },
+   "BookingRevisions.BookingRevision": {
+    "properties": {
+     "acknowledge_status": {
+      "$ref": "#/components/schemas/BookingRevisions.AcknowledgeStatus"
+     },
+     "agent": {},
+     "amount": {
+      "type": "string"
+     },
+     "arrival_date": {
+      "anyOf": [
+       {
+        "format": "date",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "arrival_hour": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "booking_id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "channel_id": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "currency": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.currency"
+       }
+      ]
+     },
+     "customer": {
+      "$ref": "#/components/schemas/BookingRevisions.BookingCustomer"
+     },
+     "departure_date": {
+      "anyOf": [
+       {
+        "format": "date",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "deposits": {
+      "items": {},
+      "type": "array"
+     },
+     "guarantee": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/BookingRevisions.BookingGuarantee"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "inserted_at": {
+      "format": "date-time",
+      "type": "string"
+     },
+     "is_crs_revision": {
+      "type": "boolean"
+     },
+     "meta": {
+      "type": "object",
+      "unevaluatedProperties": {}
+     },
+     "notes": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "occupancy": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/BookingRevisions.BookingOccupancy"
+       }
+      ]
+     },
+     "ota_commission": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "ota_name": {
+      "type": "string"
+     },
+     "ota_reservation_code": {
+      "type": "string"
+     },
+     "payment_collect": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/BookingRevisions.PaymentCollect"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "payment_type": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/BookingRevisions.PaymentType"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "property_id": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "raw_message": {
+      "type": "string"
+     },
+     "rooms": {
+      "items": {
+       "$ref": "#/components/schemas/BookingRevisions.BookingRoom"
+      },
+      "type": "array"
+     },
+     "secondary_ota": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "services": {
+      "items": {
+       "$ref": "#/components/schemas/BookingRevisions.BookingService"
+      },
+      "type": "array"
+     },
+     "status": {
+      "$ref": "#/components/schemas/BookingRevisions.BookingRevisionStatus"
+     },
+     "system_id": {
+      "type": "string"
+     },
+     "unique_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "booking_id",
+     "property_id",
+     "channel_id",
+     "unique_id",
+     "system_id",
+     "ota_reservation_code",
+     "ota_name",
+     "secondary_ota",
+     "status",
+     "acknowledge_status",
+     "rooms",
+     "services",
+     "guarantee",
+     "customer",
+     "occupancy",
+     "arrival_date",
+     "departure_date",
+     "arrival_hour",
+     "amount",
+     "currency",
+     "notes",
+     "deposits",
+     "agent",
+     "payment_collect",
+     "payment_type",
+     "ota_commission",
+     "inserted_at",
+     "meta",
+     "raw_message",
+     "is_crs_revision"
+    ],
+    "type": "object"
+   },
+   "BookingRevisions.BookingRevisionRelationships": {
+    "properties": {
+     "data": {
+      "properties": {
+       "booking": {
+        "properties": {
+         "id": {
+          "$ref": "#/components/schemas/Common.Scalars.id"
+         },
+         "type": {
+          "enum": [
+           "booking"
+          ],
+          "type": "string"
+         }
+        },
+        "required": [
+         "id",
+         "type"
+        ],
+        "type": "object"
+       },
+       "property": {
+        "properties": {
+         "id": {
+          "anyOf": [
+           {
+            "$ref": "#/components/schemas/Common.Scalars.id"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "type": {
+          "enum": [
+           "property"
+          ],
+          "type": "string"
+         }
+        },
+        "required": [
+         "id",
+         "type"
+        ],
+        "type": "object"
+       }
+      },
+      "required": [
+       "property",
+       "booking"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
+   "BookingRevisions.BookingRevisionStatus": {
+    "enum": [
+     "new",
+     "modified",
+     "cancelled"
+    ],
+    "type": "string"
+   },
+   "BookingRevisions.BookingRoom": {
+    "properties": {
+     "amount": {
+      "type": "string"
+     },
+     "booking_room_id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "checkin_date": {
+      "format": "date",
+      "type": "string"
+     },
+     "checkout_date": {
+      "format": "date",
+      "type": "string"
+     },
+     "collected_taxes": {
+      "items": {
+       "$ref": "#/components/schemas/BookingRevisions.BookingCollectedTax"
+      },
+      "type": "array"
+     },
+     "days": {
+      "type": "object",
+      "unevaluatedProperties": {
+       "type": "string"
+      }
+     },
+     "guests": {
+      "anyOf": [
+       {
+        "items": {
+         "$ref": "#/components/schemas/BookingRevisions.BookingGuest"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "is_cancelled": {
+      "type": "boolean"
+     },
+     "meta": {
+      "anyOf": [
+       {
+        "type": "object",
+        "unevaluatedProperties": {}
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "occupancy": {
+      "$ref": "#/components/schemas/BookingRevisions.BookingOccupancy"
+     },
+     "ota_commission": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "ota_unique_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "rate_plan_id": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "room_type_id": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "services": {
+      "items": {
+       "$ref": "#/components/schemas/BookingRevisions.BookingService"
+      },
+      "type": "array"
+     },
+     "taxes": {
+      "items": {
+       "$ref": "#/components/schemas/BookingRevisions.BookingRoomTax"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "booking_room_id",
+     "room_type_id",
+     "rate_plan_id",
+     "checkin_date",
+     "checkout_date",
+     "occupancy",
+     "guests",
+     "services",
+     "taxes",
+     "amount",
+     "days",
+     "ota_commission",
+     "ota_unique_id",
+     "is_cancelled",
+     "meta"
+    ],
+    "type": "object"
+   },
+   "BookingRevisions.BookingRoomTax": {
+    "properties": {
+     "is_inclusive": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     },
+     "nights": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       }
+      ]
+     },
+     "persons": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       }
+      ]
+     },
+     "price_mode": {
+      "type": "string"
+     },
+     "price_per_unit": {
+      "type": "string"
+     },
+     "total_price": {
+      "type": "string"
+     },
+     "type": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "version": {
+      "anyOf": [
+       {
+        "format": "int32",
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "name",
+     "type",
+     "total_price",
+     "is_inclusive"
+    ],
+    "type": "object"
+   },
+   "BookingRevisions.BookingService": {
+    "properties": {
+     "is_inclusive": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     },
+     "nights": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       }
+      ]
+     },
+     "persons": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       }
+      ]
+     },
+     "price_mode": {
+      "type": "string"
+     },
+     "price_per_unit": {
+      "type": "string"
+     },
+     "service_rph": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "total_price": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "type",
+     "price_mode",
+     "price_per_unit",
+     "total_price",
+     "nights",
+     "persons",
+     "is_inclusive"
+    ],
+    "type": "object"
+   },
+   "BookingRevisions.CardType": {
+    "enum": [
+     "unknown",
+     "AX",
+     "BC",
+     "BL",
+     "CU",
+     "DN",
+     "DS",
+     "EL",
+     "JC",
+     "MA",
+     "MC",
+     "MI",
+     "VI"
+    ],
+    "type": "string"
+   },
+   "BookingRevisions.PaymentCollect": {
+    "enum": [
+     "property",
+     "ota"
+    ],
+    "type": "string"
+   },
+   "BookingRevisions.PaymentType": {
+    "enum": [
+     "credit_card",
+     "bank_transfer"
+    ],
+    "type": "string"
+   },
+   "Bookings.Booking": {
+    "properties": {
+     "acknowledge_status": {
+      "$ref": "#/components/schemas/BookingRevisions.AcknowledgeStatus"
+     },
+     "agent": {},
+     "amount": {
+      "type": "string"
+     },
+     "arrival_date": {
+      "anyOf": [
+       {
+        "format": "date",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "arrival_hour": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "booking_id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "channel_id": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "currency": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.currency"
+       }
+      ]
+     },
+     "customer": {
+      "$ref": "#/components/schemas/BookingRevisions.BookingCustomer"
+     },
+     "departure_date": {
+      "anyOf": [
+       {
+        "format": "date",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "deposits": {
+      "items": {},
+      "type": "array"
+     },
+     "guarantee": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/BookingRevisions.BookingGuarantee"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "has_unacked_revisions": {
+      "type": "boolean"
+     },
+     "id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "inserted_at": {
+      "format": "date-time",
+      "type": "string"
+     },
+     "is_crs_revision": {
+      "type": "boolean"
+     },
+     "meta": {
+      "type": "object",
+      "unevaluatedProperties": {}
+     },
+     "notes": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "occupancy": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/BookingRevisions.BookingOccupancy"
+       }
+      ]
+     },
+     "ota_commission": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "ota_name": {
+      "type": "string"
+     },
+     "ota_reservation_code": {
+      "type": "string"
+     },
+     "payment_collect": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/BookingRevisions.PaymentCollect"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "payment_type": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/BookingRevisions.PaymentType"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "property_id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "raw_message": {
+      "type": "string"
+     },
+     "revision_id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "rooms": {
+      "items": {
+       "$ref": "#/components/schemas/BookingRevisions.BookingRoom"
+      },
+      "type": "array"
+     },
+     "secondary_ota": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "services": {
+      "items": {
+       "$ref": "#/components/schemas/BookingRevisions.BookingService"
+      },
+      "type": "array"
+     },
+     "status": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/BookingRevisions.BookingRevisionStatus"
+       }
+      ]
+     },
+     "unique_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "booking_id",
+     "revision_id",
+     "channel_id",
+     "unique_id",
+     "secondary_ota",
+     "acknowledge_status",
+     "has_unacked_revisions",
+     "amount",
+     "occupancy",
+     "guarantee",
+     "agent",
+     "raw_message",
+     "is_crs_revision",
+     "inserted_at",
+     "status",
+     "property_id",
+     "arrival_date",
+     "departure_date",
+     "ota_name",
+     "currency",
+     "ota_reservation_code",
+     "arrival_hour",
+     "services",
+     "payment_collect",
+     "payment_type",
+     "ota_commission",
+     "notes",
+     "meta",
+     "customer",
+     "rooms",
+     "deposits"
+    ],
+    "type": "object"
+   },
+   "Bookings.BookingResource": {
+    "properties": {
+     "attributes": {
+      "$ref": "#/components/schemas/Bookings.Booking"
+     },
+     "id": {
+      "$ref": "#/components/schemas/Common.Scalars.id"
+     },
+     "type": {
+      "enum": [
+       "booking"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "type",
+     "id",
+     "attributes"
+    ],
+    "type": "object"
+   },
+   "Common.Errors.BadRequestReasonsObject": {
+    "properties": {
+     "code": {
+      "enum": [
+       "bad_request"
+      ],
+      "type": "string"
+     },
+     "details": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "title": {
+      "enum": [
+       "Bad Request"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "title",
+     "details"
+    ],
+    "type": "object"
+   },
+   "Common.Errors.BadRequestWithReasons": {
+    "properties": {
+     "errors": {
+      "$ref": "#/components/schemas/Common.Errors.BadRequestReasonsObject"
+     }
+    },
+    "required": [
+     "errors"
+    ],
+    "type": "object"
+   },
+   "Common.Errors.Forbidden": {
+    "properties": {
+     "errors": {
+      "properties": {
+       "code": {
+        "enum": [
+         "forbidden"
+        ],
+        "type": "string"
+       },
+       "title": {
+        "enum": [
+         "Forbidden"
+        ],
+        "type": "string"
+       }
+      },
+      "required": [
+       "code",
+       "title"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "errors"
+    ],
+    "type": "object"
+   },
+   "Common.Errors.InvalidArguments": {
+    "properties": {
+     "errors": {
+      "$ref": "#/components/schemas/Common.Errors.InvalidArgumentsObject"
+     }
+    },
+    "required": [
+     "errors"
+    ],
+    "type": "object"
+   },
+   "Common.Errors.InvalidArgumentsObject": {
+    "properties": {
+     "code": {
+      "enum": [
+       "bad_request"
+      ],
+      "type": "string"
+     },
+     "details": {
+      "type": "object",
+      "unevaluatedProperties": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      }
+     },
+     "title": {
+      "enum": [
+       "Bad Request"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "title",
+     "details"
+    ],
+    "type": "object"
+   },
+   "Common.Errors.InvalidNestedArguments": {
+    "properties": {
+     "errors": {
+      "$ref": "#/components/schemas/Common.Errors.InvalidNestedArgumentsObject"
+     }
+    },
+    "required": [
+     "errors"
+    ],
+    "type": "object"
+   },
+   "Common.Errors.InvalidNestedArgumentsObject": {
+    "properties": {
+     "code": {
+      "enum": [
+       "bad_request"
+      ],
+      "type": "string"
+     },
+     "details": {
+      "type": "object",
+      "unevaluatedProperties": {
+       "anyOf": [
+        {
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        },
+        {
+         "type": "object",
+         "unevaluatedProperties": {
+          "items": {
+           "type": "string"
+          },
+          "type": "array"
+         }
+        }
+       ]
+      }
+     },
+     "title": {
+      "enum": [
+       "Bad Request"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "title",
+     "details"
+    ],
+    "type": "object"
+   },
+   "Common.Errors.NotFound": {
+    "properties": {
+     "errors": {
+      "properties": {
+       "code": {
+        "enum": [
+         "resource_not_found"
+        ],
+        "type": "string"
+       },
+       "title": {
+        "enum": [
+         "Resource Not Found"
+        ],
+        "type": "string"
+       }
+      },
+      "required": [
+       "code",
+       "title"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "errors"
+    ],
+    "type": "object"
+   },
+   "Common.Errors.TooManyRequests": {
+    "properties": {
+     "errors": {
+      "properties": {
+       "code": {
+        "enum": [
+         "http_too_many_requests"
+        ],
+        "type": "string"
+       },
+       "title": {
+        "enum": [
+         "Too Many Requests"
+        ],
+        "type": "string"
+       }
+      },
+      "required": [
+       "code",
+       "title"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "errors"
+    ],
+    "type": "object"
+   },
+   "Common.Errors.Unauthorized": {
+    "properties": {
+     "errors": {
+      "properties": {
+       "code": {
+        "enum": [
+         "unauthorized"
+        ],
+        "type": "string"
+       },
+       "title": {
+        "enum": [
+         "Unauthorized"
+        ],
+        "type": "string"
+       }
+      },
+      "required": [
+       "code",
+       "title"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "errors"
+    ],
+    "type": "object"
+   },
+   "Common.Errors.UnparsableRequest": {
+    "properties": {
+     "errors": {
+      "$ref": "#/components/schemas/Common.Errors.UnparsableRequestObject"
+     }
+    },
+    "required": [
+     "errors"
+    ],
+    "type": "object"
+   },
+   "Common.Errors.UnparsableRequestObject": {
+    "properties": {
+     "code": {
+      "enum": [
+       "bad_request"
+      ],
+      "type": "string"
+     },
+     "details": {
+      "type": "object",
+      "unevaluatedProperties": {
+       "type": "string"
+      }
+     },
+     "title": {
+      "enum": [
+       "Bad Request"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "title",
+     "details"
+    ],
+    "type": "object"
+   },
+   "Common.Errors.UnprocessableEntity": {
+    "properties": {
+     "errors": {
+      "$ref": "#/components/schemas/Common.Errors.UnprocessableEntityObject"
+     }
+    },
+    "required": [
+     "errors"
+    ],
+    "type": "object"
+   },
+   "Common.Errors.UnprocessableEntityObject": {
+    "properties": {
+     "code": {
+      "enum": [
+       "unprocessable_entity"
+      ],
+      "type": "string"
+     },
+     "details": {
+      "type": "object",
+      "unevaluatedProperties": {
+       "type": "string"
+      }
+     },
+     "title": {
+      "enum": [
+       "Unprocessable Entity"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "title"
+    ],
+    "type": "object"
+   },
+   "Common.Errors.ValidationError": {
+    "properties": {
+     "errors": {
+      "$ref": "#/components/schemas/Common.Errors.ValidationErrorObject"
+     }
+    },
+    "required": [
+     "errors"
+    ],
+    "type": "object"
+   },
+   "Common.Errors.ValidationErrorObject": {
+    "properties": {
+     "code": {
+      "enum": [
+       "validation_error"
+      ],
+      "type": "string"
+     },
+     "details": {
+      "type": "object",
+      "unevaluatedProperties": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      }
+     },
+     "title": {
+      "enum": [
+       "Validation Error"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "code",
+     "title",
+     "details"
+    ],
+    "type": "object"
+   },
+   "Common.JsonApi.OptionAttributes": {
+    "properties": {
+     "id": {
+      "$ref": "#/components/schemas/Common.Scalars.id"
+     },
+     "title": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "title"
+    ],
+    "type": "object"
+   },
+   "Common.JsonApi.SuccessMessage": {
+    "properties": {
+     "meta": {
+      "properties": {
+       "message": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "message"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "meta"
+    ],
+    "type": "object"
+   },
+   "Common.Pagination.OrderDirection": {
+    "enum": [
+     "asc",
+     "desc"
+    ],
+    "type": "string"
+   },
+   "Common.Pagination.PaginationMeta": {
+    "properties": {
+     "limit": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.positiveInt"
+       }
+      ],
+      "maximum": 100
+     },
+     "order_by": {
+      "type": "string"
+     },
+     "order_direction": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Pagination.OrderDirection"
+       }
+      ]
+     },
+     "page": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.positiveInt"
+       }
+      ]
+     },
+     "total": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       }
+      ]
+     }
+    },
+    "required": [
+     "page",
+     "limit",
+     "total",
+     "order_by",
+     "order_direction"
+    ],
+    "type": "object"
+   },
+   "Common.Scalars.country": {
+    "maxLength": 2,
+    "minLength": 2,
+    "type": "string"
+   },
+   "Common.Scalars.currency": {
+    "maxLength": 3,
+    "minLength": 3,
+    "type": "string"
+   },
+   "Common.Scalars.decimalString": {
+    "type": "string"
+   },
+   "Common.Scalars.email": {
+    "format": "email",
+    "type": "string"
+   },
+   "Common.Scalars.id": {
+    "format": "uuid",
+    "type": "string"
+   },
+   "Common.Scalars.nonNegativeInt": {
+    "format": "int32",
+    "minimum": 0,
+    "type": "integer"
+   },
+   "Common.Scalars.positiveInt": {
+    "format": "int32",
+    "minimum": 1,
+    "type": "integer"
+   },
+   "Common.Scalars.timezone": {
+    "type": "string"
+   },
+   "Facilities.Facility": {
+    "properties": {
+     "category": {
+      "type": "string"
+     },
+     "id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "title": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "category",
+     "title"
+    ],
+    "type": "object"
+   },
+   "Facilities.FacilityResource": {
+    "properties": {
+     "attributes": {
+      "$ref": "#/components/schemas/Facilities.Facility"
+     },
+     "id": {
+      "$ref": "#/components/schemas/Common.Scalars.id"
+     },
+     "type": {
+      "enum": [
+       "facility"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "type",
+     "id",
+     "attributes"
+    ],
+    "type": "object"
+   },
+   "HotelPolicies.EmbeddedHotelPolicy": {
+    "properties": {
+     "attributes": {
+      "$ref": "#/components/schemas/HotelPolicies.EmbeddedHotelPolicyAttributes"
+     },
+     "id": {
+      "$ref": "#/components/schemas/Common.Scalars.id"
+     },
+     "type": {
+      "enum": [
+       "hotel_policy"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "type",
+     "id",
+     "attributes"
+    ],
+    "type": "object"
+   },
+   "HotelPolicies.EmbeddedHotelPolicyAttributes": {
+    "properties": {
+     "checkin_from_time": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/HotelPolicies.clockTime"
+       }
+      ]
+     },
+     "checkin_to_time": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/HotelPolicies.clockTime"
+       }
+      ]
+     },
+     "checkout_from_time": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/HotelPolicies.clockTime"
+       }
+      ]
+     },
+     "checkout_to_time": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/HotelPolicies.clockTime"
+       }
+      ]
+     },
+     "id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "pets_policy": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/HotelPolicies.PetsPolicy"
+       }
+      ]
+     },
+     "smoking_policy": {
+      "$ref": "#/components/schemas/HotelPolicies.SmokingPolicy"
+     },
+     "title": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "title",
+     "pets_policy",
+     "smoking_policy",
+     "checkin_from_time",
+     "checkin_to_time",
+     "checkout_from_time",
+     "checkout_to_time"
+    ],
+    "type": "object"
+   },
+   "HotelPolicies.PetsPolicy": {
+    "enum": [
+     "allowed",
+     "not_allowed",
+     "by_arrangements",
+     "assistive_only"
+    ],
+    "type": "string"
+   },
+   "HotelPolicies.SmokingPolicy": {
+    "enum": [
+     "no_smoking",
+     "permitted_areas_only",
+     "allowed"
+    ],
+    "type": "string"
+   },
+   "HotelPolicies.clockTime": {
+    "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+    "type": "string"
+   },
+   "Photos.EmbeddedPhotoWrite": {
+    "properties": {
+     "author": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "description": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "is_removed": {
+      "type": "boolean"
+     },
+     "kind": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Photos.PhotoKind"
+       }
+      ]
+     },
+     "url": {
+      "format": "uri",
+      "type": "string"
+     }
+    },
+    "required": [
+     "url",
+     "kind"
+    ],
+    "type": "object"
+   },
+   "Photos.Photo": {
+    "properties": {
+     "author": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "description": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "kind": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Photos.PhotoKind"
+       }
+      ]
+     },
+     "position": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       }
+      ]
+     },
+     "property_id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "room_type_id": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "url": {
+      "format": "uri",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "property_id",
+     "room_type_id",
+     "kind",
+     "position",
+     "author",
+     "description",
+     "url"
+    ],
+    "type": "object"
+   },
+   "Photos.PhotoKind": {
+    "enum": [
+     "photo",
+     "ad",
+     "menu"
+    ],
+    "type": "string"
+   },
+   "Properties.MinStayType": {
+    "enum": [
+     "both",
+     "arrival",
+     "through"
+    ],
+    "type": "string"
+   },
+   "Properties.Property": {
+    "properties": {
+     "acc_channels_count": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       }
+      ]
+     },
+     "address": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "maxLength": 255
+     },
+     "city": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "maxLength": 255
+     },
+     "content": {
+      "$ref": "#/components/schemas/Properties.PropertyContent"
+     },
+     "country": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.country"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "currency": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.currency"
+       }
+      ]
+     },
+     "default_cancellation_policy_id": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "default_tax_set_id": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "email": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.email"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "expected_removal_date": {
+      "anyOf": [
+       {
+        "format": "date",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "hotel_policy_id": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "is_active": {
+      "type": "boolean"
+     },
+     "is_demo": {
+      "enum": [
+       true
+      ],
+      "type": "boolean"
+     },
+     "latitude": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "maxLength": 11
+     },
+     "location_precision": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "logo_url": {
+      "anyOf": [
+       {
+        "format": "uri",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "longitude": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "maxLength": 12
+     },
+     "max_count_of_occupancies": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       }
+      ]
+     },
+     "max_count_of_rate_plans": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       }
+      ]
+     },
+     "max_count_of_room_types": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       }
+      ]
+     },
+     "max_count_of_users": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       }
+      ]
+     },
+     "min_stay_type": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Properties.MinStayType"
+       }
+      ],
+      "deprecated": true
+     },
+     "phone": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "maxLength": 32
+     },
+     "property_category": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Properties.PropertyCategory"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "property_type": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Properties.PropertyType"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "settings": {
+      "$ref": "#/components/schemas/Properties.PropertySettings"
+     },
+     "state": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "maxLength": 255
+     },
+     "timezone": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.timezone"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "title": {
+      "maxLength": 255,
+      "type": "string"
+     },
+     "website": {
+      "anyOf": [
+       {
+        "format": "uri",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "zip_code": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "maxLength": 32
+     }
+    },
+    "required": [
+     "id",
+     "is_active",
+     "expected_removal_date",
+     "acc_channels_count",
+     "property_category",
+     "max_count_of_room_types",
+     "max_count_of_rate_plans",
+     "max_count_of_occupancies",
+     "max_count_of_users",
+     "title",
+     "currency",
+     "email",
+     "phone",
+     "zip_code",
+     "country",
+     "state",
+     "city",
+     "address",
+     "longitude",
+     "latitude",
+     "timezone",
+     "property_type",
+     "logo_url",
+     "website",
+     "hotel_policy_id",
+     "default_cancellation_policy_id",
+     "default_tax_set_id",
+     "location_precision",
+     "min_stay_type",
+     "settings",
+     "content"
+    ],
+    "type": "object"
+   },
+   "Properties.PropertyCategory": {
+    "enum": [
+     "camping",
+     "hotel",
+     "vacation_rental"
+    ],
+    "type": "string"
+   },
+   "Properties.PropertyContent": {
+    "properties": {
+     "description": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "important_information": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "photos": {
+      "items": {
+       "$ref": "#/components/schemas/Photos.Photo"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "description",
+     "important_information",
+     "photos"
+    ],
+    "type": "object"
+   },
+   "Properties.PropertyContentWrite": {
+    "properties": {
+     "description": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "important_information": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "photos": {
+      "items": {
+       "$ref": "#/components/schemas/Photos.EmbeddedPhotoWrite"
+      },
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "Properties.PropertyCreate": {
+    "properties": {
+     "address": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "maxLength": 255
+     },
+     "city": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "maxLength": 255
+     },
+     "content": {
+      "$ref": "#/components/schemas/Properties.PropertyContentWrite"
+     },
+     "country": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.country"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "currency": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.currency"
+       }
+      ]
+     },
+     "default_cancellation_policy_id": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "default_tax_set_id": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "email": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.email"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "facilities": {
+      "items": {
+       "$ref": "#/components/schemas/Common.Scalars.id"
+      },
+      "type": "array"
+     },
+     "group_id": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "hotel_policy_id": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "latitude": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "maxLength": 11
+     },
+     "location_precision": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "logo_url": {
+      "anyOf": [
+       {
+        "format": "uri",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "longitude": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "maxLength": 12
+     },
+     "min_stay_type": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Properties.MinStayType"
+       }
+      ],
+      "deprecated": true
+     },
+     "phone": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "maxLength": 32
+     },
+     "property_type": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Properties.PropertyType"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "settings": {
+      "$ref": "#/components/schemas/Properties.PropertySettingsWrite"
+     },
+     "state": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "maxLength": 255
+     },
+     "timezone": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.timezone"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "title": {
+      "maxLength": 255,
+      "type": "string"
+     },
+     "website": {
+      "anyOf": [
+       {
+        "format": "uri",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "zip_code": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "maxLength": 32
+     }
+    },
+    "required": [
+     "title",
+     "currency"
+    ],
+    "type": "object"
+   },
+   "Properties.PropertyCreateRequest": {
+    "properties": {
+     "property": {
+      "$ref": "#/components/schemas/Properties.PropertyCreate"
+     }
+    },
+    "required": [
+     "property"
+    ],
+    "type": "object"
+   },
+   "Properties.PropertyListRelationships": {
+    "properties": {
+     "groups": {
+      "properties": {
+       "data": {
+        "items": {
+         "properties": {
+          "attributes": {
+           "$ref": "#/components/schemas/Common.JsonApi.OptionAttributes"
+          },
+          "id": {
+           "$ref": "#/components/schemas/Common.Scalars.id"
+          },
+          "type": {
+           "enum": [
+            "group"
+           ],
+           "type": "string"
+          }
+         },
+         "required": [
+          "type",
+          "id",
+          "attributes"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       }
+      },
+      "required": [
+       "data"
+      ],
+      "type": "object"
+     },
+     "users": {
+      "properties": {
+       "data": {
+        "items": {
+         "$ref": "#/components/schemas/Authentication.EmbeddedUser"
+        },
+        "type": "array"
+       }
+      },
+      "required": [
+       "data"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "users",
+     "groups"
+    ],
+    "type": "object"
+   },
+   "Properties.PropertyListResource": {
+    "properties": {
+     "attributes": {
+      "$ref": "#/components/schemas/Properties.Property"
+     },
+     "id": {
+      "$ref": "#/components/schemas/Common.Scalars.id"
+     },
+     "relationships": {
+      "$ref": "#/components/schemas/Properties.PropertyListRelationships"
+     },
+     "type": {
+      "enum": [
+       "property"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "type",
+     "id",
+     "attributes",
+     "relationships"
+    ],
+    "type": "object"
+   },
+   "Properties.PropertyRelationships": {
+    "properties": {
+     "cancellation_policies": {
+      "properties": {
+       "data": {
+        "items": {
+         "properties": {
+          "attributes": {
+           "$ref": "#/components/schemas/Common.JsonApi.OptionAttributes"
+          },
+          "id": {
+           "$ref": "#/components/schemas/Common.Scalars.id"
+          },
+          "type": {
+           "enum": [
+            "cancellation_policy"
+           ],
+           "type": "string"
+          }
+         },
+         "required": [
+          "type",
+          "id",
+          "attributes"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       }
+      },
+      "required": [
+       "data"
+      ],
+      "type": "object"
+     },
+     "facilities": {
+      "properties": {
+       "data": {
+        "items": {
+         "$ref": "#/components/schemas/Facilities.FacilityResource"
+        },
+        "type": "array"
+       }
+      },
+      "required": [
+       "data"
+      ],
+      "type": "object"
+     },
+     "groups": {
+      "properties": {
+       "data": {
+        "items": {
+         "properties": {
+          "attributes": {
+           "$ref": "#/components/schemas/Common.JsonApi.OptionAttributes"
+          },
+          "id": {
+           "$ref": "#/components/schemas/Common.Scalars.id"
+          },
+          "type": {
+           "enum": [
+            "group"
+           ],
+           "type": "string"
+          }
+         },
+         "required": [
+          "type",
+          "id",
+          "attributes"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       }
+      },
+      "required": [
+       "data"
+      ],
+      "type": "object"
+     },
+     "hotel_policies": {
+      "properties": {
+       "data": {
+        "items": {
+         "$ref": "#/components/schemas/HotelPolicies.EmbeddedHotelPolicy"
+        },
+        "type": "array"
+       }
+      },
+      "required": [
+       "data"
+      ],
+      "type": "object"
+     },
+     "tax_sets": {
+      "properties": {
+       "data": {
+        "items": {
+         "properties": {
+          "attributes": {
+           "$ref": "#/components/schemas/Common.JsonApi.OptionAttributes"
+          },
+          "id": {
+           "$ref": "#/components/schemas/Common.Scalars.id"
+          },
+          "type": {
+           "enum": [
+            "tax_set"
+           ],
+           "type": "string"
+          }
+         },
+         "required": [
+          "type",
+          "id",
+          "attributes"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       }
+      },
+      "required": [
+       "data"
+      ],
+      "type": "object"
+     },
+     "users": {
+      "properties": {
+       "data": {
+        "items": {
+         "$ref": "#/components/schemas/Authentication.EmbeddedUser"
+        },
+        "type": "array"
+       }
+      },
+      "required": [
+       "data"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "users",
+     "groups",
+     "facilities",
+     "hotel_policies",
+     "cancellation_policies",
+     "tax_sets"
+    ],
+    "type": "object"
+   },
+   "Properties.PropertyResource": {
+    "properties": {
+     "attributes": {
+      "$ref": "#/components/schemas/Properties.Property"
+     },
+     "id": {
+      "$ref": "#/components/schemas/Common.Scalars.id"
+     },
+     "relationships": {
+      "$ref": "#/components/schemas/Properties.PropertyRelationships"
+     },
+     "type": {
+      "enum": [
+       "property"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "type",
+     "id",
+     "attributes",
+     "relationships"
+    ],
+    "type": "object"
+   },
+   "Properties.PropertySettings": {
+    "properties": {
+     "allow_availability_autoupdate_on_cancellation": {
+      "type": "boolean"
+     },
+     "allow_availability_autoupdate_on_confirmation": {
+      "type": "boolean"
+     },
+     "allow_availability_autoupdate_on_modification": {
+      "type": "boolean"
+     },
+     "cut_off_days": {
+      "anyOf": [
+       {
+        "format": "int32",
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "maximum": 30,
+      "minimum": 0
+     },
+     "cut_off_time": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "max_day_advance": {
+      "anyOf": [
+       {
+        "format": "int32",
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "max_price": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.decimalString"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "min_price": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.decimalString"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "min_stay_type": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Properties.MinStayType"
+       }
+      ]
+     },
+     "state_length": {
+      "format": "int32",
+      "maximum": 730,
+      "minimum": 100,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "allow_availability_autoupdate_on_confirmation",
+     "allow_availability_autoupdate_on_modification",
+     "allow_availability_autoupdate_on_cancellation",
+     "min_stay_type",
+     "state_length",
+     "cut_off_time",
+     "cut_off_days",
+     "max_day_advance",
+     "min_price",
+     "max_price"
+    ],
+    "type": "object"
+   },
+   "Properties.PropertySettingsWrite": {
+    "properties": {
+     "allow_availability_autoupdate_on_cancellation": {
+      "type": "boolean"
+     },
+     "allow_availability_autoupdate_on_confirmation": {
+      "type": "boolean"
+     },
+     "allow_availability_autoupdate_on_modification": {
+      "type": "boolean"
+     },
+     "cut_off_days": {
+      "anyOf": [
+       {
+        "format": "int32",
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "maximum": 30,
+      "minimum": 0
+     },
+     "cut_off_time": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "max_day_advance": {
+      "anyOf": [
+       {
+        "format": "int32",
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "max_price": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.decimalString"
+       },
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "min_price": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.decimalString"
+       },
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "min_stay_type": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Properties.MinStayType"
+       }
+      ]
+     },
+     "state_length": {
+      "format": "int32",
+      "maximum": 730,
+      "minimum": 100,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "Properties.PropertyType": {
+    "enum": [
+     "apart_hotel",
+     "apartment",
+     "boat",
+     "camping",
+     "capsule_hotel",
+     "chalet",
+     "country_house",
+     "farm_stay",
+     "guest_house",
+     "holiday_home",
+     "holiday_park",
+     "homestay",
+     "hostel",
+     "hotel",
+     "inn",
+     "lodge",
+     "motel",
+     "resort",
+     "riad",
+     "ryokan",
+     "tent",
+     "villa"
+    ],
+    "type": "string"
+   },
+   "RatePlans.AutoRateMode": {
+    "enum": [
+     "$",
+     "%"
+    ],
+    "type": "string"
+   },
+   "RatePlans.AutoRateSettings": {
+    "properties": {
+     "decrease_mode": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/RatePlans.AutoRateMode"
+       }
+      ]
+     },
+     "decrease_value": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.decimalString"
+       }
+      ]
+     },
+     "increase_mode": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/RatePlans.AutoRateMode"
+       }
+      ]
+     },
+     "increase_value": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.decimalString"
+       }
+      ]
+     }
+    },
+    "required": [
+     "increase_mode",
+     "decrease_mode",
+     "increase_value",
+     "decrease_value"
+    ],
+    "type": "object"
+   },
+   "RatePlans.AutoRateSettingsWrite": {
+    "properties": {
+     "decrease_mode": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/RatePlans.AutoRateMode"
+       }
+      ]
+     },
+     "decrease_value": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.decimalString"
+       },
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       }
+      ]
+     },
+     "increase_mode": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/RatePlans.AutoRateMode"
+       }
+      ]
+     },
+     "increase_value": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.decimalString"
+       },
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       }
+      ]
+     }
+    },
+    "required": [
+     "increase_mode",
+     "decrease_mode",
+     "increase_value",
+     "decrease_value"
+    ],
+    "type": "object"
+   },
+   "RatePlans.DerivedOption": {
+    "properties": {
+     "min_stay_arrival": {
+      "items": {
+       "prefixItems": [
+        {
+         "enum": [
+          "set"
+         ],
+         "type": "string"
+        },
+        {
+         "format": "int32",
+         "minimum": 1,
+         "type": "integer"
+        }
+       ],
+       "type": "array"
+      },
+      "maxItems": 1,
+      "type": "array"
+     },
+     "min_stay_through": {
+      "items": {
+       "prefixItems": [
+        {
+         "enum": [
+          "set"
+         ],
+         "type": "string"
+        },
+        {
+         "format": "int32",
+         "minimum": 1,
+         "type": "integer"
+        }
+       ],
+       "type": "array"
+      },
+      "maxItems": 1,
+      "type": "array"
+     },
+     "rate": {
+      "items": {
+       "prefixItems": [
+        {
+         "enum": [
+          "increase_by_amount",
+          "increase_by_percent",
+          "decrease_by_amount",
+          "decrease_by_percent"
+         ],
+         "type": "string"
+        },
+        {
+         "type": "string"
+        }
+       ],
+       "type": "array"
+      },
+      "type": "array"
+     },
+     "stop_sell": {
+      "items": {
+       "prefixItems": [
+        {
+         "enum": [
+          "set"
+         ],
+         "type": "string"
+        },
+        {
+         "type": "boolean"
+        }
+       ],
+       "type": "array"
+      },
+      "maxItems": 1,
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "RatePlans.MealType": {
+    "enum": [
+     "none",
+     "all_inclusive",
+     "breakfast",
+     "lunch",
+     "dinner",
+     "american",
+     "bed_and_breakfast",
+     "buffet_breakfast",
+     "carribean_breakfast",
+     "continental_breakfast",
+     "english_breakfast",
+     "european_plan",
+     "family_plan",
+     "full_board",
+     "full_breakfast",
+     "half_board",
+     "room_only",
+     "self_catering",
+     "bermuda",
+     "dinner_bed_and_breakfast_plan",
+     "family_american",
+     "breakfast_and_lunch",
+     "lunch_and_dinner"
+    ],
+    "type": "string"
+   },
+   "RatePlans.OccupancyOption": {
+    "properties": {
+     "derived_option": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/RatePlans.DerivedOption"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "inherit_availability_offset": {
+      "type": "boolean"
+     },
+     "inherit_closed_to_arrival": {
+      "type": "boolean"
+     },
+     "inherit_closed_to_departure": {
+      "type": "boolean"
+     },
+     "inherit_max_availability": {
+      "type": "boolean"
+     },
+     "inherit_max_stay": {
+      "type": "boolean"
+     },
+     "inherit_min_stay_arrival": {
+      "type": "boolean"
+     },
+     "inherit_min_stay_through": {
+      "type": "boolean"
+     },
+     "inherit_rate": {
+      "type": "boolean"
+     },
+     "inherit_stop_sell": {
+      "type": "boolean"
+     },
+     "is_primary": {
+      "type": "boolean"
+     },
+     "occupancy": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.positiveInt"
+       }
+      ]
+     },
+     "rate": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.decimalString"
+       }
+      ]
+     },
+     "rate_category_id": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "id",
+     "occupancy",
+     "is_primary",
+     "inherit_rate",
+     "inherit_closed_to_arrival",
+     "inherit_closed_to_departure",
+     "inherit_stop_sell",
+     "inherit_min_stay_arrival",
+     "inherit_min_stay_through",
+     "inherit_max_stay",
+     "inherit_max_availability",
+     "inherit_availability_offset",
+     "derived_option",
+     "rate_category_id",
+     "rate"
+    ],
+    "type": "object"
+   },
+   "RatePlans.OccupancyOptionWrite": {
+    "properties": {
+     "derived_option": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/RatePlans.DerivedOption"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "is_primary": {
+      "type": "boolean"
+     },
+     "occupancy": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.positiveInt"
+       }
+      ]
+     },
+     "rate": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.decimalString"
+       },
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       }
+      ]
+     }
+    },
+    "required": [
+     "occupancy",
+     "is_primary"
+    ],
+    "type": "object"
+   },
+   "RatePlans.RateMode": {
+    "enum": [
+     "manual",
+     "derived",
+     "cascade",
+     "auto"
+    ],
+    "type": "string"
+   },
+   "RatePlans.RatePlan": {
+    "properties": {
+     "auto_rate_settings": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/RatePlans.AutoRateSettings"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "cancellation_policy_id": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "children_fee": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.decimalString"
+       }
+      ]
+     },
+     "closed_to_arrival": {
+      "items": {
+       "type": "boolean"
+      },
+      "maxItems": 7,
+      "minItems": 7,
+      "type": "array"
+     },
+     "closed_to_departure": {
+      "items": {
+       "type": "boolean"
+      },
+      "maxItems": 7,
+      "minItems": 7,
+      "type": "array"
+     },
+     "currency": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.currency"
+       }
+      ]
+     },
+     "id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "infant_fee": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.decimalString"
+       }
+      ]
+     },
+     "inherit_availability_offset": {
+      "type": "boolean"
+     },
+     "inherit_closed_to_arrival": {
+      "type": "boolean"
+     },
+     "inherit_closed_to_departure": {
+      "type": "boolean"
+     },
+     "inherit_max_availability": {
+      "type": "boolean"
+     },
+     "inherit_max_stay": {
+      "type": "boolean"
+     },
+     "inherit_min_stay_arrival": {
+      "type": "boolean"
+     },
+     "inherit_min_stay_through": {
+      "type": "boolean"
+     },
+     "inherit_rate": {
+      "type": "boolean"
+     },
+     "inherit_stop_sell": {
+      "type": "boolean"
+     },
+     "max_stay": {
+      "items": {
+       "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+      },
+      "maxItems": 7,
+      "minItems": 7,
+      "type": "array"
+     },
+     "meal_type": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/RatePlans.MealType"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "meta": {
+      "anyOf": [
+       {
+        "type": "object",
+        "unevaluatedProperties": {}
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "min_stay_arrival": {
+      "items": {
+       "$ref": "#/components/schemas/Common.Scalars.positiveInt"
+      },
+      "maxItems": 7,
+      "minItems": 7,
+      "type": "array"
+     },
+     "min_stay_through": {
+      "items": {
+       "$ref": "#/components/schemas/Common.Scalars.positiveInt"
+      },
+      "maxItems": 7,
+      "minItems": 7,
+      "type": "array"
+     },
+     "options": {
+      "items": {
+       "$ref": "#/components/schemas/RatePlans.OccupancyOption"
+      },
+      "type": "array"
+     },
+     "rate_mode": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/RatePlans.RateMode"
+       }
+      ]
+     },
+     "sell_mode": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/RatePlans.SellMode"
+       }
+      ]
+     },
+     "stop_sell": {
+      "items": {
+       "type": "boolean"
+      },
+      "maxItems": 7,
+      "minItems": 7,
+      "type": "array"
+     },
+     "tax_set_id": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "title": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+     },
+     "ui_read_only": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "id",
+     "title",
+     "sell_mode",
+     "rate_mode",
+     "currency",
+     "meal_type",
+     "tax_set_id",
+     "cancellation_policy_id",
+     "ui_read_only",
+     "meta",
+     "inherit_rate",
+     "inherit_closed_to_arrival",
+     "inherit_closed_to_departure",
+     "inherit_stop_sell",
+     "inherit_min_stay_arrival",
+     "inherit_min_stay_through",
+     "inherit_max_stay",
+     "inherit_max_availability",
+     "inherit_availability_offset",
+     "options",
+     "auto_rate_settings",
+     "children_fee",
+     "infant_fee",
+     "max_stay",
+     "min_stay_arrival",
+     "min_stay_through",
+     "closed_to_arrival",
+     "closed_to_departure",
+     "stop_sell"
+    ],
+    "type": "object"
+   },
+   "RatePlans.RatePlanCreate": {
+    "properties": {
+     "auto_rate_settings": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/RatePlans.AutoRateSettingsWrite"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "cancellation_policy_id": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "children_fee": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.decimalString"
+       },
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       }
+      ]
+     },
+     "closed_to_arrival": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "items": {
+         "type": "boolean"
+        },
+        "type": "array"
+       }
+      ]
+     },
+     "closed_to_departure": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "items": {
+         "type": "boolean"
+        },
+        "type": "array"
+       }
+      ]
+     },
+     "currency": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.currency"
+       }
+      ]
+     },
+     "infant_fee": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.decimalString"
+       },
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       }
+      ]
+     },
+     "inherit_availability_offset": {
+      "type": "boolean"
+     },
+     "inherit_closed_to_arrival": {
+      "type": "boolean"
+     },
+     "inherit_closed_to_departure": {
+      "type": "boolean"
+     },
+     "inherit_max_availability": {
+      "type": "boolean"
+     },
+     "inherit_max_stay": {
+      "type": "boolean"
+     },
+     "inherit_min_stay_arrival": {
+      "type": "boolean"
+     },
+     "inherit_min_stay_through": {
+      "type": "boolean"
+     },
+     "inherit_rate": {
+      "type": "boolean"
+     },
+     "inherit_stop_sell": {
+      "type": "boolean"
+     },
+     "max_stay": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       },
+       {
+        "items": {
+         "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+        },
+        "type": "array"
+       }
+      ]
+     },
+     "meal_type": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/RatePlans.MealType"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "meta": {
+      "anyOf": [
+       {
+        "type": "object",
+        "unevaluatedProperties": {}
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "min_stay_arrival": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.positiveInt"
+       },
+       {
+        "items": {
+         "$ref": "#/components/schemas/Common.Scalars.positiveInt"
+        },
+        "type": "array"
+       }
+      ]
+     },
+     "min_stay_through": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.positiveInt"
+       },
+       {
+        "items": {
+         "$ref": "#/components/schemas/Common.Scalars.positiveInt"
+        },
+        "type": "array"
+       }
+      ]
+     },
+     "options": {
+      "items": {
+       "$ref": "#/components/schemas/RatePlans.OccupancyOptionWrite"
+      },
+      "type": "array"
+     },
+     "parent_rate_plan_id": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "property_id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "rate_mode": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/RatePlans.RateMode"
+       }
+      ]
+     },
+     "room_type_id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "sell_mode": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/RatePlans.SellMode"
+       }
+      ]
+     },
+     "stop_sell": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "items": {
+         "type": "boolean"
+        },
+        "type": "array"
+       }
+      ]
+     },
+     "tax_set_id": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "title": {
+      "maxLength": 255,
+      "minLength": 1,
+      "type": "string"
+     },
+     "ui_read_only": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "title",
+     "property_id",
+     "room_type_id",
+     "options"
+    ],
+    "type": "object"
+   },
+   "RatePlans.RatePlanCreateRequest": {
+    "properties": {
+     "rate_plan": {
+      "$ref": "#/components/schemas/RatePlans.RatePlanCreate"
+     }
+    },
+    "required": [
+     "rate_plan"
+    ],
+    "type": "object"
+   },
+   "RatePlans.RatePlanRelationships": {
+    "properties": {
+     "channel": {
+      "properties": {
+       "data": {
+        "properties": {
+         "id": {
+          "$ref": "#/components/schemas/Common.Scalars.id"
+         },
+         "type": {
+          "enum": [
+           "channel"
+          ],
+          "type": "string"
+         }
+        },
+        "required": [
+         "id",
+         "type"
+        ],
+        "type": "object"
+       }
+      },
+      "required": [
+       "data"
+      ],
+      "type": "object"
+     },
+     "parent_rate_plan": {
+      "properties": {
+       "data": {
+        "properties": {
+         "id": {
+          "$ref": "#/components/schemas/Common.Scalars.id"
+         },
+         "type": {
+          "enum": [
+           "rate_plan"
+          ],
+          "type": "string"
+         }
+        },
+        "required": [
+         "id",
+         "type"
+        ],
+        "type": "object"
+       }
+      },
+      "required": [
+       "data"
+      ],
+      "type": "object"
+     },
+     "property": {
+      "properties": {
+       "data": {
+        "properties": {
+         "id": {
+          "$ref": "#/components/schemas/Common.Scalars.id"
+         },
+         "type": {
+          "enum": [
+           "property"
+          ],
+          "type": "string"
+         }
+        },
+        "required": [
+         "id",
+         "type"
+        ],
+        "type": "object"
+       }
+      },
+      "required": [
+       "data"
+      ],
+      "type": "object"
+     },
+     "room_type": {
+      "properties": {
+       "data": {
+        "properties": {
+         "id": {
+          "$ref": "#/components/schemas/Common.Scalars.id"
+         },
+         "type": {
+          "enum": [
+           "room_type"
+          ],
+          "type": "string"
+         }
+        },
+        "required": [
+         "id",
+         "type"
+        ],
+        "type": "object"
+       }
+      },
+      "required": [
+       "data"
+      ],
+      "type": "object"
+     },
+     "tax_set": {
+      "properties": {
+       "data": {
+        "properties": {
+         "attributes": {
+          "properties": {
+           "id": {
+            "$ref": "#/components/schemas/Common.Scalars.id"
+           },
+           "title": {
+            "type": "string"
+           }
+          },
+          "required": [
+           "id",
+           "title"
+          ],
+          "type": "object"
+         },
+         "id": {
+          "$ref": "#/components/schemas/Common.Scalars.id"
+         },
+         "type": {
+          "enum": [
+           "tax_set"
+          ],
+          "type": "string"
+         }
+        },
+        "required": [
+         "id",
+         "type",
+         "attributes"
+        ],
+        "type": "object"
+       }
+      },
+      "required": [
+       "data"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "room_type",
+     "property"
+    ],
+    "type": "object"
+   },
+   "RatePlans.RatePlanResource": {
+    "properties": {
+     "attributes": {
+      "$ref": "#/components/schemas/RatePlans.RatePlan"
+     },
+     "id": {
+      "$ref": "#/components/schemas/Common.Scalars.id"
+     },
+     "relationships": {
+      "$ref": "#/components/schemas/RatePlans.RatePlanRelationships"
+     },
+     "type": {
+      "enum": [
+       "rate_plan"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "type",
+     "id",
+     "attributes",
+     "relationships"
+    ],
+    "type": "object"
+   },
+   "RatePlans.SellMode": {
+    "enum": [
+     "per_room",
+     "per_person"
+    ],
+    "type": "string"
+   },
+   "Restrictions.AvailabilityDocument": {
+    "properties": {
+     "data": {
+      "type": "object",
+      "unevaluatedProperties": {
+       "type": "object",
+       "unevaluatedProperties": {
+        "format": "int32",
+        "type": "integer"
+       }
+      }
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
+   "Restrictions.AvailabilityUpdate": {
+    "properties": {
+     "availability": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       }
+      ]
+     },
+     "date": {
+      "format": "date",
+      "type": "string"
+     },
+     "date_from": {
+      "format": "date",
+      "type": "string"
+     },
+     "date_to": {
+      "format": "date",
+      "type": "string"
+     },
+     "days": {
+      "items": {
+       "$ref": "#/components/schemas/Restrictions.Weekday"
+      },
+      "type": "array"
+     },
+     "property_id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "room_type_id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     }
+    },
+    "required": [
+     "property_id",
+     "room_type_id",
+     "availability"
+    ],
+    "type": "object"
+   },
+   "Restrictions.AvailabilityUpdateRequest": {
+    "properties": {
+     "values": {
+      "items": {
+       "$ref": "#/components/schemas/Restrictions.AvailabilityUpdate"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "values"
+    ],
+    "type": "object"
+   },
+   "Restrictions.OccupancyRate": {
+    "properties": {
+     "occupancy": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.positiveInt"
+       }
+      ]
+     },
+     "rate": {
+      "$ref": "#/components/schemas/Restrictions.RateValue"
+     }
+    },
+    "required": [
+     "occupancy",
+     "rate"
+    ],
+    "type": "object"
+   },
+   "Restrictions.RateValue": {
+    "anyOf": [
+     {
+      "$ref": "#/components/schemas/Common.Scalars.decimalString"
+     },
+     {
+      "$ref": "#/components/schemas/Common.Scalars.positiveInt"
+     }
+    ]
+   },
+   "Restrictions.RestrictionKind": {
+    "enum": [
+     "availability",
+     "availability_offset",
+     "closed_to_arrival",
+     "closed_to_departure",
+     "max_availability",
+     "max_sell",
+     "max_stay",
+     "min_stay_arrival",
+     "min_stay_through",
+     "rate",
+     "stop_sell",
+     "stop_sell_manual"
+    ],
+    "type": "string"
+   },
+   "Restrictions.RestrictionUpdate": {
+    "properties": {
+     "closed_to_arrival": {
+      "type": "boolean"
+     },
+     "closed_to_departure": {
+      "type": "boolean"
+     },
+     "date": {
+      "format": "date",
+      "type": "string"
+     },
+     "date_from": {
+      "format": "date",
+      "type": "string"
+     },
+     "date_to": {
+      "format": "date",
+      "type": "string"
+     },
+     "days": {
+      "items": {
+       "$ref": "#/components/schemas/Restrictions.Weekday"
+      },
+      "type": "array"
+     },
+     "max_sell": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "max_stay": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       }
+      ]
+     },
+     "min_stay": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.positiveInt"
+       }
+      ]
+     },
+     "min_stay_arrival": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.positiveInt"
+       }
+      ]
+     },
+     "min_stay_through": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.positiveInt"
+       }
+      ]
+     },
+     "property_id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "rate": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Restrictions.RateValue"
+       }
+      ]
+     },
+     "rate_plan_id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "rates": {
+      "items": {
+       "$ref": "#/components/schemas/Restrictions.OccupancyRate"
+      },
+      "type": "array"
+     },
+     "stop_sell": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "property_id",
+     "rate_plan_id"
+    ],
+    "type": "object"
+   },
+   "Restrictions.RestrictionValues": {
+    "properties": {
+     "availability": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       }
+      ]
+     },
+     "availability_offset": {
+      "format": "int32",
+      "type": "integer"
+     },
+     "closed_to_arrival": {
+      "type": "boolean"
+     },
+     "closed_to_departure": {
+      "type": "boolean"
+     },
+     "max_availability": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "max_sell": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "max_stay": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       }
+      ]
+     },
+     "min_stay_arrival": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.positiveInt"
+       }
+      ]
+     },
+     "min_stay_through": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.positiveInt"
+       }
+      ]
+     },
+     "rate": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.decimalString"
+       }
+      ]
+     },
+     "stop_sell": {
+      "type": "boolean"
+     },
+     "stop_sell_manual": {
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "Restrictions.RestrictionsDocument": {
+    "properties": {
+     "data": {
+      "type": "object",
+      "unevaluatedProperties": {
+       "type": "object",
+       "unevaluatedProperties": {
+        "$ref": "#/components/schemas/Restrictions.RestrictionValues"
+       }
+      }
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
+   "Restrictions.RestrictionsUpdateRequest": {
+    "properties": {
+     "values": {
+      "items": {
+       "$ref": "#/components/schemas/Restrictions.RestrictionUpdate"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "values"
+    ],
+    "type": "object"
+   },
+   "Restrictions.TaskReference": {
+    "properties": {
+     "id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "type": {
+      "enum": [
+       "task"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "type"
+    ],
+    "type": "object"
+   },
+   "Restrictions.UpdateAcknowledgement": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/Restrictions.TaskReference"
+      },
+      "type": "array"
+     },
+     "meta": {
+      "properties": {
+       "message": {
+        "type": "string"
+       },
+       "warnings": {
+        "items": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/Restrictions.UpdateWarning"
+          },
+          {
+           "type": "string"
+          }
+         ]
+        },
+        "type": "array"
+       }
+      },
+      "required": [
+       "message"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "data",
+     "meta"
+    ],
+    "type": "object"
+   },
+   "Restrictions.UpdateWarning": {
+    "properties": {
+     "warning": {
+      "type": "object",
+      "unevaluatedProperties": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      }
+     }
+    },
+    "required": [
+     "warning"
+    ],
+    "type": "object",
+    "unevaluatedProperties": {}
+   },
+   "Restrictions.Weekday": {
+    "enum": [
+     "mo",
+     "tu",
+     "we",
+     "th",
+     "fr",
+     "sa",
+     "su"
+    ],
+    "type": "string"
+   },
+   "RoomTypes.RoomKind": {
+    "enum": [
+     "room",
+     "dorm"
+    ],
+    "type": "string"
+   },
+   "RoomTypes.RoomType": {
+    "properties": {
+     "capacity": {
+      "anyOf": [
+       {
+        "format": "int32",
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "codes": {
+      "anyOf": [
+       {
+        "type": "object",
+        "unevaluatedProperties": {}
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "content": {
+      "$ref": "#/components/schemas/RoomTypes.RoomTypeContent"
+     },
+     "count_of_rooms": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.positiveInt"
+       }
+      ]
+     },
+     "default_occupancy": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.positiveInt"
+       }
+      ],
+      "deprecated": true
+     },
+     "id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "meta": {
+      "anyOf": [
+       {
+        "type": "object",
+        "unevaluatedProperties": {}
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "occ_adults": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.positiveInt"
+       }
+      ]
+     },
+     "occ_children": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       }
+      ]
+     },
+     "occ_infants": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       }
+      ]
+     },
+     "position": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       }
+      ]
+     },
+     "room_kind": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/RoomTypes.RoomKind"
+       }
+      ]
+     },
+     "title": {
+      "maxLength": 255,
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "position",
+     "title",
+     "count_of_rooms",
+     "occ_adults",
+     "occ_children",
+     "occ_infants",
+     "default_occupancy",
+     "room_kind",
+     "capacity",
+     "codes",
+     "meta",
+     "content"
+    ],
+    "type": "object"
+   },
+   "RoomTypes.RoomTypeContent": {
+    "properties": {
+     "description": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "photos": {
+      "items": {
+       "$ref": "#/components/schemas/Photos.Photo"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "description",
+     "photos"
+    ],
+    "type": "object"
+   },
+   "RoomTypes.RoomTypeContentWrite": {
+    "properties": {
+     "description": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "photos": {
+      "items": {
+       "$ref": "#/components/schemas/Photos.EmbeddedPhotoWrite"
+      },
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "RoomTypes.RoomTypeCreate": {
+    "properties": {
+     "capacity": {
+      "anyOf": [
+       {
+        "format": "int32",
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "codes": {
+      "anyOf": [
+       {
+        "type": "object",
+        "unevaluatedProperties": {}
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "content": {
+      "$ref": "#/components/schemas/RoomTypes.RoomTypeContentWrite"
+     },
+     "count_of_rooms": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.positiveInt"
+       }
+      ]
+     },
+     "default_occupancy": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.positiveInt"
+       }
+      ],
+      "deprecated": true
+     },
+     "facilities": {
+      "items": {
+       "$ref": "#/components/schemas/Common.Scalars.id"
+      },
+      "type": "array"
+     },
+     "meta": {
+      "anyOf": [
+       {
+        "type": "object",
+        "unevaluatedProperties": {}
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "occ_adults": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.positiveInt"
+       }
+      ]
+     },
+     "occ_children": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       }
+      ]
+     },
+     "occ_infants": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+       }
+      ]
+     },
+     "property_id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "room_kind": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/RoomTypes.RoomKind"
+       }
+      ]
+     },
+     "title": {
+      "maxLength": 255,
+      "type": "string"
+     }
+    },
+    "required": [
+     "title",
+     "count_of_rooms",
+     "occ_adults",
+     "occ_children",
+     "occ_infants",
+     "property_id"
+    ],
+    "type": "object"
+   },
+   "RoomTypes.RoomTypeCreateRequest": {
+    "properties": {
+     "room_type": {
+      "$ref": "#/components/schemas/RoomTypes.RoomTypeCreate"
+     }
+    },
+    "required": [
+     "room_type"
+    ],
+    "type": "object"
+   },
+   "RoomTypes.RoomTypeRelationships": {
+    "properties": {
+     "facilities": {
+      "properties": {
+       "data": {
+        "items": {
+         "$ref": "#/components/schemas/Facilities.FacilityResource"
+        },
+        "type": "array"
+       }
+      },
+      "required": [
+       "data"
+      ],
+      "type": "object"
+     },
+     "property": {
+      "properties": {
+       "data": {
+        "properties": {
+         "id": {
+          "$ref": "#/components/schemas/Common.Scalars.id"
+         },
+         "type": {
+          "enum": [
+           "property"
+          ],
+          "type": "string"
+         }
+        },
+        "required": [
+         "id",
+         "type"
+        ],
+        "type": "object"
+       }
+      },
+      "required": [
+       "data"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "property",
+     "facilities"
+    ],
+    "type": "object"
+   },
+   "RoomTypes.RoomTypeResource": {
+    "properties": {
+     "attributes": {
+      "$ref": "#/components/schemas/RoomTypes.RoomType"
+     },
+     "id": {
+      "$ref": "#/components/schemas/Common.Scalars.id"
+     },
+     "relationships": {
+      "$ref": "#/components/schemas/RoomTypes.RoomTypeRelationships"
+     },
+     "type": {
+      "enum": [
+       "room_type"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "type",
+     "id",
+     "attributes",
+     "relationships"
+    ],
+    "type": "object"
+   },
+   "SigningKeys.SigningKey": {
+    "properties": {
+     "id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "inserted_at": {
+      "format": "date-time",
+      "type": "string"
+     },
+     "rotated_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "format": "date-time"
+     },
+     "title": {
+      "type": "string"
+     },
+     "updated_at": {
+      "format": "date-time",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "inserted_at",
+     "updated_at",
+     "rotated_at",
+     "title"
+    ],
+    "type": "object"
+   },
+   "SigningKeys.SigningKeyRelationships": {
+    "properties": {
+     "signing_key_versions": {
+      "properties": {
+       "data": {
+        "items": {
+         "$ref": "#/components/schemas/SigningKeys.SigningKeyVersionResource"
+        },
+        "type": "array"
+       }
+      },
+      "required": [
+       "data"
+      ],
+      "type": "object"
+     },
+     "webhooks": {
+      "properties": {
+       "data": {
+        "items": {
+         "$ref": "#/components/schemas/SigningKeys.SigningKeyWebhookResource"
+        },
+        "type": "array"
+       }
+      },
+      "required": [
+       "data"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "signing_key_versions",
+     "webhooks"
+    ],
+    "type": "object"
+   },
+   "SigningKeys.SigningKeyResource": {
+    "properties": {
+     "attributes": {
+      "$ref": "#/components/schemas/SigningKeys.SigningKey"
+     },
+     "id": {
+      "$ref": "#/components/schemas/Common.Scalars.id"
+     },
+     "relationships": {
+      "$ref": "#/components/schemas/SigningKeys.SigningKeyRelationships"
+     },
+     "type": {
+      "enum": [
+       "signing_key"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "type",
+     "id",
+     "attributes",
+     "relationships"
+    ],
+    "type": "object"
+   },
+   "SigningKeys.SigningKeyVersion": {
+    "properties": {
+     "id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "inserted_at": {
+      "format": "date-time",
+      "type": "string"
+     },
+     "is_current": {
+      "type": "boolean"
+     },
+     "secret": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "is_current",
+     "secret",
+     "inserted_at"
+    ],
+    "type": "object"
+   },
+   "SigningKeys.SigningKeyVersionResource": {
+    "properties": {
+     "attributes": {
+      "$ref": "#/components/schemas/SigningKeys.SigningKeyVersion"
+     },
+     "id": {
+      "$ref": "#/components/schemas/Common.Scalars.id"
+     },
+     "type": {
+      "enum": [
+       "signing_key_version"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "type",
+     "id",
+     "attributes"
+    ],
+    "type": "object"
+   },
+   "SigningKeys.SigningKeyWebhook": {
+    "properties": {
+     "callback_url": {
+      "format": "uri",
+      "type": "string"
+     },
+     "event_mask": {
+      "type": "string"
+     },
+     "id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "is_global": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "id",
+     "callback_url",
+     "event_mask",
+     "is_global"
+    ],
+    "type": "object"
+   },
+   "SigningKeys.SigningKeyWebhookResource": {
+    "properties": {
+     "attributes": {
+      "$ref": "#/components/schemas/SigningKeys.SigningKeyWebhook"
+     },
+     "id": {
+      "$ref": "#/components/schemas/Common.Scalars.id"
+     },
+     "type": {
+      "enum": [
+       "webhook"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "type",
+     "id",
+     "attributes"
+    ],
+    "type": "object"
+   },
+   "Webhooks.EmbeddedWebhookBillingAccount": {
+    "properties": {
+     "id": {
+      "$ref": "#/components/schemas/Common.Scalars.id"
+     },
+     "type": {
+      "enum": [
+       "billing_account"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "type"
+    ],
+    "type": "object"
+   },
+   "Webhooks.EmbeddedWebhookOrganization": {
+    "properties": {
+     "id": {
+      "$ref": "#/components/schemas/Common.Scalars.id"
+     },
+     "type": {
+      "enum": [
+       "organization"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "type"
+    ],
+    "type": "object"
+   },
+   "Webhooks.EmbeddedWebhookProperty": {
+    "properties": {
+     "id": {
+      "$ref": "#/components/schemas/Common.Scalars.id"
+     },
+     "type": {
+      "enum": [
+       "property"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "type"
+    ],
+    "type": "object"
+   },
+   "Webhooks.EventMask": {
+    "type": "string"
+   },
+   "Webhooks.Webhook": {
+    "properties": {
+     "activity": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Webhooks.WebhookActivity"
+       }
+      ]
+     },
+     "callback_url": {
+      "format": "uri",
+      "type": "string"
+     },
+     "event_mask": {
+      "$ref": "#/components/schemas/Webhooks.EventMask"
+     },
+     "headers": {
+      "anyOf": [
+       {
+        "type": "object",
+        "unevaluatedProperties": {
+         "type": "string"
+        }
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "id": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       }
+      ]
+     },
+     "is_active": {
+      "type": "boolean"
+     },
+     "is_global": {
+      "type": "boolean"
+     },
+     "is_signed": {
+      "type": "boolean"
+     },
+     "protected": {
+      "type": "boolean"
+     },
+     "request_params": {
+      "anyOf": [
+       {
+        "type": "object",
+        "unevaluatedProperties": {
+         "type": "string"
+        }
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "send_data": {
+      "type": "boolean"
+     },
+     "signing_key_id": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "id",
+     "protected",
+     "callback_url",
+     "event_mask",
+     "request_params",
+     "headers",
+     "is_active",
+     "send_data",
+     "is_global",
+     "is_signed",
+     "signing_key_id"
+    ],
+    "type": "object"
+   },
+   "Webhooks.WebhookActivity": {
+    "properties": {
+     "deliveries": {
+      "properties": {
+       "failed_count": {
+        "allOf": [
+         {
+          "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+         }
+        ]
+       },
+       "response_time": {
+        "properties": {
+         "p95_ms": {
+          "anyOf": [
+           {
+            "format": "double",
+            "type": "number"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         }
+        },
+        "required": [
+         "p95_ms"
+        ],
+        "type": "object"
+       },
+       "success_count": {
+        "allOf": [
+         {
+          "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+         }
+        ]
+       }
+      },
+      "required": [
+       "response_time",
+       "success_count",
+       "failed_count"
+      ],
+      "type": "object"
+     },
+     "last_attempt": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Webhooks.WebhookLastAttempt"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "series": {
+      "properties": {
+       "failed": {
+        "items": {
+         "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+        },
+        "type": "array"
+       },
+       "success": {
+        "items": {
+         "$ref": "#/components/schemas/Common.Scalars.nonNegativeInt"
+        },
+        "type": "array"
+       },
+       "timestamp": {
+        "items": {
+         "format": "int64",
+         "type": "integer"
+        },
+        "type": "array"
+       }
+      },
+      "required": [
+       "timestamp",
+       "success",
+       "failed"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "deliveries",
+     "last_attempt",
+     "series"
+    ],
+    "type": "object"
+   },
+   "Webhooks.WebhookCreate": {
+    "properties": {
+     "callback_url": {
+      "format": "uri",
+      "type": "string"
+     },
+     "event_mask": {
+      "$ref": "#/components/schemas/Webhooks.EventMask"
+     },
+     "headers": {
+      "anyOf": [
+       {
+        "type": "object",
+        "unevaluatedProperties": {
+         "type": "string"
+        }
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "is_active": {
+      "type": "boolean"
+     },
+     "is_global": {
+      "type": "boolean"
+     },
+     "is_signed": {
+      "type": "boolean"
+     },
+     "property_id": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "request_params": {
+      "anyOf": [
+       {
+        "type": "object",
+        "unevaluatedProperties": {
+         "type": "string"
+        }
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "send_data": {
+      "type": "boolean"
+     },
+     "signing_key_id": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "callback_url",
+     "event_mask"
+    ],
+    "type": "object"
+   },
+   "Webhooks.WebhookCreateRequest": {
+    "properties": {
+     "webhook": {
+      "$ref": "#/components/schemas/Webhooks.WebhookCreate"
+     }
+    },
+    "required": [
+     "webhook"
+    ],
+    "type": "object"
+   },
+   "Webhooks.WebhookLastAttempt": {
+    "properties": {
+     "attempted_at": {
+      "format": "date-time",
+      "type": "string"
+     },
+     "error": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "status_code": {
+      "anyOf": [
+       {
+        "format": "int32",
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "success": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "error",
+     "success",
+     "status_code",
+     "attempted_at"
+    ],
+    "type": "object"
+   },
+   "Webhooks.WebhookRelationships": {
+    "properties": {
+     "billing_account": {
+      "properties": {
+       "data": {
+        "$ref": "#/components/schemas/Webhooks.EmbeddedWebhookBillingAccount"
+       }
+      },
+      "required": [
+       "data"
+      ],
+      "type": "object"
+     },
+     "organization": {
+      "properties": {
+       "data": {
+        "$ref": "#/components/schemas/Webhooks.EmbeddedWebhookOrganization"
+       }
+      },
+      "required": [
+       "data"
+      ],
+      "type": "object"
+     },
+     "property": {
+      "properties": {
+       "data": {
+        "$ref": "#/components/schemas/Webhooks.EmbeddedWebhookProperty"
+       }
+      },
+      "required": [
+       "data"
+      ],
+      "type": "object"
+     },
+     "signing_key": {
+      "properties": {
+       "data": {
+        "$ref": "#/components/schemas/SigningKeys.SigningKeyResource"
+       }
+      },
+      "required": [
+       "data"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "billing_account",
+     "organization"
+    ],
+    "type": "object"
+   },
+   "Webhooks.WebhookResource": {
+    "properties": {
+     "attributes": {
+      "$ref": "#/components/schemas/Webhooks.Webhook"
+     },
+     "id": {
+      "$ref": "#/components/schemas/Common.Scalars.id"
+     },
+     "relationships": {
+      "$ref": "#/components/schemas/Webhooks.WebhookRelationships"
+     },
+     "type": {
+      "enum": [
+       "webhook"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "type",
+     "id",
+     "attributes",
+     "relationships"
+    ],
+    "type": "object"
+   },
+   "Webhooks.WebhookUpdate": {
+    "properties": {
+     "callback_url": {
+      "format": "uri",
+      "type": "string"
+     },
+     "event_mask": {
+      "$ref": "#/components/schemas/Webhooks.EventMask"
+     },
+     "headers": {
+      "anyOf": [
+       {
+        "type": "object",
+        "unevaluatedProperties": {
+         "type": "string"
+        }
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "is_active": {
+      "type": "boolean"
+     },
+     "is_global": {
+      "type": "boolean"
+     },
+     "is_signed": {
+      "type": "boolean"
+     },
+     "property_id": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "request_params": {
+      "anyOf": [
+       {
+        "type": "object",
+        "unevaluatedProperties": {
+         "type": "string"
+        }
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "send_data": {
+      "type": "boolean"
+     },
+     "signing_key_id": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Common.Scalars.id"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "type": "object"
+   },
+   "Webhooks.WebhookUpdateRequest": {
+    "properties": {
+     "webhook": {
+      "$ref": "#/components/schemas/Webhooks.WebhookUpdate"
+     }
+    },
+    "required": [
+     "webhook"
+    ],
+    "type": "object"
+   }
+  },
+  "securitySchemes": {
+   "UserApiKeyAuth": {
+    "in": "header",
+    "name": "user-api-key",
+    "type": "apiKey"
+   }
+  }
+ },
+ "info": {
+  "title": "Channex.io — Public API",
+  "version": "0.0.0"
+ },
+ "openapi": "3.1.0",
+ "paths": {
+  "/availability": {
+   "get": {
+    "operationId": "AriAvailability_listAvailability",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Restrictions.AvailabilityListParams.propertyId"
+     },
+     {
+      "$ref": "#/components/parameters/Restrictions.AvailabilityListParams.date"
+     },
+     {
+      "$ref": "#/components/parameters/Restrictions.AvailabilityListParams.dateGte"
+     },
+     {
+      "$ref": "#/components/parameters/Restrictions.AvailabilityListParams.dateLte"
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Restrictions.AvailabilityDocument"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.BadRequestWithReasons"
+        }
+       }
+      }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.Unauthorized"
+        }
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.InvalidArguments"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "ARI"
+    ]
+   },
+   "post": {
+    "operationId": "AriAvailability_updateAvailability",
+    "parameters": [],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Restrictions.AvailabilityUpdateRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Restrictions.UpdateAcknowledgement"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.UnparsableRequest"
+        }
+       }
+      }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.Unauthorized"
+        }
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.InvalidArguments"
+        }
+       }
+      }
+     },
+     "429": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.TooManyRequests"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "ARI"
+    ]
+   }
+  },
+  "/booking_revisions/feed": {
+   "get": {
+    "operationId": "BookingRevisions_feed",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Common.Pagination.PaginationParams.page"
+     },
+     {
+      "$ref": "#/components/parameters/Common.Pagination.PaginationParams.limit"
+     },
+     {
+      "$ref": "#/components/parameters/BookingRevisions.BookingRevisionFeedParams.orderInsertedAt"
+     },
+     {
+      "$ref": "#/components/parameters/BookingRevisions.BookingRevisionFeedParams.filterPropertyId"
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "data": {
+           "items": {
+            "properties": {
+             "attributes": {
+              "$ref": "#/components/schemas/BookingRevisions.BookingRevision"
+             },
+             "id": {
+              "$ref": "#/components/schemas/Common.Scalars.id"
+             },
+             "relationships": {
+              "$ref": "#/components/schemas/BookingRevisions.BookingRevisionRelationships"
+             },
+             "type": {
+              "enum": [
+               "booking_revision"
+              ],
+              "type": "string"
+             }
+            },
+            "required": [
+             "type",
+             "id",
+             "attributes",
+             "relationships"
+            ],
+            "type": "object"
+           },
+           "type": "array"
+          },
+          "meta": {
+           "$ref": "#/components/schemas/Common.Pagination.PaginationMeta"
+          }
+         },
+         "required": [
+          "data",
+          "meta"
+         ],
+         "type": "object"
+        }
+       }
+      }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.Unauthorized"
+        }
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/Common.Errors.InvalidArguments"
+          },
+          {
+           "$ref": "#/components/schemas/Common.Errors.InvalidNestedArguments"
+          }
+         ]
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "Bookings"
+    ]
+   }
+  },
+  "/booking_revisions/{id}": {
+   "get": {
+    "operationId": "BookingRevisions_read",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "id",
+      "required": true,
+      "schema": {
+       "$ref": "#/components/schemas/Common.Scalars.id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "data": {
+           "properties": {
+            "attributes": {
+             "$ref": "#/components/schemas/BookingRevisions.BookingRevision"
+            },
+            "id": {
+             "$ref": "#/components/schemas/Common.Scalars.id"
+            },
+            "relationships": {
+             "$ref": "#/components/schemas/BookingRevisions.BookingRevisionRelationships"
+            },
+            "type": {
+             "enum": [
+              "booking_revision"
+             ],
+             "type": "string"
+            }
+           },
+           "required": [
+            "type",
+            "id",
+            "attributes",
+            "relationships"
+           ],
+           "type": "object"
+          }
+         },
+         "required": [
+          "data"
+         ],
+         "type": "object"
+        }
+       }
+      }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.Unauthorized"
+        }
+       }
+      }
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.NotFound"
+        }
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.InvalidArguments"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "Bookings"
+    ]
+   }
+  },
+  "/booking_revisions/{id}/ack": {
+   "post": {
+    "operationId": "BookingRevisionAcknowledgements_ack",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "id",
+      "required": true,
+      "schema": {
+       "$ref": "#/components/schemas/Common.Scalars.id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.JsonApi.SuccessMessage"
+        }
+       }
+      }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.Unauthorized"
+        }
+       }
+      }
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.Forbidden"
+        }
+       }
+      }
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.NotFound"
+        }
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.InvalidArguments"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "Bookings"
+    ]
+   }
+  },
+  "/bookings": {
+   "get": {
+    "operationId": "Bookings_list",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Common.Pagination.PaginationParams.page"
+     },
+     {
+      "$ref": "#/components/parameters/Common.Pagination.PaginationParams.limit"
+     },
+     {
+      "$ref": "#/components/parameters/Bookings.BookingListParams.orderInsertedAt"
+     },
+     {
+      "$ref": "#/components/parameters/Bookings.BookingListParams.arrivalDateGte"
+     },
+     {
+      "$ref": "#/components/parameters/Bookings.BookingListParams.arrivalDateLte"
+     },
+     {
+      "$ref": "#/components/parameters/Bookings.BookingListParams.departureDateGte"
+     },
+     {
+      "$ref": "#/components/parameters/Bookings.BookingListParams.departureDateLte"
+     },
+     {
+      "$ref": "#/components/parameters/Bookings.BookingListParams.insertedAtGte"
+     },
+     {
+      "$ref": "#/components/parameters/Bookings.BookingListParams.insertedAtLte"
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "data": {
+           "items": {
+            "$ref": "#/components/schemas/Bookings.BookingResource"
+           },
+           "type": "array"
+          },
+          "meta": {
+           "$ref": "#/components/schemas/Common.Pagination.PaginationMeta"
+          }
+         },
+         "required": [
+          "data",
+          "meta"
+         ],
+         "type": "object"
+        }
+       }
+      }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.Unauthorized"
+        }
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/Common.Errors.InvalidArguments"
+          },
+          {
+           "$ref": "#/components/schemas/Common.Errors.InvalidNestedArguments"
+          }
+         ]
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "Bookings"
+    ]
+   }
+  },
+  "/properties": {
+   "get": {
+    "operationId": "Properties_list",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Properties.PropertyListParams.title"
+     },
+     {
+      "$ref": "#/components/parameters/Properties.PropertyListParams.city"
+     },
+     {
+      "$ref": "#/components/parameters/Properties.PropertyListParams.country"
+     },
+     {
+      "$ref": "#/components/parameters/Common.Pagination.PaginationParams.page"
+     },
+     {
+      "$ref": "#/components/parameters/Common.Pagination.PaginationParams.limit"
+     },
+     {
+      "$ref": "#/components/parameters/Properties.PropertyListParams.orderTitle"
+     },
+     {
+      "$ref": "#/components/parameters/Properties.PropertyListParams.orderInsertedAt"
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "data": {
+           "items": {
+            "$ref": "#/components/schemas/Properties.PropertyListResource"
+           },
+           "type": "array"
+          },
+          "meta": {
+           "$ref": "#/components/schemas/Common.Pagination.PaginationMeta"
+          }
+         },
+         "required": [
+          "data",
+          "meta"
+         ],
+         "type": "object"
+        }
+       }
+      }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.Unauthorized"
+        }
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/Common.Errors.InvalidArguments"
+          },
+          {
+           "$ref": "#/components/schemas/Common.Errors.InvalidNestedArguments"
+          }
+         ]
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "Properties"
+    ]
+   },
+   "post": {
+    "operationId": "Properties_create",
+    "parameters": [],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Properties.PropertyCreateRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "data": {
+           "$ref": "#/components/schemas/Properties.PropertyResource"
+          }
+         },
+         "required": [
+          "data"
+         ],
+         "type": "object"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.UnparsableRequest"
+        }
+       }
+      }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.Unauthorized"
+        }
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.ValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "Properties"
+    ]
+   }
+  },
+  "/properties/{id}": {
+   "get": {
+    "operationId": "Properties_read",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "id",
+      "required": true,
+      "schema": {
+       "$ref": "#/components/schemas/Common.Scalars.id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "data": {
+           "$ref": "#/components/schemas/Properties.PropertyResource"
+          }
+         },
+         "required": [
+          "data"
+         ],
+         "type": "object"
+        }
+       }
+      }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.Unauthorized"
+        }
+       }
+      }
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.NotFound"
+        }
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.InvalidArguments"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "Properties"
+    ]
+   }
+  },
+  "/rate_plans": {
+   "get": {
+    "operationId": "RatePlans_list",
+    "parameters": [
+     {
+      "explode": false,
+      "in": "query",
+      "name": "filter[property_id]",
+      "required": false,
+      "schema": {
+       "$ref": "#/components/schemas/Common.Scalars.id"
+      }
+     },
+     {
+      "explode": false,
+      "in": "query",
+      "name": "filter[room_type_id]",
+      "required": false,
+      "schema": {
+       "$ref": "#/components/schemas/Common.Scalars.id"
+      }
+     },
+     {
+      "$ref": "#/components/parameters/Common.Pagination.PaginationParams.page"
+     },
+     {
+      "$ref": "#/components/parameters/Common.Pagination.PaginationParams.limit"
+     },
+     {
+      "explode": false,
+      "in": "query",
+      "name": "order[title]",
+      "required": false,
+      "schema": {
+       "$ref": "#/components/schemas/Common.Pagination.OrderDirection"
+      }
+     },
+     {
+      "$ref": "#/components/parameters/RatePlans.RatePlanListParams.orderInsertedAt"
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "data": {
+           "items": {
+            "$ref": "#/components/schemas/RatePlans.RatePlanResource"
+           },
+           "type": "array"
+          },
+          "meta": {
+           "$ref": "#/components/schemas/Common.Pagination.PaginationMeta"
+          }
+         },
+         "required": [
+          "data",
+          "meta"
+         ],
+         "type": "object"
+        }
+       }
+      }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.Unauthorized"
+        }
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/Common.Errors.InvalidArguments"
+          },
+          {
+           "$ref": "#/components/schemas/Common.Errors.InvalidNestedArguments"
+          }
+         ]
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "Rate Plans"
+    ]
+   },
+   "post": {
+    "operationId": "RatePlans_create",
+    "parameters": [],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/RatePlans.RatePlanCreateRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "data": {
+           "$ref": "#/components/schemas/RatePlans.RatePlanResource"
+          }
+         },
+         "required": [
+          "data"
+         ],
+         "type": "object"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.UnparsableRequest"
+        }
+       }
+      }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.Unauthorized"
+        }
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/Common.Errors.InvalidArguments"
+          },
+          {
+           "$ref": "#/components/schemas/Common.Errors.ValidationError"
+          }
+         ]
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "Rate Plans"
+    ]
+   }
+  },
+  "/restrictions": {
+   "get": {
+    "operationId": "Ari_listRestrictions",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Restrictions.RestrictionListParams.propertyId"
+     },
+     {
+      "$ref": "#/components/parameters/Restrictions.RestrictionListParams.date"
+     },
+     {
+      "$ref": "#/components/parameters/Restrictions.RestrictionListParams.dateGte"
+     },
+     {
+      "$ref": "#/components/parameters/Restrictions.RestrictionListParams.dateLte"
+     },
+     {
+      "$ref": "#/components/parameters/Restrictions.RestrictionListParams.restrictions"
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Restrictions.RestrictionsDocument"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.BadRequestWithReasons"
+        }
+       }
+      }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.Unauthorized"
+        }
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.InvalidArguments"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "ARI"
+    ]
+   },
+   "post": {
+    "operationId": "Ari_updateRestrictions",
+    "parameters": [],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Restrictions.RestrictionsUpdateRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Restrictions.UpdateAcknowledgement"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.UnparsableRequest"
+        }
+       }
+      }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.Unauthorized"
+        }
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.InvalidArguments"
+        }
+       }
+      }
+     },
+     "429": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.TooManyRequests"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "ARI"
+    ]
+   }
+  },
+  "/room_types": {
+   "get": {
+    "operationId": "RoomTypes_list",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/RoomTypes.RoomTypeListParams.propertyId"
+     },
+     {
+      "$ref": "#/components/parameters/Common.Pagination.PaginationParams.page"
+     },
+     {
+      "$ref": "#/components/parameters/Common.Pagination.PaginationParams.limit"
+     },
+     {
+      "explode": false,
+      "in": "query",
+      "name": "order[title]",
+      "required": false,
+      "schema": {
+       "$ref": "#/components/schemas/Common.Pagination.OrderDirection"
+      }
+     },
+     {
+      "explode": false,
+      "in": "query",
+      "name": "order[position]",
+      "required": false,
+      "schema": {
+       "$ref": "#/components/schemas/Common.Pagination.OrderDirection"
+      }
+     },
+     {
+      "explode": false,
+      "in": "query",
+      "name": "order[inserted_at]",
+      "required": false,
+      "schema": {
+       "$ref": "#/components/schemas/Common.Pagination.OrderDirection"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "data": {
+           "items": {
+            "$ref": "#/components/schemas/RoomTypes.RoomTypeResource"
+           },
+           "type": "array"
+          },
+          "meta": {
+           "$ref": "#/components/schemas/Common.Pagination.PaginationMeta"
+          }
+         },
+         "required": [
+          "data",
+          "meta"
+         ],
+         "type": "object"
+        }
+       }
+      }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.Unauthorized"
+        }
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/Common.Errors.InvalidArguments"
+          },
+          {
+           "$ref": "#/components/schemas/Common.Errors.InvalidNestedArguments"
+          }
+         ]
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "Room Types"
+    ]
+   },
+   "post": {
+    "operationId": "RoomTypes_create",
+    "parameters": [],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/RoomTypes.RoomTypeCreateRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "data": {
+           "$ref": "#/components/schemas/RoomTypes.RoomTypeResource"
+          }
+         },
+         "required": [
+          "data"
+         ],
+         "type": "object"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.UnparsableRequest"
+        }
+       }
+      }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.Unauthorized"
+        }
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/Common.Errors.UnprocessableEntity"
+          },
+          {
+           "$ref": "#/components/schemas/Common.Errors.ValidationError"
+          }
+         ]
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "Room Types"
+    ]
+   }
+  },
+  "/webhooks": {
+   "get": {
+    "operationId": "Webhooks_list",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Webhooks.WebhookListParams.propertyId"
+     },
+     {
+      "$ref": "#/components/parameters/Webhooks.WebhookListParams.isActive"
+     },
+     {
+      "$ref": "#/components/parameters/Common.Pagination.PaginationParams.page"
+     },
+     {
+      "$ref": "#/components/parameters/Common.Pagination.PaginationParams.limit"
+     },
+     {
+      "$ref": "#/components/parameters/Webhooks.WebhookListParams.orderInsertedAt"
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "data": {
+           "items": {
+            "$ref": "#/components/schemas/Webhooks.WebhookResource"
+           },
+           "type": "array"
+          },
+          "meta": {
+           "$ref": "#/components/schemas/Common.Pagination.PaginationMeta"
+          }
+         },
+         "required": [
+          "data",
+          "meta"
+         ],
+         "type": "object"
+        }
+       }
+      }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.Unauthorized"
+        }
+       }
+      }
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.Forbidden"
+        }
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/Common.Errors.InvalidArguments"
+          },
+          {
+           "$ref": "#/components/schemas/Common.Errors.InvalidNestedArguments"
+          }
+         ]
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "Webhooks"
+    ]
+   },
+   "post": {
+    "operationId": "Webhooks_create",
+    "parameters": [],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Webhooks.WebhookCreateRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "data": {
+           "$ref": "#/components/schemas/Webhooks.WebhookResource"
+          }
+         },
+         "required": [
+          "data"
+         ],
+         "type": "object"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.UnparsableRequest"
+        }
+       }
+      }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.Unauthorized"
+        }
+       }
+      }
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.Forbidden"
+        }
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/Common.Errors.InvalidArguments"
+          },
+          {
+           "$ref": "#/components/schemas/Common.Errors.ValidationError"
+          }
+         ]
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "Webhooks"
+    ]
+   }
+  },
+  "/webhooks/{id}": {
+   "delete": {
+    "operationId": "Webhooks_delete",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "id",
+      "required": true,
+      "schema": {
+       "$ref": "#/components/schemas/Common.Scalars.id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.JsonApi.SuccessMessage"
+        }
+       }
+      }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.Unauthorized"
+        }
+       }
+      }
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.NotFound"
+        }
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/Common.Errors.InvalidArguments"
+          },
+          {
+           "$ref": "#/components/schemas/Common.Errors.ValidationError"
+          }
+         ]
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "Webhooks"
+    ]
+   },
+   "put": {
+    "operationId": "Webhooks_update",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "id",
+      "required": true,
+      "schema": {
+       "$ref": "#/components/schemas/Common.Scalars.id"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Webhooks.WebhookUpdateRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "data": {
+           "$ref": "#/components/schemas/Webhooks.WebhookResource"
+          }
+         },
+         "required": [
+          "data"
+         ],
+         "type": "object"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.UnparsableRequest"
+        }
+       }
+      }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.Unauthorized"
+        }
+       }
+      }
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.NotFound"
+        }
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "anyOf": [
+          {
+           "$ref": "#/components/schemas/Common.Errors.InvalidArguments"
+          },
+          {
+           "$ref": "#/components/schemas/Common.Errors.ValidationError"
+          }
+         ]
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "Webhooks"
+    ]
+   }
+  },
+  "/whoami": {
+   "get": {
+    "operationId": "AuthenticationCurrentUser_whoami",
+    "parameters": [],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "data": {
+           "$ref": "#/components/schemas/Authentication.CurrentUserResource"
+          }
+         },
+         "required": [
+          "data"
+         ],
+         "type": "object"
+        }
+       }
+      }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Common.Errors.Unauthorized"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "Authentication"
+    ]
+   }
+  }
+ },
+ "security": [
+  {
+   "UserApiKeyAuth": []
+  }
+ ],
+ "servers": [
+  {
+   "url": "https://app.channex.io/api/v1",
+   "variables": {}
+  },
+  {
+   "url": "https://staging.channex.io/api/v1",
+   "variables": {}
+  }
+ ]
+}

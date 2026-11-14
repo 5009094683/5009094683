@@ -1,0 +1,146 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    'Noto Sans', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+
+  --color-canvas: #f5f6f8;
+  --color-surface: #ffffff;
+  --color-sunken: #eef0f3;
+  --color-line: #e2e5ea;
+  --color-line-strong: #c9ced6;
+  --color-ink: #141c26;
+  --color-ink-soft: #485464;
+  --color-ink-faint: #7b8898;
+
+  --color-brand-50: #eefaf7;
+  --color-brand-100: #d5f2eb;
+  --color-brand-200: #aee4d8;
+  --color-brand-300: #7bd0c0;
+  --color-brand-400: #46b5a3;
+  --color-brand-500: #259987;
+  --color-brand-600: #197b6e;
+  --color-brand-700: #17635a;
+  --color-brand-800: #164f49;
+  --color-brand-900: #14423d;
+
+  --color-danger-50: #fef2f2;
+  --color-danger-100: #fde3e3;
+  --color-danger-500: #e5484d;
+  --color-danger-600: #c9353a;
+  --color-danger-700: #a52a2f;
+  --color-warning-50: #fff8eb;
+  --color-warning-100: #feefc7;
+  --color-warning-500: #e8930c;
+  --color-warning-700: #a15c07;
+  --color-success-50: #edf9f0;
+  --color-success-100: #d3f0da;
+  --color-success-500: #2f9e55;
+  --color-success-700: #1f7340;
+  --color-info-50: #eff5ff;
+  --color-info-100: #dbe8fe;
+  --color-info-500: #3b7de9;
+  --color-info-700: #2256b8;
+
+  /* Reservation sources on the calendar. */
+  --color-src-direct: #197b6e;
+  --color-src-bdc: #1d4fa8;
+  --color-src-abb: #e0565b;
+  --color-src-exp: #b8860b;
+  --color-src-ago: #7a4fc2;
+  --color-src-mmt: #c2410c;
+  --color-src-other: #516173;
+
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.05), 0 1px 3px rgb(16 24 40 / 0.06);
+  --shadow-pop: 0 10px 30px -8px rgb(16 24 40 / 0.22), 0 2px 8px rgb(16 24 40 / 0.08);
+
+  --animate-fade-in: fade-in 140ms ease-out;
+  --animate-slide-in: slide-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-pop-in: pop-in 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes slide-in {
+    from {
+      transform: translateX(24px);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+  @keyframes pop-in {
+    from {
+      transform: translateY(4px) scale(0.98);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0) scale(1);
+      opacity: 1;
+    }
+  }
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+  body {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* A visible focus ring for keyboard users on every interactive element. */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+  }
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']) {
+    cursor: pointer;
+  }
+  ::selection {
+    background: var(--color-brand-200);
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  /* Diagonal stripes for blocked dates on the calendar. */
+  .stripes {
+    background-image: repeating-linear-gradient(
+      135deg,
+      rgb(255 255 255 / 0.35) 0,
+      rgb(255 255 255 / 0.35) 5px,
+      transparent 5px,
+      transparent 10px
+    );
+  }
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}

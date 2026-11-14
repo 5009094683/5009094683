@@ -1,0 +1,16 @@
+# The back office. The API is reached under /api on the same name, so the
+# address to give a channel manager for its webhook is
+# https://<PMS_DOMAIN>/api/webhooks/channex.
+{$PMS_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy web:3000 {
+		# Live updates are a long-lived response: never buffer them.
+		flush_interval -1
+	}
+}
+
+# The guest booking site.
+{$BOOKING_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy booking:3001
+}
