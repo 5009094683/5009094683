@@ -83,6 +83,15 @@ export async function saveMailbox(
   if (port !== undefined && (!Number.isInteger(port) || port < 1 || port > 65535)) {
     throw validationError('The mail server port must be between 1 and 65535');
   }
+  // Half a mailbox cannot be read, and fails later in words that do not say what is missing.
+  if (Boolean(host) !== Boolean(user)) {
+    throw validationError('Enter the mail server and the user name together, or leave both empty');
+  }
+  if (host && !input.password && connection.secretsEnc === null) {
+    throw validationError('Enter the password of the mailbox');
+  }
+  // With no mailbox left to read, the password that was kept for it is forgotten.
+  const forgetPassword = !host && !input.password && connection.secretsEnc !== null;
   const config: EmailConnectionConfig = {
     ...before,
     mailbox: {
@@ -111,12 +120,23 @@ export async function saveMailbox(
       .set({ state: {} })
       .where(eq(channelConnections.id, connectionId));
   }
+  if (forgetPassword) {
+    await db
+      .update(channelConnections)
+      .set({ secretsEnc: null })
+      .where(eq(channelConnections.id, connectionId));
+  }
   await writeAudit(db, actor, {
     action: 'channel.mailbox_saved',
     entityType: 'channel_connection',
     entityId: connectionId,
     propertyId: connection.propertyId,
     summary: `Saved the reservations mailbox settings for ${property!.name}`,
-    changes: { host, user, passwordChanged: Boolean(input.password) },
+    changes: {
+      host,
+      user,
+      passwordChanged: Boolean(input.password),
+      ...(forgetPassword ? { passwordForgotten: true } : {}),
+    },
   });
 }

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
 import { setMailboxFactory, type MailboxReader, type RawEmail } from '@pms/channels';
 import { bookingRevisions, reservations } from '@pms/db';
-import { createTestUser, type TestHotel } from '@pms/domain/testing';
+import { createTestHotel, createTestUser, type TestHotel } from '@pms/domain/testing';
 import {
   day,
   liveHotel,
@@ -472,6 +472,49 @@ describe('mailbox settings', () => {
         })
       ).statusCode,
     ).toBe(403);
+  });
+
+  it('takes a mailbox whole or not at all, and forgets the password with the mailbox', async () => {
+    const hotel = await createTestHotel(stack.api.t.db, stack.api.org, { standardRooms: 1 });
+    const created = await stack.admin.post('/channels/connections', {
+      propertyId: hotel.property.id,
+      adapter: 'email',
+    });
+    const path = `/channels/connections/${(created.json() as { id: string }).id}/email/mailbox`;
+    const refused = async (body: Record<string, unknown>) => {
+      const res = await stack.admin.put(path, body);
+      expect(res.statusCode, JSON.stringify(body)).toBe(400);
+      return (res.json() as { error: { message: string } }).error.message;
+    };
+    expect(await refused({ host: 'imap.other.test' })).toBe(
+      'Enter the mail server and the user name together, or leave both empty',
+    );
+    expect(await refused({ user: 'bookings@other.test' })).toBe(
+      'Enter the mail server and the user name together, or leave both empty',
+    );
+    expect(await refused({ host: 'imap.other.test', user: 'bookings@other.test' })).toBe(
+      'Enter the password of the mailbox',
+    );
+    // Other settings can be saved with no mailbox at all: mail may be forwarded instead.
+    expect((await stack.admin.put(path, { recipient: 'goa@other.test' })).statusCode).toBe(204);
+
+    const whole = { host: 'imap.other.test', user: 'bookings@other.test', password: 'secret-1' };
+    expect((await stack.admin.put(path, whole)).statusCode).toBe(204);
+    expect((await stack.admin.get(path)).json()).toMatchObject({
+      host: 'imap.other.test',
+      hasPassword: true,
+    });
+    // The password stays through later saves that do not name it.
+    expect((await stack.admin.put(path, { folder: 'Bookings' })).statusCode).toBe(204);
+    expect((await stack.admin.get(path)).json()).toMatchObject({ hasPassword: true });
+
+    // Taking the mailbox away takes its password with it.
+    expect((await stack.admin.put(path, { host: null, user: null })).statusCode).toBe(204);
+    expect((await stack.admin.get(path)).json()).toMatchObject({
+      host: null,
+      user: null,
+      hasPassword: false,
+    });
   });
 
   it('only handles mail addressed to the property when the mailbox is shared', async () => {
