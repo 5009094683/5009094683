@@ -272,6 +272,60 @@ test.describe('working on the calendar', () => {
     });
   });
 
+  test('catches up with a booking made before live updates were connected', async ({ page }) => {
+    const start = windowStart(8);
+    // The stream of changes is slow to open, as on a poor connection.
+    let open!: () => void;
+    const slow = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    await page.route('**/api/live', async (route) => {
+      await slow;
+      await route.continue();
+    });
+    await page.reload();
+    await showCalendarFrom(page, start);
+
+    // The calendar has been read, and nothing can announce this booking to it yet.
+    const stay = await bookCottage(addDays(start, 3), addDays(start, 6), 'Meanwhile');
+    open();
+    await expect(page.getByRole('status', { name: 'Live updates connected' })).toBeVisible();
+    await expect(page.locator(`[data-stay="${stay.rooms[0]!.id}"]`)).toBeVisible({ timeout: 5000 });
+  });
+
+  test('catches up with a booking made while the connection was down', async ({ page }) => {
+    const start = windowStart(9);
+    // The first stream opens and is cut at once, as when a network drops; the browser then
+    // tries again by itself, and that second attempt is kept waiting.
+    let attempts = 0;
+    let comeBack!: () => void;
+    const down = new Promise<void>((resolve) => {
+      comeBack = resolve;
+    });
+    await page.route('**/api/live', async (route) => {
+      attempts++;
+      if (attempts === 1) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'text/event-stream',
+          body: 'retry: 200\n\n',
+        });
+        return;
+      }
+      await down;
+      await route.continue();
+    });
+    await page.reload();
+    await showCalendarFrom(page, start);
+    await expect.poll(() => attempts).toBeGreaterThan(1);
+    await expect(page.getByRole('status', { name: 'Live updates reconnecting' })).toBeVisible();
+
+    const stay = await bookCottage(addDays(start, 3), addDays(start, 6), 'Offline');
+    comeBack();
+    await expect(page.getByRole('status', { name: 'Live updates connected' })).toBeVisible();
+    await expect(page.locator(`[data-stay="${stay.rooms[0]!.id}"]`)).toBeVisible({ timeout: 5000 });
+  });
+
   test('opens a stay, changes its dates in the panel and cancels it', async ({ page }) => {
     const start = windowStart(6);
     const stay = await bookCottage(addDays(start, 2), addDays(start, 4), 'Panel');

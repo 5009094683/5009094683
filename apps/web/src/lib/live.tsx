@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -35,15 +36,15 @@ export function LiveProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const source = new EventSource('/api/live');
-    let wasConnected = false;
     const broadcast = (event: LiveEvent) => {
       for (const listener of listeners.current) listener(event);
     };
     source.onopen = () => {
       setConnected(true);
-      // Anything that changed while the stream was down was missed: refetch everything.
-      if (wasConnected) broadcast({ id: 0, kind: 'resync', orgId: '', propertyId: null });
-      wasConnected = true;
+      // Whatever changed before this moment was not announced here: while the stream was
+      // down, or, the first time, between a screen's first read and the stream opening.
+      // Every screen reads again.
+      broadcast({ id: 0, kind: 'resync', orgId: '', propertyId: null });
     };
     source.onerror = () => setConnected(false);
     source.addEventListener('change', (message) => {
@@ -59,16 +60,16 @@ export function LiveProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const value = useMemo<LiveContextValue>(
-    () => ({
-      connected,
-      subscribe(listener) {
-        listeners.current.add(listener);
-        return () => listeners.current.delete(listener);
-      },
-    }),
-    [connected],
-  );
+  // The same function for the life of the page. Were it remade when `connected` changes, every
+  // screen would subscribe afresh at the very moment the stream opens, and drop the "read
+  // again" it had just been handed.
+  const subscribe = useCallback((listener: Listener) => {
+    listeners.current.add(listener);
+    return () => {
+      listeners.current.delete(listener);
+    };
+  }, []);
+  const value = useMemo<LiveContextValue>(() => ({ connected, subscribe }), [connected, subscribe]);
 
   return <LiveContext.Provider value={value}>{children}</LiveContext.Provider>;
 }
