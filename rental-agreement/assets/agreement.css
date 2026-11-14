@@ -1,0 +1,901 @@
+@font-face {
+  font-family: "Be Vietnam Pro";
+  src: url("fonts/BeVietnamPro-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: "Be Vietnam Pro";
+  src: url("fonts/BeVietnamPro-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-display: block;
+}
+@font-face {
+  font-family: "Be Vietnam Pro";
+  src: url("fonts/BeVietnamPro-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-display: block;
+}
+@font-face {
+  font-family: "Be Vietnam Pro";
+  src: url("fonts/BeVietnamPro-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-display: block;
+}
+
+/* ---------- Design settings ---------- */
+
+:root {
+  --accent: #0f5f4f; /* overridden by accentColor in config.js */
+  --ink: #17211e;
+  --muted: #4f5a56;
+  --line: #98a39f;
+  --guide: #7a8682;
+  --tint: #eef4f2;
+  --tint: color-mix(in srgb, var(--accent) 7%, #fff);
+  --heart: #d83a3a; /* the {heart} symbol */
+
+  --text-size: 9.5pt;
+  --terms-size: 9.2pt;
+  --row-height: 10mm; /* height of one row of boxes on the form */
+  --section-gap: 4mm;
+  --hairline: 0.25mm;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+body {
+  margin: 0;
+  background: #e6eae8;
+  color: var(--ink);
+  font-family: "Be Vietnam Pro", "Segoe UI", Arial, sans-serif;
+  font-size: var(--text-size);
+  line-height: 1.4;
+}
+
+.defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+/* ---------- Screen-only toolbar ---------- */
+
+.toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #fff;
+  border-bottom: 1px solid #d3dad7;
+  font-size: 13px;
+}
+
+.toolbar-home {
+  margin-right: 4px;
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.toolbar-languages {
+  display: flex;
+  gap: 4px;
+}
+
+.toolbar button {
+  padding: 6px 14px;
+  border: 1px solid #c6cfcb;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.toolbar button[aria-pressed="true"],
+#print-button {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.toolbar-warning {
+  color: #b42318;
+  font-weight: 600;
+}
+
+.toolbar-hint {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+/* ---------- Page ---------- */
+
+#agreement {
+  counter-reset: section;
+}
+
+.page {
+  /* 1 = normal. agreement.js lowers --fit per page when the content would not fit otherwise.
+     Boxes and text follow --fit; empty space follows --gap-fit, which shrinks three times as
+     fast, so a crowded page gives up white space before it gives up text size. */
+  --fit: 1;
+  --gap-fit: calc(var(--fit) * 3 - 2);
+
+  display: flex;
+  flex-direction: column;
+  width: 210mm;
+  height: 297mm;
+  margin: 8mm auto;
+  padding: 10mm 13mm 8mm;
+  background: #fff;
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.14);
+}
+
+@media screen {
+  .page[data-overflow] {
+    outline: 3px solid #d92d20;
+  }
+}
+
+@page {
+  size: A4;
+  margin: 0;
+}
+
+@media print {
+  body {
+    background: #fff;
+  }
+
+  .toolbar {
+    display: none;
+  }
+
+  .page {
+    margin: 0;
+    box-shadow: none;
+    break-after: page;
+  }
+
+  .page:last-child {
+    break-after: auto;
+  }
+}
+
+/* ---------- Brand header ---------- */
+
+.brand {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8mm;
+  padding-bottom: 3.6mm;
+  border-bottom: 0.7mm solid var(--accent);
+}
+
+.brand::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -1.6mm;
+  left: 0;
+  border-top: var(--hairline) solid var(--accent);
+}
+
+.brand-identity {
+  display: flex;
+  align-items: center;
+  gap: 3.6mm;
+}
+
+.brand-logo {
+  flex: none;
+  height: 14mm;
+  color: var(--accent);
+}
+
+.brand-logo svg,
+.brand-logo img {
+  display: block;
+  width: auto;
+  max-width: 45mm;
+  height: 100%;
+  object-fit: contain;
+}
+
+.brand-name {
+  color: var(--accent);
+  font-size: 15.5pt;
+  font-weight: 700;
+  letter-spacing: 0.035em;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.brand-tagline {
+  margin-top: 0.9mm;
+  color: var(--muted);
+  font-size: 7.5pt;
+  font-weight: 500;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+.brand-contacts {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  gap: 0.7mm 2.6mm;
+  margin: 0;
+}
+
+.brand-contacts dt {
+  color: var(--muted);
+  font-size: 7pt;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.brand-contacts dd {
+  margin: 0;
+  font-size: 10.5pt;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.brand-compact {
+  padding-bottom: 2.6mm;
+}
+
+.brand-compact .brand-identity {
+  gap: 2.6mm;
+}
+
+.brand-compact .brand-logo {
+  height: 8.5mm;
+}
+
+.brand-compact .brand-name {
+  font-size: 11pt;
+}
+
+.running-title {
+  color: var(--muted);
+  font-size: 7.5pt;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+/* ---------- Title block ---------- */
+
+.masthead {
+  padding-top: calc(5.6mm * var(--gap-fit));
+  text-align: center;
+}
+
+.national {
+  margin-bottom: calc(3.4mm * var(--gap-fit));
+  font-size: 9pt;
+  line-height: 1.45;
+}
+
+.national-name {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.national-motto {
+  font-weight: 600;
+}
+
+.national-motto::after {
+  content: "";
+  display: block;
+  width: 36mm;
+  margin: 1.3mm auto 0;
+  border-top: var(--hairline) solid var(--ink);
+}
+
+.title {
+  margin: 0;
+  font-size: 20pt;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.agreement-number {
+  margin-top: 1.8mm;
+  color: var(--muted);
+  font-size: 9pt;
+}
+
+.title-terms {
+  margin: calc(6.6mm * var(--gap-fit)) 0 calc(5mm * var(--gap-fit));
+  font-size: 15pt;
+  text-align: center;
+}
+
+/* ---------- Hand-written blanks ---------- */
+
+.blank {
+  display: inline-block;
+  min-width: 30mm;
+  height: 1em;
+  margin: 0 1mm;
+  border-bottom: var(--hairline) solid var(--guide);
+  vertical-align: baseline;
+}
+
+/* ---------- Sections ---------- */
+
+.section {
+  margin-top: calc(var(--section-gap) * var(--gap-fit));
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: 2.2mm;
+  margin: 0 0 calc(1.7mm * var(--gap-fit));
+  color: var(--accent);
+  font-size: 9.5pt;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.section-head::after {
+  content: "";
+  flex: 1;
+  border-top: var(--hairline) solid var(--accent);
+  opacity: 0.4;
+}
+
+.section-number {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 5.2mm;
+  height: 5.2mm;
+  border-radius: 1.2mm;
+  background: var(--accent);
+  color: #fff;
+  font-size: 8.5pt;
+  letter-spacing: 0;
+}
+
+.section-number::before {
+  counter-increment: section;
+  content: counter(section);
+}
+
+.section-when {
+  padding: 0.3mm 2mm;
+  border: var(--hairline) solid var(--accent);
+  border-radius: 3mm;
+  font-size: 7pt;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+/* ---------- Party A ---------- */
+
+.party-a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6mm;
+  padding: calc(2.8mm * var(--gap-fit)) 3.6mm;
+  border-left: 0.9mm solid var(--accent);
+  border-radius: 0 1.5mm 1.5mm 0;
+  background: var(--tint);
+}
+
+.party-a-name {
+  font-size: 11pt;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.party-a-address {
+  margin-top: 0.5mm;
+  font-size: 9pt;
+}
+
+.party-a-address b {
+  font-weight: 600;
+}
+
+.party-a-note {
+  flex: none;
+  font-size: 10pt;
+}
+
+.party-a-note strong {
+  font-weight: 600;
+}
+
+.heart {
+  width: 0.95em;
+  height: 0.95em;
+  fill: var(--heart);
+  vertical-align: -0.13em;
+}
+
+/* ---------- Form boxes ---------- */
+
+.fields {
+  overflow: hidden;
+  border: var(--hairline) solid var(--line);
+  border-radius: 1.5mm;
+}
+
+.row {
+  display: flex;
+  min-height: calc(var(--row-height) * var(--fit));
+  border-bottom: var(--hairline) solid var(--line);
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.field {
+  position: relative;
+  display: flex;
+  /* Growing from a width that is already in proportion keeps each box at exactly its share
+     of the row, so dividers line up between rows. */
+  flex: var(--span, 12) 1 calc(var(--span, 12) * 5mm);
+  flex-direction: column;
+  min-width: 0;
+  padding: 1.3mm 2.2mm 1.5mm;
+  border-right: var(--hairline) solid var(--line);
+}
+
+.field:last-child {
+  border-right: 0;
+}
+
+.label {
+  color: var(--muted);
+  font-size: 6.6pt;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.unit {
+  position: absolute;
+  right: 2.2mm;
+  bottom: 1.5mm;
+  color: var(--muted);
+  font-size: 8pt;
+  font-weight: 500;
+}
+
+.guides {
+  display: flex;
+  margin-top: auto;
+}
+
+.guides .guide + .guide {
+  margin-left: 3.5mm;
+  padding-left: 2.5mm;
+  border-left: var(--hairline) dashed var(--line);
+}
+
+.guide {
+  display: inline-flex;
+  align-items: flex-end;
+  margin-top: auto;
+  color: var(--guide);
+  font-size: 11pt;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.guide b {
+  font-size: 13pt;
+  font-weight: 700;
+}
+
+.guide i {
+  width: 8mm;
+}
+
+.guide i.wide {
+  width: 12mm;
+}
+
+.printed {
+  display: flex;
+  align-items: baseline;
+  gap: 5mm;
+  margin-top: auto;
+  font-size: 9pt;
+  font-weight: 500;
+}
+
+.printed-note {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1mm 6.5mm;
+  margin-top: auto;
+  padding-top: 0.8mm;
+  font-size: 9pt;
+}
+
+.check,
+.count {
+  display: inline-flex;
+  align-items: center;
+  gap: 1.7mm;
+}
+
+.box,
+.count-box {
+  flex: none;
+  border: 0.3mm solid var(--ink);
+  border-radius: 0.6mm;
+}
+
+.box {
+  width: 3.7mm;
+  height: 3.7mm;
+}
+
+.count-box {
+  width: 7.5mm;
+  height: 5mm;
+}
+
+.write-in {
+  display: inline-flex;
+  flex: 1;
+  align-items: baseline;
+  min-width: 34mm;
+}
+
+.write-in .box {
+  align-self: center;
+}
+
+.write-in .blank {
+  flex: 1;
+  margin-right: 0;
+}
+
+/* ---------- Signatures ---------- */
+
+.section-sign {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  margin-bottom: 4mm;
+}
+
+/* Tick boxes for the customer to confirm, printed above a signature. */
+.declarations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.2mm 8mm;
+  margin: 0 0 2.4mm;
+  font-size: 9pt;
+}
+
+.declarations .check {
+  align-items: flex-start;
+}
+
+.declarations .box {
+  margin-top: 0.3mm;
+}
+
+.statement {
+  margin: 0 0 2.4mm;
+  text-wrap: balance;
+}
+
+/* The boxes take the space left on the page, between these two heights. */
+.signatures {
+  display: grid;
+  flex: 1;
+  grid-template-columns: 1fr 1fr;
+  gap: 6mm;
+  min-height: calc(27mm * var(--fit));
+  max-height: 46mm;
+}
+
+.signature {
+  padding: 2.2mm 3mm;
+  border: var(--hairline) solid var(--line);
+  border-radius: 1.5mm;
+  text-align: center;
+}
+
+.signature-party {
+  font-size: 9pt;
+}
+
+.signature-party strong {
+  color: var(--accent);
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.signature-party span::before {
+  content: "·";
+  margin: 0 1.6mm;
+  color: var(--guide);
+}
+
+.signature-hint {
+  color: var(--muted);
+  font-size: 7.5pt;
+}
+
+/* ---------- Terms & conditions ---------- */
+
+.terms {
+  font-size: calc(var(--terms-size) * var(--fit));
+  line-height: calc(1.45 - (1 - var(--fit)) * 0.6);
+  text-wrap: pretty;
+}
+
+.article {
+  display: grid;
+  grid-template-columns: 15mm 1fr;
+  padding: calc(2.8mm * var(--gap-fit)) 0 calc(3mm * var(--gap-fit));
+  border-top: var(--hairline) solid var(--line);
+}
+
+.article-number span {
+  display: block;
+  color: var(--muted);
+  font-size: 6.6pt;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  line-height: 1.9;
+  text-transform: uppercase;
+}
+
+.article-number b {
+  display: block;
+  color: var(--accent);
+  font-size: 17pt;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.article-title {
+  margin: 0 0 1mm;
+  font-size: inherit;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.clauses,
+.clauses ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.clauses {
+  counter-reset: clause;
+}
+
+.clauses > li {
+  position: relative;
+  margin-top: 0.8mm;
+  padding-left: 5.5mm;
+  counter-increment: clause;
+}
+
+.clauses > li::before {
+  content: counter(clause) ".";
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.clauses ul li {
+  position: relative;
+  margin-top: 0.5mm;
+  padding-left: 4mm;
+}
+
+.clauses ul li::before {
+  content: "–";
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+}
+
+.terms strong {
+  font-weight: 600;
+}
+
+.terms .blank {
+  min-width: 36mm;
+}
+
+/* Signature line under the terms. */
+.acceptance {
+  display: flex;
+  align-items: flex-end;
+  gap: 6mm;
+  margin-bottom: 3mm;
+  padding-top: calc(5mm * var(--gap-fit));
+  border-top: var(--hairline) solid var(--line);
+  font-size: 9pt;
+}
+
+.acceptance-statement {
+  font-weight: 600;
+}
+
+.acceptance-field {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 1.5mm;
+  color: var(--muted);
+}
+
+/* The signature line takes whatever width is left between the statement and the date. */
+.acceptance-signature {
+  flex: 1;
+}
+
+.acceptance-field .blank {
+  flex: 1;
+  min-width: 30mm;
+  margin: 0;
+}
+
+/* ---------- Footer ---------- */
+
+.page-footer {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6mm;
+  margin-top: auto;
+  padding-top: 2mm;
+  border-top: var(--hairline) solid var(--line);
+  color: var(--muted);
+  font-size: 7.5pt;
+}
+
+.page-footer b {
+  font-weight: 600;
+}
+
+.page-number {
+  flex: none;
+}
+
+/* ---------- Start page (index.html), screen only ---------- */
+
+.home {
+  max-width: 250mm;
+  margin: 0 auto;
+  padding: 12mm 8mm 16mm;
+}
+
+/* On a narrow screen the contacts drop below the company name instead of squeezing beside it. */
+.home .brand {
+  flex-wrap: wrap;
+  row-gap: 4mm;
+}
+
+.home .brand-contacts dd {
+  white-space: nowrap;
+}
+
+.home-title {
+  margin: 12mm 0 2mm;
+  font-size: 22pt;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.home-title span,
+.home-card h2 span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.6em;
+  font-weight: 500;
+}
+
+.home-intro {
+  margin: 0 0 8mm;
+  color: var(--muted);
+  font-size: 10.5pt;
+  line-height: 1.5;
+}
+
+.home-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(68mm, 1fr));
+  gap: 6mm;
+}
+
+.home-card {
+  display: flex;
+  flex-direction: column;
+  padding: 7mm;
+  border-top: 1mm solid var(--accent);
+  border-radius: 2mm;
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+}
+
+.home-card h2 {
+  margin: 0 0 3mm;
+  color: var(--accent);
+  font-size: 14pt;
+  line-height: 1.25;
+}
+
+.home-card p {
+  margin: 0 0 6mm;
+  font-size: 10pt;
+  line-height: 1.5;
+}
+
+.home-links {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2.5mm;
+  margin-top: auto;
+}
+
+.home-links a {
+  padding: 2.6mm 3mm;
+  border: 1px solid var(--accent);
+  border-radius: 1.6mm;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10pt;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+}
+
+.home-links a.home-pdf {
+  background: #fff;
+  color: var(--accent);
+}
