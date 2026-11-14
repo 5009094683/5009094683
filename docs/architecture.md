@@ -120,7 +120,8 @@ refusing it would only hide a guest who is going to arrive.
   in between, the channel manager offers the revision again.
 - **A booking that cannot be placed is not dropped.** If its room or rate is
   not mapped, it is held, an alert says so, and it is applied as soon as the
-  mapping is fixed ("Apply again").
+  mapping is fixed ("Apply again"). It stays outstanding until it is recorded
+  or a person says it was dealt with by hand.
 
 The same pipeline takes bookings found in a calendar feed and bookings read
 from email; only the first step differs.

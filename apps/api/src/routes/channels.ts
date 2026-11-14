@@ -31,6 +31,7 @@ import {
   listRevisions,
   provisionChannex,
   reprocessRevision,
+  setAsideRevision,
   requestFullSync,
   saveIcalFeeds,
   saveMailbox,
@@ -345,6 +346,31 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       if (!row) throw notFound('Booking message', req.params.id);
       const actor = await authorizeConnection(app.db, req, row.connectionId, 'channels.manage');
       return reprocessRevision(app.db, actor, req.params.id);
+    },
+  );
+
+  r.post(
+    '/channels/revisions/:id/set-aside',
+    {
+      schema: {
+        tags: ['channels'],
+        summary:
+          'Mark a booking message that could not be recorded as dealt with by hand; applying it again reopens it',
+        params: idParams,
+      },
+    },
+    async (req) => {
+      const session = authorize(req);
+      const [row] = await app.db
+        .select({ connectionId: bookingRevisions.connectionId })
+        .from(bookingRevisions)
+        .innerJoin(channelConnections, eq(channelConnections.id, bookingRevisions.connectionId))
+        .where(
+          and(eq(bookingRevisions.id, req.params.id), eq(channelConnections.orgId, session.orgId)),
+        );
+      if (!row) throw notFound('Booking message', req.params.id);
+      const actor = await authorizeConnection(app.db, req, row.connectionId, 'channels.manage');
+      return setAsideRevision(app.db, actor, req.params.id);
     },
   );
 

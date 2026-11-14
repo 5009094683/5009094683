@@ -42,6 +42,7 @@ import {
   listRevisions,
   pullConnection,
   reprocessRevision,
+  setAsideRevision,
   retryPendingRevisions,
 } from './inbound';
 import { routeOutbox } from './router';
@@ -789,6 +790,66 @@ describe('bookings that cannot be placed', () => {
     expect(after!.fullSyncRequestedAt).not.toBeNull();
     // Applying it again does nothing.
     expect(await reprocessRevision(t.db, org.admin, result.id)).toMatchObject({ changed: false });
+  });
+
+  it('lets a person say a booking that could not be placed is dealt with, and take that back', async () => {
+    const c = await connectHotel({ standardRooms: 3 });
+    const event = bookingEvent({
+      rooms: [
+        {
+          externalRoomTypeId: 'ext-annexe',
+          externalRatePlanId: 'ext-annexe-bar',
+          checkIn: day(20),
+          checkOut: day(22),
+          amount: 1_200_000,
+        },
+      ],
+    });
+    const held = await ingestBookingEvent(t.db, c.connection, event, 'webhook');
+    expect(held.status).toBe('unmapped');
+    const key = `unmapped_booking:${c.connection.id}:${event.bookingId}`;
+    expect(await openAlerts(key)).toHaveLength(1);
+
+    // The front desk entered the booking by hand and says so.
+    expect(await setAsideRevision(t.db, org.admin, held.id)).toEqual({ status: 'set_aside' });
+    expect(await openAlerts(key)).toHaveLength(0);
+    const row = async () =>
+      (await t.db.select().from(bookingRevisions).where(eq(bookingRevisions.id, held.id)))[0]!;
+    expect(await row()).toMatchObject({ status: 'set_aside', nextAttemptAt: null });
+    // Saying it twice changes nothing.
+    expect(await setAsideRevision(t.db, org.admin, held.id)).toEqual({ status: 'set_aside' });
+
+    // It is not tried again: not on the schedule, not when rooms are mapped, and not when
+    // the channel delivers the same message once more.
+    expect(await retryPendingRevisions(t.db, new Date(Date.now() + 86_400_000))).toMatchObject({
+      applied: 0,
+      failed: 0,
+    });
+    const again = await ingestBookingEvent(t.db, c.connection, event, 'pull');
+    expect(again).toMatchObject({ status: 'set_aside', duplicate: true, reservationId: null });
+    expect(await openAlerts(key)).toHaveLength(0);
+    expect(await reservationFor(c.connection.id, event.bookingId)).toBeUndefined();
+
+    // Set aside by mistake: applying it again takes it up as before.
+    const reopened = await reprocessRevision(t.db, org.admin, held.id);
+    expect(reopened.status).toBe('unmapped');
+    expect(await openAlerts(key)).toHaveLength(1);
+
+    // Only what could not be recorded can be set aside, and only by its own organisation.
+    const fine = await ingestBookingEvent(
+      t.db,
+      c.connection,
+      bookingEvent({ rooms: [stdRoom(day(20), day(21))] }),
+      'webhook',
+    );
+    expect(fine.status).toBe('applied');
+    await expect(setAsideRevision(t.db, org.admin, fine.id)).rejects.toThrow(
+      'Only a booking message that could not be recorded can be marked as dealt with',
+    );
+    const rival = await createTestOrg(t.db, 'Rival');
+    await expect(setAsideRevision(t.db, rival.admin, held.id)).rejects.toMatchObject({
+      code: 'not_found',
+    });
   });
 
   it('drops the contents of a booking message nobody acted on, once it is old', async () => {

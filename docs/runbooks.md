@@ -89,6 +89,10 @@ not be read. The message says why.
 2. Fix the cause, then "Apply again" on the booking, or "Fetch bookings now".
 3. If you cannot fix it at once, enter the booking by hand from the site's
    extranet so the room is closed, and note the site's booking number on it.
+4. Once it is in the calendar by hand (or if the message was not about a
+   booking at all), choose "Dealt with by hand" on it under "Bookings
+   received". It is then no longer tried or counted as outstanding, and its
+   alert is closed. "Take it up again" undoes that.
 
 ### "... is no longer connected"
 

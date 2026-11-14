@@ -94,6 +94,8 @@ export const REVISION_STATUSES = [
   'superseded',
   'unmapped',
   'failed',
+  /** Could not be recorded, and a person has said it is dealt with: entered by hand, or nothing to enter. */
+  'set_aside',
 ] as const;
 export type RevisionStatus = (typeof REVISION_STATUSES)[number];
 

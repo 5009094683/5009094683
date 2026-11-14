@@ -1,8 +1,9 @@
 'use client';
 
-import { Inbox, RotateCw } from 'lucide-react';
+import { Check, Inbox, RotateCw } from 'lucide-react';
 import Link from 'next/link';
 import { Fragment, useEffect, useRef, useState } from 'react';
+import { ConfirmDialog } from '@/components/owners/confirm-dialog';
 import { ReservationPanel } from '@/components/reservations/reservation-panel';
 import { Button } from '@/components/ui/button';
 import { Drawer } from '@/components/ui/dialog';
@@ -175,6 +176,8 @@ export function ReceivedBookings({
   );
   const [applying, setApplying] = useState<ReadonlySet<string>>(new Set());
   const [open, setOpen] = useState<Revision | null>(null);
+  /** The booking message a person is about to say they dealt with by hand. */
+  const [settingAside, setSettingAside] = useState<Revision | null>(null);
   const rememberOpener = useReturnFocus(open !== null);
   // The table of one connection sits on the page of that connection.
   const onItsPage = connectionId !== undefined;
@@ -229,6 +232,13 @@ export function ReceivedBookings({
         return next;
       });
     }
+  };
+
+  const setAside = async (revision: Revision) => {
+    await api(`/channels/revisions/${revision.id}/set-aside`, { method: 'POST' });
+    await mutate();
+    setSettingAside(null);
+    toast.success('Marked as dealt with by hand');
   };
 
   const revisions = data?.revisions ?? [];
@@ -318,6 +328,19 @@ export function ReceivedBookings({
                           {revision.status === 'applied' && revision.error && (
                             <p className="mt-1 max-w-64 text-xs text-ink-soft">{revision.error}</p>
                           )}
+                          {revision.status === 'set_aside' &&
+                            !revision.contentsDropped &&
+                            auth.can('channels.manage', revision.propertyId) && (
+                              <button
+                                type="button"
+                                className="mt-1 block rounded text-xs font-medium text-brand-700 hover:underline disabled:opacity-50"
+                                disabled={applying.has(revision.id)}
+                                aria-label={`Take up again: ${subject}`}
+                                onClick={() => void applyAgain(revision)}
+                              >
+                                Take it up again
+                              </button>
+                            )}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-ink-soft">
                           <span title={via.hint}>{via.label}</span>
@@ -364,6 +387,17 @@ export function ReceivedBookings({
                                     Open the connection
                                   </Link>
                                 )}
+                                {auth.can('channels.manage', revision.propertyId) && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    icon={<Check className="size-3.5" />}
+                                    aria-label={`Dealt with by hand: ${subject}`}
+                                    onClick={() => setSettingAside(revision)}
+                                  >
+                                    Dealt with by hand
+                                  </Button>
+                                )}
                                 {auth.can('channels.manage', revision.propertyId) &&
                                   !revision.contentsDropped && (
                                     <Button
@@ -394,6 +428,25 @@ export function ReceivedBookings({
           </p>
         )}
       </Card>
+
+      {settingAside && (
+        <ConfirmDialog
+          title="Dealt with by hand?"
+          confirmLabel="Yes, it is dealt with"
+          tone="primary"
+          onConfirm={() => setAside(settingAside)}
+          onClose={() => setSettingAside(null)}
+        >
+          <p>
+            Say so once the booking, change or cancellation is in the calendar, or if the message
+            was not about a booking at all.
+          </p>
+          <p>
+            It is then no longer tried or counted as outstanding, and the alert about it is closed.
+            Nothing is recorded from it.
+          </p>
+        </ConfirmDialog>
+      )}
 
       <Drawer
         open={open !== null}

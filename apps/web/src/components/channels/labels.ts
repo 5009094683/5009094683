@@ -35,6 +35,7 @@ const REVISION_STATUS: Record<Revision['status'], StatusLabel> = {
   superseded: { label: 'Out of date, ignored', tone: 'neutral' },
   unmapped: { label: 'Room not mapped', tone: 'danger' },
   failed: { label: 'Failed', tone: 'danger' },
+  set_aside: { label: 'Dealt with by hand', tone: 'neutral' },
 };
 
 /**

@@ -792,7 +792,9 @@ export async function applyRevision(db: Database, revisionRowId: string): Promis
         .where(eq(bookingRevisions.id, revisionRowId))
         .for('update');
       if (!row) throw notFound('Booking revision', revisionRowId);
-      if (row.status === 'applied' || row.status === 'superseded') {
+      // Settled, one way or another. A message that was set aside by a person stays so when
+      // the channel delivers it again; only applying it again by hand reopens it.
+      if (row.status === 'applied' || row.status === 'superseded' || row.status === 'set_aside') {
         return { status: row.status, reservationId: row.reservationId, changed: false };
       }
       // Its contents were dropped (too old, or its guest was erased): there is nothing to apply.
@@ -913,7 +915,7 @@ async function recordFailure(
         error = ${message.slice(0, 2000)},
         next_attempt_at = CASE WHEN attempts + 1 <= ${RETRY_DELAYS_S.length}
           THEN now() + make_interval(secs => (ARRAY[${delays}]::int[])[attempts + 1]) ELSE NULL END
-    WHERE id = ${revisionRowId} AND status NOT IN ('applied', 'superseded')
+    WHERE id = ${revisionRowId} AND status NOT IN ('applied', 'superseded', 'set_aside')
     RETURNING attempts, next_attempt_at IS NOT NULL AS will_retry
   `);
   if (!rows[0] || !context) return;
@@ -1355,6 +1357,13 @@ export async function reprocessRevision(
     propertyId: row.connection.propertyId,
     summary: `Re-applied booking message ${row.revision.externalRevisionId} from ${row.connection.name}`,
   });
+  // Applying again is also how a message that was set aside by mistake is taken up again.
+  if (row.revision.status === 'set_aside') {
+    await db
+      .update(bookingRevisions)
+      .set({ status: 'failed' })
+      .where(and(eq(bookingRevisions.id, revisionRowId), eq(bookingRevisions.status, 'set_aside')));
+  }
   // A message that could not be read is read again first: the reading may have improved,
   // or a setting that held it back may have changed.
   const stored = row.revision.event as unknown as StoredBookingEvent;
@@ -1373,6 +1382,67 @@ export async function reprocessRevision(
     }
   }
   return applyRevision(db, revisionRowId);
+}
+
+/**
+ * Closes a booking message that will not be recorded from here: the booking was entered by
+ * hand, or the message was not about a booking after all. It is no longer tried, no longer
+ * counted as outstanding, and the alerts about it are closed. Applying it again reopens it.
+ */
+export async function setAsideRevision(
+  db: Database,
+  actor: Actor,
+  revisionRowId: string,
+): Promise<{ status: RevisionStatus }> {
+  return transact(db, async (tx) => {
+    const [row] = await tx
+      .select({ revision: bookingRevisions, connection: channelConnections })
+      .from(bookingRevisions)
+      .innerJoin(channelConnections, eq(channelConnections.id, bookingRevisions.connectionId))
+      .where(and(eq(bookingRevisions.id, revisionRowId), eq(channelConnections.orgId, actor.orgId)))
+      .for('update', { of: bookingRevisions });
+    if (!row) throw notFound('Booking revision', revisionRowId);
+    const { revision, connection } = row;
+    if (revision.status === 'set_aside') return { status: revision.status };
+    if (revision.status !== 'failed' && revision.status !== 'unmapped') {
+      throw invalidState(
+        'Only a booking message that could not be recorded can be marked as dealt with',
+      );
+    }
+    await tx
+      .update(bookingRevisions)
+      .set({ status: 'set_aside', nextAttemptAt: null })
+      .where(eq(bookingRevisions.id, revisionRowId));
+
+    await resolveAlert(tx, connection.orgId, `unreadable:${revision.id}`);
+    // The other alerts are about the booking, which may have further messages still waiting.
+    const { rows: waiting } = await tx.execute(sql`
+      SELECT 1 FROM booking_revisions
+      WHERE connection_id = ${connection.id} AND external_booking_id = ${revision.externalBookingId}
+        AND id <> ${revision.id} AND status IN ('failed', 'unmapped')
+      LIMIT 1
+    `);
+    if (waiting.length === 0) {
+      const bookingKey = `${connection.id}:${revision.externalBookingId}`;
+      await resolveAlert(tx, connection.orgId, `unmapped_booking:${bookingKey}`);
+      await resolveAlert(tx, connection.orgId, `inbound_failure:${bookingKey}`);
+    }
+    await writeAudit(tx, actor, {
+      action: 'channel.revision_set_aside',
+      entityType: 'booking_revision',
+      entityId: revisionRowId,
+      propertyId: connection.propertyId,
+      summary: `Marked booking message ${revision.externalRevisionId} from ${connection.name} as dealt with by hand`,
+    });
+    await emit(tx, connection.orgId, [
+      {
+        kind: 'sync.updated',
+        propertyId: connection.propertyId,
+        payload: { connectionId: connection.id },
+      },
+    ]);
+    return { status: 'set_aside' };
+  });
 }
 
 export interface RevisionSummary {
