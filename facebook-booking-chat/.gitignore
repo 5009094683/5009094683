@@ -1,0 +1,17 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+*.log
+.DS_Store
+
+# Local settings and secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Database and the Facebook session. The session file is a login to the
+# company's Facebook account: it must never be committed or shared.
+/var/
+appstate*.json
