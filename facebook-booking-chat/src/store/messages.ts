@@ -168,6 +168,14 @@ export class Messages {
     return rows.map(fromRow);
   }
 
+  /** The id of the newest message of all; grows with every message in or out. */
+  latestId(): number {
+    const row = this.db.prepare('SELECT COALESCE(MAX(id), 0) AS id FROM messages').get() as {
+      id: number;
+    };
+    return row.id;
+  }
+
   /** How many messages the assistant sent in this chat since a time. */
   countBotSince(threadId: string, since: number): number {
     const row = this.db
