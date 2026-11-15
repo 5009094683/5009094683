@@ -117,6 +117,30 @@ export class Messages {
       .run(externalId, id);
   }
 
+  /**
+   * Facebook reports every message sent from the company's account back to
+   * the listener. When such a report matches a message this program sent, it
+   * is recognised here (and given Facebook's id), and true is returned. False
+   * means nobody here sent it: a person wrote it in Messenger itself.
+   */
+  adoptEcho(threadId: string, text: string, externalId: string | null, since: number): boolean {
+    const squeeze = (value: string) => value.replace(/\s+/g, ' ').trim();
+    const candidates = this.db
+      .prepare(
+        `SELECT id, text FROM messages
+          WHERE thread_id = ? AND sender <> 'customer' AND external_id IS NULL
+            AND status <> 'failed' AND created_at >= ?
+          ORDER BY id`,
+      )
+      .all(threadId, since) as Array<{ id: number; text: string }>;
+    const match = candidates.find((candidate) => squeeze(candidate.text) === squeeze(text));
+    if (!match) return false;
+    if (externalId !== null) {
+      this.db.prepare('UPDATE messages SET external_id = ? WHERE id = ?').run(externalId, match.id);
+    }
+    return true;
+  }
+
   markFailed(id: number, error: string): void {
     this.db.prepare(`UPDATE messages SET status = 'failed', error = ? WHERE id = ?`).run(error, id);
   }
