@@ -54,6 +54,8 @@ const HANDOFF_NOTES: Record<HandoffReason, string> = {
 
 /** A sent message is recognised in what Facebook reports back for this long. */
 const ECHO_WINDOW_MS = 10 * 60 * 1000;
+/** Within this time of sending, a report that only begins like the message is still taken for it. */
+const JUST_SENT_MS = 30 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
 
 interface Waiting {
@@ -167,11 +169,14 @@ export class Bot {
     const now = this.now();
     const { messages, conversations } = this.store;
     if (message.messageId !== null && messages.hasExternalId(message.messageId)) return;
-    if (
-      messages.adoptEcho(message.threadId, message.text, message.messageId, now - ECHO_WINDOW_MS)
-    ) {
-      return;
-    }
+    const ours = messages.adoptEcho(
+      message.threadId,
+      message.text,
+      message.messageId,
+      now - ECHO_WINDOW_MS,
+      now - JUST_SENT_MS,
+    );
+    if (ours) return;
 
     // Nobody here sent it: a person of the team wrote in Messenger itself.
     // The assistant keeps out of the chat for a while.

@@ -109,16 +109,29 @@ async function main(): Promise<number> {
         say(
           `SENT a test reply (FB_SEND_VIA=${settings.sendVia}). Check that it shows in the chat.`,
         );
-        const echoed = await until(
-          () => received.some((echo) => echo.fromSelf && echo.threadId === message.threadId),
-          WAIT_FOR_ECHO_MS,
-        );
-        say(
-          echoed
-            ? 'Facebook reported the reply back, so replies typed by a person in Messenger will be noticed.'
-            : 'Facebook did not report the reply back. The assistant will then not notice when a person ' +
-                'answers in Messenger itself: take chats over in the dashboard instead.',
-        );
+        const reportedBack = () =>
+          received.find((echo) => echo.fromSelf && echo.threadId === message.threadId);
+        await until(() => reportedBack() !== undefined, WAIT_FOR_ECHO_MS);
+        const echo = reportedBack();
+        if (!echo) {
+          say(
+            'Facebook did not report the reply back. The assistant will then not notice when a person',
+          );
+          say('answers in Messenger itself: take chats over in the dashboard instead.');
+        } else if (echo.text.replace(/\s+/g, ' ').trim() === text) {
+          say(
+            'Facebook reported the reply back unchanged, so replies typed by a person in Messenger',
+          );
+          say('are told from the assistant\u2019s own.');
+        } else {
+          ok = false;
+          say('Facebook reported the reply back, but changed. The assistant may then take its own');
+          say(
+            'messages for a person\u2019s and fall silent. Please report this, with the two lines below:',
+          );
+          say(`  sent:     ${JSON.stringify(text)}`);
+          say(`  reported: ${JSON.stringify(echo.text)}`);
+        }
       } catch (error) {
         ok = false;
         const other = settings.sendVia === 'mqtt' ? 'http' : 'mqtt';

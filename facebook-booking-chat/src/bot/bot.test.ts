@@ -161,6 +161,23 @@ describe('a person of the team in the chat', () => {
     expect(store.messages.list('anna')).toHaveLength(4);
   });
 
+  it('still knows its message when Facebook reports it shortened or re-spaced', async () => {
+    // Facebook hands the message back cut short and with other spaces, and gives no id.
+    facebook.reportBackAs = (text) => `${text.slice(0, 80).replace(/ /g, '\u00a0')}…`;
+    await customer('anna', 'Hello');
+    await customer('anna', 'how much is a scooter?');
+    expect(facebook.sentTo('anna')).toHaveLength(2);
+    expect(store.conversations.get('anna')!.mode).toBe('bot');
+    expect(store.messages.list('anna').filter((m) => m.sender === 'staff')).toHaveLength(0);
+
+    // Half a minute later, the same opening is no longer taken for the assistant's own.
+    const sent = facebook.sentTo('anna')[1]!;
+    clock.advance(31_000);
+    facebook.staffWritesInMessenger('anna', `${sent.slice(0, 40)} (as I said, Hien)`);
+    await bot.settled();
+    expect(store.conversations.get('anna')!.mode).toBe('human');
+  });
+
   it('steps back when a person writes in Messenger itself, and returns later', async () => {
     await customer('anna', 'Hello');
     facebook.staffWritesInMessenger('anna', 'Hi Anna, this is Hien. I will call you in a minute.');

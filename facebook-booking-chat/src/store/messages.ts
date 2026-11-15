@@ -123,17 +123,40 @@ export class Messages {
    * is recognised here (and given Facebook's id), and true is returned. False
    * means nobody here sent it: a person wrote it in Messenger itself.
    */
-  adoptEcho(threadId: string, text: string, externalId: string | null, since: number): boolean {
-    const squeeze = (value: string) => value.replace(/\s+/g, ' ').trim();
+  adoptEcho(
+    threadId: string,
+    text: string,
+    externalId: string | null,
+    since: number,
+    justSentSince: number,
+  ): boolean {
+    const squeeze = (value: string) =>
+      value
+        .normalize('NFC')
+        .replace(/[\u200b-\u200f\ufeff]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
     const candidates = this.db
       .prepare(
-        `SELECT id, text FROM messages
+        `SELECT id, text, created_at FROM messages
           WHERE thread_id = ? AND sender <> 'customer' AND external_id IS NULL
             AND status <> 'failed' AND created_at >= ?
           ORDER BY id`,
       )
-      .all(threadId, since) as Array<{ id: number; text: string }>;
-    const match = candidates.find((candidate) => squeeze(candidate.text) === squeeze(text));
+      .all(threadId, since) as Array<{ id: number; text: string; created_at: number }>;
+    const reported = squeeze(text);
+    // The same words, or, for a message sent only moments ago, the same
+    // opening: Facebook may shorten or re-space a message on its way through,
+    // and taking the assistant's own message for a person's would silence it.
+    const opening = (value: string) => value.slice(0, 16).toLowerCase();
+    const match =
+      candidates.find((candidate) => squeeze(candidate.text) === reported) ??
+      candidates.find(
+        (candidate) =>
+          candidate.created_at >= justSentSince &&
+          reported.length >= 16 &&
+          opening(squeeze(candidate.text)) === opening(reported),
+      );
     if (!match) return false;
     if (externalId !== null) {
       this.db.prepare('UPDATE messages SET external_id = ? WHERE id = ?').run(externalId, match.id);

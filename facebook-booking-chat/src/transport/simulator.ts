@@ -19,6 +19,8 @@ export class SimulatorTransport implements Transport {
   readonly names = new Map<string, string>();
   /** When set, sending fails with this message: for trying out failures. */
   failSendsWith: string | null = null;
+  /** When set, a sent message is reported back changed like this, and without its id. */
+  reportBackAs: ((text: string) => string) | null = null;
 
   private onMessage: ((message: IncomingMessage) => void) | null = null;
   private counter = 0;
@@ -50,6 +52,11 @@ export class SimulatorTransport implements Transport {
     if (this.failSendsWith !== null) throw new Error(this.failSendsWith);
     const messageId = this.nextId();
     this.sent.push({ threadId, text, messageId });
+    if (this.reportBackAs) {
+      // As over the live Messenger connection: no id comes back from sending.
+      this.emit({ threadId, senderId: 'simulator', text: this.reportBackAs(text), fromSelf: true });
+      return { messageId: null };
+    }
     this.emit({ threadId, senderId: 'simulator', messageId, text, fromSelf: true });
     return { messageId };
   }
