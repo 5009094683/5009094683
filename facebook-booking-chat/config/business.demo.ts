@@ -62,7 +62,7 @@ export default defineBusiness({
       },
       note: {
         en: 'Fuel is paid by the renter. A deposit or collateral is left with us at pick-up.',
-        vi: 'Người thuê tự trả tiền xăng. Khi nhận xe, quý khách để lại tiền cọc hoặc tài sản thế chấp.',
+        vi: 'Người thuê tự trả tiền xăng. Khi nhận xe, anh/chị để lại tiền cọc hoặc tài sản thế chấp.',
       },
       autoConfirm: true,
     },

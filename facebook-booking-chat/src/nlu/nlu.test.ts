@@ -76,7 +76,8 @@ describe('people and motorbikes', () => {
 
   const bikes: Array<[string, number | undefined]> = [
     ['2 bikes', 2],
-    ['rent a motorbike', 1],
+    ['rent a motorbike', undefined],
+    ['one motorbike', 1],
     ['two scooters', 2],
     ['3 motorbikes for 2 days', 3],
     ['thue 2 xe may', 2],

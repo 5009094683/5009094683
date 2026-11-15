@@ -51,6 +51,26 @@ function optionPhrases(option: ServiceOption): string[] {
   return [...new Set(phrases.map(fold).filter((phrase) => phrase.length >= 2))];
 }
 
+const COUNT_WORDS: Record<string, number> = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  mot: 1, hai: 2, ba: 3, bon: 4, nam: 5, sau: 6, bay: 7, tam: 8, chin: 9, muoi: 10,
+}; // prettier-ignore
+
+/** The count put before an option's name: "2 Honda Wave", "hai chiếc Vision", "3 x XR 150". */
+export function countOfOption(folded: string, option: ServiceOption): number | undefined {
+  const numbers = `(\\d{1,2}|${Object.keys(COUNT_WORDS).join('|')})`;
+  for (const phrase of optionPhrases(option)) {
+    const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = new RegExp(
+      `(?<![\\d/.a-z])${numbers}\\s*(?:x\\s*|chiec\\s+|xe\\s+)?${escaped}(?![a-z0-9])`,
+    ).exec(folded);
+    if (!match) continue;
+    const n = /^\d+$/.test(match[1]!) ? Number(match[1]) : COUNT_WORDS[match[1]!];
+    if (n !== undefined && n >= 1) return n;
+  }
+  return undefined;
+}
+
 export type OptionMatch =
   | { kind: 'one'; option: ServiceOption }
   | { kind: 'several'; options: ServiceOption[] }
@@ -83,6 +103,11 @@ export function matchOption(folded: string, service: Service): OptionMatch {
 export interface ServiceMatch {
   service?: Service;
   option?: ServiceOption;
+  /**
+   * The message names the service ("rent", "easy rider", a tour by name)
+   * rather than only leaning towards it ("scooter").
+   */
+  strong: boolean;
   /** Services the message fits equally well, when it does not settle on one. */
   unsure: Service[];
 }
@@ -114,20 +139,24 @@ export function matchService(folded: string, business: Business): ServiceMatch {
     return {
       service: entry.service,
       option: entry.option.kind === 'one' ? entry.option.option : undefined,
+      strong: true,
       unsure: [],
     };
   }
 
   scored.sort((a, b) => b.score - a.score);
   const top = scored[0];
-  if (!top || top.score === 0) return { unsure: [] };
+  if (!top || top.score === 0) return { strong: false, unsure: [] };
 
   const rivals = scored.filter((entry) => entry.score === top.score);
-  if (rivals.length > 1) return { unsure: rivals.map((entry) => entry.service) };
+  if (rivals.length > 1) {
+    return { strong: false, unsure: rivals.map((entry) => entry.service) };
+  }
 
   return {
     service: top.service,
     option: top.option.kind === 'one' ? top.option.option : undefined,
+    strong: top.score >= 3,
     unsure: [],
   };
 }

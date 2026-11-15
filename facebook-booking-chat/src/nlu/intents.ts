@@ -3,6 +3,7 @@ import { hasAnyPhrase } from './text';
 export type Intent =
   | 'greeting'
   | 'human'
+  | 'discount'
   | 'book'
   | 'services'
   | 'price'
@@ -30,6 +31,10 @@ const PHRASES: Record<Exclude<Intent, 'greeting'>, string[]> = {
     'speak with', 'talk with', 'call me', 'customer service',
     'nhan vien', 'nguoi that', 'gap nguoi', 'tu van vien', 'noi chuyen voi', 'goi cho toi',
     'goi lai', 'goi cho minh', 'goi cho em', 'chu shop', 'gap chu',
+  ],
+  discount: [
+    'discount', 'discounts', 'cheaper', 'better price', 'best price', 'special price', 'negotiate',
+    'giam gia', 'bot di', 'bot chut', 'giam chut', 'gia tot hon', 'uu dai', 'khuyen mai',
   ],
   book: [
     'book', 'booking', 'reserve', 'reservation', 'i want', 'i would like', "i'd like", 'we want',

@@ -226,8 +226,9 @@ export function parseDates(text: string, today: IsoDate): DatesFound {
   consume(new RegExp(`(?<![\\d/.a-z])${NUM}\\s*(?:nights?|dem)(?![a-z])`), (m) =>
     setDays(toNumber(m[1]!) + 1, false),
   );
-  consume(/(?<![a-z])(?:for a day|half\s*(?:a\s*)?day|nua\s*ngay)(?![a-z])/, () =>
-    setDays(1, false),
+  consume(
+    /(?<![a-z])(?:(?:for|just) (?:a|the|one) day|half\s*(?:a\s*)?day|nua\s*ngay|trong ngay)(?![a-z])/,
+    () => setDays(1, false),
   );
 
   // "ngày 20", "mùng 5", "on the 20th": a day with no month. Kept aside and

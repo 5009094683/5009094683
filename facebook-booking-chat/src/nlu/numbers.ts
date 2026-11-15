@@ -15,7 +15,6 @@ const NOT_ANOTHER_UNIT =
 function numberOf(token: string | undefined): number | undefined {
   if (token === undefined) return undefined;
   if (/^\d+$/.test(token)) return Number(token);
-  if (token === 'a' || token === 'an') return 1;
   return NUMBER_WORDS[token];
 }
 
@@ -60,12 +59,16 @@ export function findPeople(folded: string): number | undefined {
   return undefined;
 }
 
-/** How many motorbikes a message speaks of: "2 bikes", "a scooter", "hai xe". */
+/**
+ * How many motorbikes a message speaks of: "2 bikes", "one scooter", "hai xe".
+ * "A motorbike" is not a count: "we want to rent a motorbike" names the
+ * service, and the assistant asks how many.
+ */
 export function findBikes(folded: string): number | undefined {
   return firstMatch(folded, [
     new RegExp(`(?<![\\d/.])(\\d{1,2})\\s*${BIKE_UNIT_EN}(?![a-z])`),
     new RegExp(`(?<![\\d/.])(\\d{1,2})\\s*${BIKE_UNIT_VI}(?![a-z])`),
-    new RegExp(`(?<![a-z])(a|an|${EN_WORDS})\\s+${BIKE_UNIT_EN}(?![a-z])`),
+    new RegExp(`(?<![a-z])(${EN_WORDS})\\s+${BIKE_UNIT_EN}(?![a-z])`),
     new RegExp(`(?<![a-z])(${VI_WORDS})\\s+${BIKE_UNIT_VI}(?![a-z])`),
   ]);
 }
