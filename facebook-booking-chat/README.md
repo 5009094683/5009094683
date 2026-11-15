@@ -74,10 +74,11 @@ The sentences themselves are in `src/engine/wording/en.ts` and `vi.ts`.
 
 ### 2. Connect Facebook
 
-Put three values from Facebook into `.env`, as described under
-[Connecting Facebook](#connecting-facebook), then look them over:
+Put the app's id and secret into `.env` and connect the Page, as described under
+[Connecting Facebook](#connecting-facebook), then look everything over:
 
 ```bash
+pnpm fb:connect
 pnpm fb:check
 ```
 
@@ -123,29 +124,47 @@ Once, at <https://developers.facebook.com>:
    Meta**. Its number, shown at the top of the app's dashboard, is `FB_APP_ID`.
 2. The app's secret: **App settings > Basic > App secret > Show** (Facebook asks for your password).
    This is `FB_APP_SECRET`.
-3. A token for the Page: **Use cases > Messenger > Customize > Messenger API Settings > Generate
-   access tokens**. Connect the Page there, leave every permission ticked, and press **Generate**.
-   This is `FB_PAGE_ACCESS_TOKEN`. The person who does this must have full access to the Page.
 
-Copy `.env.example` to `.env` and put the three values in, with a password for the dashboard:
+Copy `.env.example` to `.env` and put the two values in, with a password for the dashboard:
 
 ```bash
 cp .env.example .env
 ```
 
-That is all Facebook's dashboard is needed for. **The assistant sets up the rest itself** each time
-it starts: it tells Facebook the address to deliver the Page's messages to (the "webhook"), answers
-Facebook's check of that address, and switches the Page on for the app. Nothing has to be entered
-under "Configure webhooks" in Facebook's dashboard. It looks all of this over again every ten
-minutes and repairs what it finds missing; Facebook switches a webhook off when its address did not
-answer for an hour.
+### Connecting the Page
 
-`pnpm fb:check` shows what is in `.env` and what Facebook has on record for it, and says what is
-wrong in plain words. It changes nothing. If the token in `.env` is that of a person (from
-Facebook's Graph API Explorer, for example), `pnpm fb:check --save-page-token` turns it into a token
-of the Page that does not expire and saves it in `.env`.
+The assistant answers with a token of the Page (`FB_PAGE_ACCESS_TOKEN`). There are two ways to get
+one, and they differ in what the assistant can then do by itself.
 
-The token of a Page made in the app's dashboard does not expire. It ends when the person who made
+**By signing in with Facebook (`pnpm fb:connect`).** The command serves a page with one button at
+<http://localhost:3402>. Open it in a browser in which you are signed in to Facebook as someone
+with full access to the Page, press **Continue with Facebook**, and press Continue on each of
+Facebook's steps, leaving every permission switched on. The command then saves a token of the
+Page in `.env`; no token is copied by hand or shown. With this token **the assistant sets up
+everything else itself** each time it starts: it tells Facebook the address to deliver the Page's
+messages to (the "webhook"), answers Facebook's check of that address, and switches the Page on
+for the app. It looks all of this over again every ten minutes and repairs what it finds missing;
+Facebook takes a Page off an app whose address did not answer for an hour.
+
+**By copying the token from the app's dashboard.** Under **Use cases > Messenger > Customize >
+Messenger API Settings > Generate access tokens**, connect the Page and press **Generate**; put the
+token into `.env` as `FB_PAGE_ACCESS_TOKEN`. A token made this way may answer chats and nothing
+else. The assistant still registers its address with Facebook by itself, but switching the Page on
+for the app is then yours to do, once, in the same place: press **Add Subscriptions** next to the
+Page, tick `messages`, `messaging_postbacks` and `message_echoes`, and confirm. The assistant
+cannot see whether this was done; its status page says so until the first message arrives, and
+tells you if `message_echoes` was left out (without it, the assistant does not notice when a person
+answers in the Page's inbox). Should Facebook ever take the Page off the app, the step has to be
+repeated by hand.
+
+Either way, nothing has to be entered under "Configure webhooks" in Facebook's dashboard.
+
+`pnpm fb:check` shows what is in `.env` and what Facebook has on record for it, says which of the
+two kinds of token it is, and says what is wrong in plain words. It changes nothing. If the token
+in `.env` is that of a person (from Facebook's Graph API Explorer, for example),
+`pnpm fb:check --save-page-token` turns it into a token of the Page that does not expire.
+
+A token of the Page made in either way does not expire. It ends when the person who made
 it changes their Facebook password, loses access to the Page, or removes the app. The dashboard
 then shows "Not connected" with the reason; put a new token into `.env` and start again.
 
@@ -158,8 +177,8 @@ internet.
 - **To try it out:** `pnpm start --tunnel` opens a free tunnel through Cloudflare (it needs the
   program `cloudflared`: `brew install cloudflared`) and registers the tunnel's address with
   Facebook. The address is a new one at every start and lasts only while the program runs; when it
-  is stopped with Ctrl+C, it tells Facebook to stop delivering until the next start. Not for real
-  use.
+  is stopped with Ctrl+C, it takes the address off Facebook's record again, so that Facebook does
+  not keep calling an address that is gone. Not for real use.
 - **For real:** set `PUBLIC_URL` in `.env`. See the next section.
 
 Only what Facebook needs is open at that address: the webhook, which acts on nothing but what
@@ -317,12 +336,15 @@ Messenger itself is not touched.
 
 ## What to know
 
-- **Tried against Facebook as far as possible without the app's keys.** The conversation logic, the
-  dashboard and every call to Facebook are covered by tests, with a stand-in that answers as
-  Facebook's documentation describes. The program was run for real through a tunnel: a delivery
-  signed the way Facebook signs was taken in and answered, unsigned ones were turned away, and
-  Facebook's real servers refused made-up keys with the message the dashboard then showed. Run
-  `pnpm fb:check` and write to the Page once before relying on it.
+- **What has been tried against Facebook itself, and what has not.** Tried, with a real app and a
+  real Page: Facebook accepts the app's keys and a token copied from the dashboard
+  (`pnpm fb:check`), and the assistant registered its address through a tunnel, which Facebook's
+  servers called and accepted. Through the same kind of tunnel, a delivery signed the way Facebook
+  signs was taken in and answered, and unsigned ones were turned away. **Not tried there when this
+  was written:** a real customer's message arriving and the answer going out, and signing in with
+  `pnpm fb:connect`. The rest stands on tests against a stand-in that answers as Facebook's
+  documentation describes, corrected where the real one answered otherwise (what a token from the
+  dashboard may do was one such case). Write to the Page once before relying on it.
 - **Facebook's interface changes by version.** The assistant speaks version `v27.0`
   (`FB_GRAPH_VERSION`). Facebook retires a version about two years after it appears; raise the
   number before then and run the tests.
@@ -357,7 +379,7 @@ screenshot of each step.
 | `src/transport/` | The connection: Facebook's Messenger Platform (`messenger.ts`, `graph.ts`), and a stand-in for try-out and tests |
 | `src/public/` | What is open to the internet: the address Facebook calls, and the privacy notice |
 | `src/admin/` | The dashboard |
-| `src/cli/` | `pnpm fb:check` |
+| `src/cli/` | `pnpm fb:connect` and `pnpm fb:check` |
 | `src/tunnel.ts` | The try-out tunnel behind `--tunnel` |
 | `src/store/` | The database (SQLite) |
 | `test/fake-facebook.ts` | The stand-in for Facebook that the tests talk to |

@@ -30,8 +30,12 @@ let bot: Bot;
 let app: FastifyInstance;
 let warnings: string[];
 
-async function setUp(build?: () => Promise<FastifyInstance>): Promise<void> {
+async function setUp(
+  build?: () => Promise<FastifyInstance>,
+  prepare?: (facebook: FakeFacebook) => void,
+): Promise<void> {
   facebook = new FakeFacebook();
+  prepare?.(facebook);
   clock = new TestClock();
   store = memoryStore();
   warnings = [];
@@ -197,6 +201,28 @@ describe('from Facebook to the assistant and back', () => {
       mode: 'bot',
     });
     expect(facebook.sentTo('42')).toHaveLength(1);
+  });
+});
+
+describe('with the token the app\u2019s dashboard makes', () => {
+  // It may answer chats and no more; a person switches the Page on for the app in the dashboard.
+  beforeEach(async () => {
+    await app.close();
+    await bot.stop();
+    await setUp(undefined, (f) => (f.token.scopes = FakeFacebook.DASHBOARD_TOKEN_SCOPES));
+  });
+
+  it('registers its address, and answers once messages arrive', async () => {
+    expect(messenger.status()).toMatchObject({ state: 'connected', lastError: null });
+    expect(facebook.subscription).toMatchObject({ callback_url: `${ADDRESS}/webhook` });
+    expect(messenger.status().notes?.[0]).toMatch(/Add Subscriptions/);
+
+    facebook.chats.set('42', 'Anna Müller');
+    const [reply] = await customer('42', 'Hello');
+    expect(reply).toContain('automatic booking assistant');
+    expect(store.conversations.get('42')!.customerName).toBe('Anna Müller');
+    expect(messenger.status().notes).toEqual([]);
+    expect(messenger.status().account?.name).toBe('Cao Bằng Travel Guide');
   });
 });
 

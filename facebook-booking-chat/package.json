@@ -12,6 +12,7 @@
     "start": "tsx src/main.ts",
     "dev": "tsx watch --clear-screen=false src/main.ts",
     "demo": "tsx src/main.ts --demo",
+    "fb:connect": "tsx src/cli/connect-facebook.ts",
     "fb:check": "tsx src/cli/check-facebook.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",

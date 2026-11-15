@@ -3,7 +3,7 @@ import { SettingsError, readSettings } from './settings';
 
 const given = {
   DASHBOARD_PASSWORD: 'correct horse',
-  FB_APP_ID: '2639642633127339',
+  FB_APP_ID: '1234567890123456',
   FB_APP_SECRET: '0123456789abcdef',
   FB_PAGE_ACCESS_TOKEN: 'EAAexample',
 };
@@ -25,7 +25,7 @@ describe('settings', () => {
       tunnel: false,
       connection: 'messenger',
       facebook: {
-        appId: '2639642633127339',
+        appId: '1234567890123456',
         appSecret: '0123456789abcdef',
         pageAccessToken: 'EAAexample',
         pageId: '',
@@ -40,11 +40,12 @@ describe('settings', () => {
   });
 
   it('says which values from Facebook are missing, and where each is found', () => {
-    const message = failure({ DASHBOARD_PASSWORD: 'correct horse', FB_APP_ID: '2639642633127339' });
+    const message = failure({ DASHBOARD_PASSWORD: 'correct horse', FB_APP_ID: '1234567890123456' });
     expect(message).toContain('To connect to Facebook, .env still needs:');
     expect(message).toContain('- FB_APP_SECRET: in the app\u2019s dashboard: App settings > Basic');
     expect(message).toContain(
-      '- FB_PAGE_ACCESS_TOKEN: in the app\u2019s dashboard: Use cases > Messenger',
+      '- FB_PAGE_ACCESS_TOKEN: run "pnpm fb:connect", which signs in with Facebook and saves it; ' +
+        'or copy it from the app\u2019s dashboard: Use cases > Messenger',
     );
     expect(message).not.toContain('- FB_APP_ID');
     expect(message).toContain('pnpm demo');

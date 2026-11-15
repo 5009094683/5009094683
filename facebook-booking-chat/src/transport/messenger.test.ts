@@ -196,7 +196,7 @@ describe('connecting', () => {
       'a token without the permission to answer',
       {},
       (facebook) => (facebook.token.scopes = ['pages_show_list', 'pages_manage_metadata']),
-      /lacks the permission pages_messaging\./,
+      /lacks the permission pages_messaging, without which the Page\u2019s chats can be neither read nor answered\. Run "pnpm fb:connect"/,
     ],
     [
       'a token for another Page than the one named',
@@ -296,29 +296,48 @@ describe('connecting', () => {
     expect(detail(transport, 'Access token')).toBe('ends on 2026-11-20');
   });
 
-  it('tells Facebook to stop delivering when its address is about to go away', async () => {
+  it('takes its address off Facebook\u2019s record when the address is about to go away', async () => {
     const { facebook, transport, start } = await connected({}, (f) => {
       f.subscribedApps = [{ id: '999', name: 'Some CRM', subscribed_fields: ['messages'] }];
     });
-    expect(facebook.subscribedApps.map((app) => app.id)).toEqual(['999', facebook.appId]);
     expect(await transport.leave()).toBe(true);
-    // Only this app is taken off the Page; the address stays on record for the next start.
-    expect(facebook.subscribedApps.map((app) => app.id)).toEqual(['999']);
-    expect(facebook.subscription?.callback_url).toBe(`${ADDRESS}/webhook`);
-    // It has stopped: nothing switches the Page back on behind its back.
+    // The address is gone, and only what the app is told about Pages.
+    expect(facebook.subscription).toBeNull();
+    expect(facebook.otherSubscriptionsRemoved).toBe(false);
+    expect(facebook.calls('DELETE', /subscriptions$/)[0]!.query).toMatchObject({ object: 'page' });
+    // The Page stays switched on for the app, and for the others.
+    expect(facebook.subscribedApps.map((app) => app.id)).toEqual(['999', facebook.appId]);
+    // It has stopped: nothing registers the address again behind its back.
     expect(transport.status().state).toBe('stopped');
     await transport.check();
-    expect(facebook.subscribedApps.map((app) => app.id)).toEqual(['999']);
+    expect(facebook.subscription).toBeNull();
 
-    // The next start switches the Page on again.
+    // The next start registers the address again.
     await start();
-    expect(facebook.subscribedApps.map((app) => app.id)).toEqual(['999', facebook.appId]);
+    expect(facebook.subscription).toMatchObject({ callback_url: `${ADDRESS}/webhook` });
 
     // A Facebook that cannot be reached does not hold up the stop.
-    facebook.failing('DELETE', /subscribed_apps$/, null);
+    facebook.failing('DELETE', /subscriptions$/, null);
     expect(await transport.leave()).toBe(false);
-    // And without a Page there is nothing to tell.
-    expect(await setUp({}, (f) => (f.token.valid = false)).transport.leave()).toBe(false);
+  });
+
+  it('leaves alone an address it did not register', async () => {
+    // Entered in Facebook's dashboard by hand: not this program's to remove.
+    const byHand = await connected({ publicUrl: '' }, (f) => {
+      f.subscription = {
+        callback_url: 'https://proxy.example.com/hook',
+        fields: ['messages'],
+        active: true,
+      };
+    });
+    expect(await byHand.transport.leave()).toBe(false);
+    expect(byHand.facebook.subscription?.callback_url).toBe('https://proxy.example.com/hook');
+
+    // Never connected: nothing was registered.
+    const never = setUp({}, (f) => (f.token.valid = false));
+    await never.start();
+    expect(await never.transport.leave()).toBe(false);
+    expect(never.facebook.calls('DELETE', /./)).toHaveLength(0);
   });
 
   it('stops looking when it is stopped', async () => {
@@ -719,6 +738,95 @@ describe('sending', () => {
   });
 });
 
+/*
+  What "Generate" in the app's dashboard makes, as a real one showed: it may
+  read and answer the Page's chats, and nothing else. Facebook refuses it the
+  Page's own name, and both looking at and changing which apps the Page is
+  switched on for.
+*/
+describe('with a token that may answer chats and no more', () => {
+  const fromTheDashboard = (facebook: FakeFacebook) => {
+    facebook.token.scopes = FakeFacebook.DASHBOARD_TOKEN_SCOPES;
+  };
+
+  it('registers its address, and leaves switching the Page on to a person', async () => {
+    const { facebook, transport, logged } = await connected({}, fromTheDashboard);
+    expect(transport.status()).toMatchObject({
+      state: 'connected',
+      account: { id: facebook.page.id, name: null, kind: 'page' },
+    });
+    expect(facebook.subscription).toMatchObject({
+      callback_url: `${ADDRESS}/webhook`,
+      active: true,
+    });
+    // Nothing is asked of Facebook that it refuses such a token.
+    expect(facebook.calls('GET', /subscribed_apps$/)).toHaveLength(0);
+    expect(facebook.calls('POST', /subscribed_apps$/)).toHaveLength(0);
+    expect(facebook.subscribedApps).toEqual([]);
+
+    expect(detail(transport, 'Page switched on')).toBe(
+      'by hand, in Facebook\u2019s dashboard (the access token may not do it); nothing has arrived from Facebook since the start',
+    );
+    expect(transport.status().notes).toEqual([
+      expect.stringMatching(
+        /^Nothing has arrived from Facebook since the start\..*press \u201cAdd Subscriptions\u201d next to the Page, tick messages, messaging_postbacks and message_echoes, and confirm\. Or run "pnpm fb:connect" once/,
+      ),
+    ]);
+    // Said once in the log, however often the connection is looked over.
+    await transport.check();
+    await transport.check();
+    const said = logged.filter(
+      (entry) => entry.level === 'warn' && entry.message.includes('Add Subscriptions'),
+    );
+    expect(said).toHaveLength(1);
+  });
+
+  it('knows that the Page is switched on once something arrives', async () => {
+    const { facebook, transport, received } = await connected({}, fromTheDashboard);
+    transport.receive(facebook.customerWrites('42', 'Hello'));
+    expect(received).toHaveLength(1);
+    expect(transport.status().notes).toEqual([]);
+    expect(detail(transport, 'Page switched on')).toMatch(/; messages are arriving$/);
+  });
+
+  it('answers, and learns names from the Page\u2019s own list of chats', async () => {
+    const { facebook, transport } = await connected({}, fromTheDashboard);
+    facebook.chats.set('42', 'Anna Müller');
+    await transport.sendText('42', 'Hello Anna');
+    expect(facebook.sentTo('42')).toEqual(['Hello Anna']);
+    expect(await transport.nameOf('42')).toBe('Anna Müller');
+    // The Page is the other one in that chat.
+    expect(transport.status().account?.name).toBe('Cao Bằng Travel Guide');
+  });
+
+  it('says so when Facebook does not report back what leaves the Page', async () => {
+    const { facebook, transport, clock } = await connected({}, fromTheDashboard);
+    transport.receive(facebook.customerWrites('42', 'Hello'));
+    await transport.sendText('42', 'Hello! I am the booking assistant.');
+    // Where it is ticked, the report of the assistant's own message arrives within seconds.
+    clock.advance(60_000);
+    expect(transport.status().notes).toEqual([]);
+    clock.advance(90_000);
+    expect(transport.status().notes).toEqual([
+      expect.stringMatching(
+        /\u201cmessage_echoes\u201d is not ticked for it\. Until it is, a reply typed by a person in the Page\u2019s inbox goes unnoticed/,
+      ),
+    ]);
+
+    // Ticked: the report arrives, and the note goes.
+    transport.receive(
+      facebook.pageWrote('42', 'Hello! I am the booking assistant.', facebook.appId),
+    );
+    expect(transport.status().notes).toEqual([]);
+  });
+
+  it('takes its address off Facebook\u2019s record all the same', async () => {
+    const { facebook, transport } = await connected({}, fromTheDashboard);
+    expect(await transport.leave()).toBe(true);
+    expect(facebook.subscription).toBeNull();
+  });
+});
+
 describe('cutting a long text', () => {
   it('leaves a text that fits as it is', () => {
     expect(splitText('Hello')).toEqual(['Hello']);
@@ -758,6 +866,21 @@ describe('names', () => {
       user_id: '44',
     });
     expect(await transport.nameOf(facebook.page.id)).toBe('Cao Bằng Travel Guide');
+  });
+
+  it('learns the Page\u2019s own name from a chat where Facebook does not tell it otherwise', async () => {
+    const { facebook, transport } = await connected({}, (f) => {
+      f.token.scopes = ['pages_messaging', 'pages_manage_metadata'];
+    });
+    // Reading the Page itself takes a permission this token lacks.
+    expect(transport.status()).toMatchObject({ state: 'connected', account: { name: null } });
+    facebook.chats.set('44', 'Nguyễn Văn Nam');
+    expect(await transport.nameOf('44')).toBe('Nguyễn Văn Nam');
+    expect(transport.status().account).toEqual({
+      id: facebook.page.id,
+      name: 'Cao Bằng Travel Guide',
+      kind: 'page',
+    });
   });
 
   it('remembers a name, and does not keep asking for one it cannot get', async () => {

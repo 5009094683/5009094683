@@ -54,7 +54,7 @@ export class FakeFacebook {
   readonly personToken = 'EAA-person-token';
   readonly page = { id: '700000000000001', name: 'Cao Bằng Travel Guide' };
 
-  /** What Facebook knows of the Page's token. */
+  /** What Facebook knows of the Page's token: here, one made by signing in ("pnpm fb:connect"). */
   token = {
     valid: true,
     type: 'PAGE' as 'PAGE' | 'USER',
@@ -70,16 +70,42 @@ export class FakeFacebook {
     ],
   };
 
+  /** What "Generate" in the app's dashboard gives: a token that may answer chats and nothing else. */
+  static readonly DASHBOARD_TOKEN_SCOPES = ['pages_messaging', 'public_profile'];
+
   /** The app's webhook for Pages, as registered. */
   subscription: { callback_url: string; fields: string[]; active: boolean } | null = null;
   /** The apps the Page is switched on for. */
   subscribedApps: Array<{ id: string; name: string; subscribed_fields: string[] }> = [];
+  /** Set when the app's subscriptions were deleted wholesale, not only those about Pages. */
+  otherSubscriptionsRemoved = false;
   /** Field names Facebook accepts; narrowed by a test to play a refusal. */
   acceptedFields = new Set(ALL_PAGE_FIELDS);
 
   /** Plays Facebook calling the address before accepting it. */
   verifyCallback: (url: string, verifyToken: string) => Promise<boolean> = async () => true;
 
+  /** The code Facebook hands the browser after someone signed in, and the address it was for. */
+  signInCode = 'code-from-facebook';
+  signInRedirect = '';
+  /** What the person who signs in may do on the Page. */
+  tasks = ['ADVERTISE', 'ANALYZE', 'CREATE_CONTENT', 'MESSAGING', 'MODERATE', 'MANAGE'];
+  /** Further Pages the person manages and shared with the app. */
+  otherPages: Array<{ id: string; name: string }> = [];
+  /** The person shared no Page with the app. */
+  sharedNoPage = false;
+
+  private managedPages(): unknown[] {
+    if (this.sharedNoPage) return [];
+    return [
+      { id: this.page.id, name: this.page.name, access_token: this.pageToken, tasks: this.tasks },
+      ...this.otherPages.map((page) => ({
+        ...page,
+        access_token: `EAA-token-of-${page.id}`,
+        tasks: this.tasks,
+      })),
+    ];
+  }
   /** People who wrote to the Page more than 24 hours ago. */
   outsideWindow = new Set<string>();
   /** The app is approved for the human agent tag. */
@@ -220,12 +246,33 @@ export class FakeFacebook {
         return { id: '100000000000042', name: 'Thu Hien' };
       }
       asPage();
+      // As Facebook answered when this was tried with a token from the app's dashboard.
+      if (!this.token.scopes.includes('pages_read_engagement')) {
+        throw new Refusal(
+          100,
+          "(#100) Object does not exist, cannot be loaded due to missing permission or reviewable feature, or does not support this operation. This endpoint requires the 'pages_read_engagement' permission or the 'Page Public Content Access' feature or the 'Page Public Metadata Access' feature.",
+        );
+      }
       return { id: this.page.id, name: this.page.name };
     }
 
     if (method === 'GET' && path === 'oauth/access_token') {
-      asApp();
-      if (query.client_secret !== this.appSecret || query.fb_exchange_token !== this.personToken) {
+      // This one call takes the app's id and secret as parameters, and no token.
+      if (
+        token !== '' ||
+        query.client_id !== this.appId ||
+        query.client_secret !== this.appSecret
+      ) {
+        throw new Refusal(101, 'Error validating client secret.');
+      }
+      if (query.code !== undefined) {
+        // The code Facebook hands the browser after someone signed in.
+        if (query.code !== this.signInCode || query.redirect_uri !== this.signInRedirect) {
+          throw new Refusal(100, 'This authorization code has been used.', 400, 36009);
+        }
+        return { access_token: this.personToken, token_type: 'bearer', expires_in: 5183944 };
+      }
+      if (query.fb_exchange_token !== this.personToken) {
         throw new Refusal(190, 'Invalid OAuth access token.');
       }
       return {
@@ -240,16 +287,7 @@ export class FakeFacebook {
         throw new Refusal(190, 'Invalid OAuth access token.');
       }
       this.proven(request);
-      return {
-        data: [
-          {
-            id: this.page.id,
-            name: this.page.name,
-            access_token: this.pageToken,
-            tasks: ['ADVERTISE', 'ANALYZE', 'CREATE_CONTENT', 'MESSAGING', 'MODERATE', 'MANAGE'],
-          },
-        ],
-      };
+      return { data: this.managedPages() };
     }
 
     if (path === `${this.appId}/subscriptions`) {
@@ -268,6 +306,12 @@ export class FakeFacebook {
               ]
             : [],
         };
+      }
+      if (method === 'DELETE') {
+        // Without naming what it is about, this removes everything the app is told about.
+        if (query.object === undefined) this.otherSubscriptionsRemoved = true;
+        if (query.object === undefined || query.object === 'page') this.subscription = null;
+        return { success: true };
       }
       const fields = this.fieldsIn(String(body.fields ?? ''));
       if (body.object !== 'page') throw new Refusal(100, '(#100) Invalid parameter', 400);
@@ -290,6 +334,9 @@ export class FakeFacebook {
 
     if (path === `${this.page.id}/subscribed_apps`) {
       asPage();
+      if (!this.token.scopes.includes('pages_manage_metadata')) {
+        throw new Refusal(200, '(#200) Requires pages_manage_metadata permission to manage the object', 403); // prettier-ignore
+      }
       if (method === 'GET') return { data: this.subscribedApps };
       if (method === 'DELETE') {
         this.subscribedApps = this.subscribedApps.filter((app) => app.id !== this.appId);

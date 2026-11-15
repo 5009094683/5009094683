@@ -129,8 +129,8 @@ export class Graph {
     );
   }
 
-  delete<T>(path: string, token: string): Promise<T> {
-    return this.request<T>('DELETE', path, token, {});
+  delete<T>(path: string, token: string, query: GraphQuery = {}): Promise<T> {
+    return this.request<T>('DELETE', path, token, query);
   }
 
   /** What Facebook knows of an access token: whose it is, what it may do, when it ends. */
@@ -164,12 +164,25 @@ export class Graph {
   }
 
   /** Turns the short-lived token of a person into one that lasts about two months. */
-  async extendToken(token: string): Promise<string> {
-    const answer = await this.get<{ access_token?: unknown }>('oauth/access_token', this.appToken, {
-      grant_type: 'fb_exchange_token',
+  extendToken(token: string): Promise<string> {
+    return this.tokenFrom({ grant_type: 'fb_exchange_token', fb_exchange_token: token });
+  }
+
+  /**
+   * Turns the code Facebook hands back after a person signed in to the app
+   * into that person's token. `redirectUri` is the address the sign-in was
+   * started with.
+   */
+  exchangeCode(code: string, redirectUri: string): Promise<string> {
+    return this.tokenFrom({ redirect_uri: redirectUri, code });
+  }
+
+  /** Facebook's interface for handing out tokens takes the app's id and secret as parameters. */
+  private async tokenFrom(query: GraphQuery): Promise<string> {
+    const answer = await this.request<{ access_token?: unknown }>('GET', 'oauth/access_token', '', {
       client_id: this.appId,
       client_secret: this.appSecret,
-      fb_exchange_token: token,
+      ...query,
     });
     if (typeof answer.access_token !== 'string' || answer.access_token === '') {
       throw new GraphError('Facebook returned no token', 200);
@@ -201,7 +214,7 @@ export class Graph {
     // Proves to Facebook that a call made with a Page's or a person's token
     // comes from the holder of the app secret, and not from someone who got
     // hold of the token alone.
-    if (token !== this.appToken) {
+    if (token !== '' && token !== this.appToken) {
       url.searchParams.set(
         'appsecret_proof',
         createHmac('sha256', this.appSecret).update(token).digest('hex'),
@@ -214,7 +227,7 @@ export class Graph {
       response = await this.fetch(url, {
         method,
         headers: {
-          authorization: `Bearer ${token}`,
+          ...(token !== '' ? { authorization: `Bearer ${token}` } : {}),
           accept: 'application/json',
           ...(body ? { 'content-type': body.type } : {}),
         },

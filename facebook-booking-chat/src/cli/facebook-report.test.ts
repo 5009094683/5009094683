@@ -99,10 +99,10 @@ describe('pnpm fb:check', () => {
       /made for another Facebook app \(id 999\)/,
     ],
     [
-      'a token that lacks a permission',
+      'a token that may not answer chats',
       {},
-      (facebook) => (facebook.token.scopes = ['pages_messaging']),
-      /The token lacks pages_manage_metadata\./,
+      (facebook) => (facebook.token.scopes = ['pages_manage_metadata', 'pages_show_list']),
+      /The token lacks pages_messaging, without which the Page\u2019s chats can be neither read nor answered\. Run "pnpm fb:connect"/,
     ],
     [
       'a token that ends',
@@ -116,17 +116,51 @@ describe('pnpm fb:check', () => {
       () => undefined,
       /FB_PAGE_ID names another Page \(123\)/,
     ],
-    [
-      'no address for Facebook to deliver to',
-      { publicUrl: '' },
-      () => undefined,
-      /no address to deliver messages to, and PUBLIC_URL is not set/,
-    ],
   ])('says what is wrong with %s', async (_what, options, prepare, expected) => {
     const { ok, text } = await report(options, prepare);
     expect(ok).toBe(false);
     expect(text).toMatch(expected);
     expect(text).toContain('NOT IN ORDER.');
+  });
+
+  it('says what is left to a person with the token the app\u2019s dashboard makes', async () => {
+    // As a real one showed: it may answer chats and nothing else.
+    const { ok, text, facebook } = await report({}, (f) => {
+      f.token.scopes = FakeFacebook.DASHBOARD_TOKEN_SCOPES;
+    });
+    expect(ok).toBe(true);
+    // Facebook does not tell such a token the Page's name; the id is known from the token itself.
+    expect(text).toContain(
+      'Page:         (Facebook does not tell this token the name), id 700000000000001',
+    );
+    expect(text).toContain('Permissions:  pages_messaging, public_profile');
+    expect(text).toContain(
+      'This token may answer chats, but may not switch the Page on for the app',
+    );
+    expect(text).toContain(
+      'press \u201cAdd Subscriptions\u201d next to the Page, tick messages, messaging_postbacks and message_echoes, and confirm.',
+    );
+    expect(text).toContain('Or run "pnpm fb:connect"');
+    // The address is the app's to register, and is looked at as before.
+    expect(text).toContain('On record:    nothing yet');
+    // What Facebook refuses such a token is not asked.
+    expect(text).toContain(
+      'Whether the Page is switched on for the app cannot be seen with this token (see 1).',
+    );
+    expect(facebook.calls('GET', /subscribed_apps$/)).toHaveLength(0);
+    expect(text).toContain(
+      'The assistant can run with these values. Left for you, once: "Add Subscriptions" in the',
+    );
+    expect(text).not.toContain('NOT IN ORDER');
+  });
+
+  it('says how the address gets registered where none is set yet', async () => {
+    const { ok, text } = await report({ publicUrl: '' });
+    expect(ok).toBe(true);
+    expect(text).toContain('PUBLIC_URL:   (not set)');
+    expect(text).toContain(
+      'The assistant registers its address when it starts: with "pnpm start --tunnel"',
+    );
   });
 
   it('says what to do about the token of a person, and changes nothing unasked', async () => {
@@ -167,7 +201,7 @@ describe('pnpm fb:check', () => {
       saveTokenTo: envFile(''),
     });
     expect(ok).toBe(false);
-    expect(text).toContain('None of them has the id in FB_PAGE_ID (123).');
+    expect(text).toContain('None of the Pages has the id in FB_PAGE_ID (123).');
   });
 });
 
