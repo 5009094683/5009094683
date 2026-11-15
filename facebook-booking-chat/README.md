@@ -5,6 +5,8 @@ booking questions, takes bookings for motorbike rental, tour packages and Easy R
 confirms them, in English and Vietnamese. The team follows along, confirms and takes over in a small
 dashboard.
 
+It talks to Facebook through Facebook's own official interface for Pages, the Messenger Platform.
+
 ## What it does
 
 - **Answers questions**: prices, what is included, deposit and payment, cancellation terms, what to
@@ -16,13 +18,15 @@ dashboard.
   those days; otherwise the booking waits until a person confirms it in the dashboard, and the
   assistant then sends the confirmation with price, deposit and cancellation terms.
 - **Calls a person** when the customer asks for one, when it fails to understand twice in a row,
-  for cancellations and changes of existing bookings, and for requests larger than you allow. It
-  then stays silent in that chat. Photos and questions about discounts are flagged for the team
-  while the assistant carries on.
-- **Steps back** as soon as a person of the team writes in a chat, in Messenger or in the dashboard.
+  for cancellations and changes of existing bookings, for requests larger than you allow, and when
+  a customer asks for their data to be deleted. It then stays silent in that chat. Photos and
+  questions about discounts are flagged for the team while the assistant carries on.
+- **Steps back** as soon as a person of the team writes in a chat, in the Page's inbox (Messenger,
+  Meta Business Suite) or in the dashboard.
 
 It only ever answers people who wrote to the Page. It has no function for writing to people first
-or to many people at once.
+or to many people at once, and Facebook's interface would not allow it either. It serves the Page;
+chats of personal profiles cannot be automated through Facebook's interface.
 
 ## Try it without Facebook
 
@@ -31,16 +35,17 @@ pnpm install
 pnpm demo
 ```
 
-Open <http://127.0.0.1:3400>, sign in with the password `demo`, and write as a customer under
-**Try the assistant**. Bookings and chats show up in the dashboard as they would for real. Try-out
-mode uses the sample prices in `config/business.demo.ts` and a database that is emptied at each start.
+Open <http://127.0.0.1:3400>, sign in with the password `demo` (with a `.env` file in place: the
+password set there), and write as a customer under **Try the assistant**. Bookings and chats show
+up in the dashboard as they would for real. Try-out mode uses the sample prices in
+`config/business.demo.ts` and a database that is emptied at each start.
 
 `pnpm talk` does the same in the terminal, and `pnpm talk config/business.ts` with the company's own
 settings.
 
 ## Going live
 
-Three things are needed, in this order.
+Four things, in this order.
 
 ### 1. Fill in the settings
 
@@ -69,77 +74,212 @@ The sentences themselves are in `src/engine/wording/en.ts` and `vi.ts`.
 
 ### 2. Connect Facebook
 
-See [Connecting Facebook](#connecting-facebook) below, then make sure it works:
+Put three values from Facebook into `.env`, as described under
+[Connecting Facebook](#connecting-facebook), then look them over:
 
 ```bash
-pnpm fb:check --reply
+pnpm fb:check
 ```
 
 ### 3. Start it
 
+To try it from any computer, without an address of your own:
+
 ```bash
-cp .env.example .env      # then set DASHBOARD_PASSWORD in it
+pnpm start --tunnel
+```
+
+To run it for real, give it a lasting address first ([A lasting address](#a-lasting-address)), then:
+
+```bash
 pnpm start
 ```
 
-The dashboard is at <http://127.0.0.1:3400>.
+The dashboard is at <http://127.0.0.1:3400>. Write to the Page from a Facebook account that has a
+role on the app, and the assistant answers.
 
-- **Run one copy only.** Two copies answer every customer twice. A second start on the same
-  machine stops with a message.
+- **Run one copy only.** A second start on the same machine stops with a message. A copy started
+  elsewhere with the same values takes the Page's messages away from the first.
 - Keep it running with a process manager (`pm2 start "pnpm start" --name booking-assistant`, or a
   systemd service with `Restart=always`).
-- Everything it keeps is in `var/`: the database (`assistant.sqlite`) and the session file. Back
-  the folder up; never share it.
-- The dashboard listens on this machine only. To open it from a phone, put a web server with HTTPS
-  in front of it (Caddy: `desk.example.com { reverse_proxy 127.0.0.1:3400 }`) and set `DASHBOARD_URL`.
-- Switch off the Page's own automatic replies (instant reply, away message) in Meta Business
-  Suite, or customers get two answers.
+- Everything it keeps is in `var/` (the database, `assistant.sqlite`). Back the folder up; never
+  share it. `.env` holds the keys to the Page's chat: keep it on the machine that runs the
+  assistant, and nowhere else.
+- Switch off the Page's own automatic replies (instant reply, away message, frequently asked
+  questions) in Meta Business Suite, or customers get two answers.
+
+### 4. Open it to all customers
+
+A new Facebook app only passes on messages from people who have a role on it. See
+[Opening the assistant to all customers](#opening-the-assistant-to-all-customers).
 
 ## Connecting Facebook
 
-### Why not Facebook's official interface
+### What you need from Facebook
 
-The request was to use the official interface only if it could be had in one click. It cannot.
-Facebook's Messenger Platform needs a Meta developer account, an app with the Messenger use case,
-an access token for the Page, and a web address with HTTPS that Facebook can call; it works for
-Pages only, never for personal profiles. (Meta's
+Once, at <https://developers.facebook.com>:
+
+1. A developer account, and an app with the use case **Engage with customers on Messenger from
+   Meta**. Its number, shown at the top of the app's dashboard, is `FB_APP_ID`.
+2. The app's secret: **App settings > Basic > App secret > Show** (Facebook asks for your password).
+   This is `FB_APP_SECRET`.
+3. A token for the Page: **Use cases > Messenger > Customize > Messenger API Settings > Generate
+   access tokens**. Connect the Page there, leave every permission ticked, and press **Generate**.
+   This is `FB_PAGE_ACCESS_TOKEN`. The person who does this must have full access to the Page.
+
+Copy `.env.example` to `.env` and put the three values in, with a password for the dashboard:
+
+```bash
+cp .env.example .env
+```
+
+That is all Facebook's dashboard is needed for. **The assistant sets up the rest itself** each time
+it starts: it tells Facebook the address to deliver the Page's messages to (the "webhook"), answers
+Facebook's check of that address, and switches the Page on for the app. Nothing has to be entered
+under "Configure webhooks" in Facebook's dashboard. It looks all of this over again every ten
+minutes and repairs what it finds missing; Facebook switches a webhook off when its address did not
+answer for an hour.
+
+`pnpm fb:check` shows what is in `.env` and what Facebook has on record for it, and says what is
+wrong in plain words. It changes nothing. If the token in `.env` is that of a person (from
+Facebook's Graph API Explorer, for example), `pnpm fb:check --save-page-token` turns it into a token
+of the Page that does not expire and saves it in `.env`.
+
+The token of a Page made in the app's dashboard does not expire. It ends when the person who made
+it changes their Facebook password, loses access to the Page, or removes the app. The dashboard
+then shows "Not connected" with the reason; put a new token into `.env` and start again.
+
+### The address Facebook calls
+
+Facebook does not hold a connection open: it calls the assistant whenever something happens in the
+Page's chats. The assistant therefore needs an address with HTTPS that is reachable from the
+internet.
+
+- **To try it out:** `pnpm start --tunnel` opens a free tunnel through Cloudflare (it needs the
+  program `cloudflared`: `brew install cloudflared`) and registers the tunnel's address with
+  Facebook. The address is a new one at every start and lasts only while the program runs. Not for
+  real use.
+- **For real:** set `PUBLIC_URL` in `.env`. See the next section.
+
+Only what Facebook needs is open at that address: the webhook, which acts on nothing but what
+carries Facebook's signature, and the [privacy notice](#privacy-notice-and-deleting-a-customers-data).
+The dashboard is on another port and is not reachable through it.
+
+## A lasting address
+
+The program listens on two ports of the machine it runs on:
+
+| Port | What | Who must reach it |
+| --- | --- | --- |
+| 3401 (`WEBHOOK_PORT`) | What Facebook calls, and the privacy notice | The internet, over HTTPS, at `PUBLIC_URL` |
+| 3400 (`DASHBOARD_PORT`) | The dashboard | The team only |
+
+Both listen on this machine only (`127.0.0.1`). Something has to stand in front of port 3401 that
+has a name and a certificate. Two usual ways:
+
+**A web server on a machine with a public address.** With [Caddy](https://caddyserver.com), which
+gets the certificate by itself:
+
+```
+assistant.example.com {
+    @facebook path /webhook /privacy
+    reverse_proxy @facebook 127.0.0.1:3401
+    # The dashboard under the same name, behind its password.
+    # Leave this line out to keep the dashboard off the internet.
+    reverse_proxy 127.0.0.1:3400
+}
+```
+
+**A tunnel with a name of your own**, for a machine without a public address. With a domain at
+Cloudflare ([their guide](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)):
+
+```bash
+cloudflared tunnel login
+cloudflared tunnel create booking-assistant
+cloudflared tunnel route dns booking-assistant assistant.example.com
+cloudflared tunnel run --url http://127.0.0.1:3401 booking-assistant
+```
+
+Either way, in `.env`:
+
+```
+PUBLIC_URL=https://assistant.example.com
+```
+
+Where only one port can be opened (some hosting services), set `WEBHOOK_PORT` to the same number as
+`DASHBOARD_PORT`: both are then served from that port, the dashboard behind its password. In a
+container, set `DASHBOARD_HOST=0.0.0.0` and `WEBHOOK_HOST=0.0.0.0`.
+
+To open the dashboard from a phone, it needs HTTPS in front of it as well (the Caddy lines above do
+that); set `DASHBOARD_URL` to its address so that messages to the team can link to it.
+
+## Opening the assistant to all customers
+
+While the app is new ("in development"), Facebook passes on only the messages of people who have a
+role on the app: its administrators, developers and testers (**App roles** in the app's dashboard).
+That is enough to try everything. For every customer to be answered, Facebook wants three things:
+
+1. **The app's details filled in** under App settings > Basic: an icon, a category, and
+   - Privacy policy URL: `PUBLIC_URL` + `/privacy`
+   - User data deletion, instructions URL: `PUBLIC_URL` + `/privacy#delete`
+
+   Both are served by the assistant itself; see below. They must be reachable at a lasting address.
+2. **`pages_messaging` approved for everyone** ("Advanced Access"): requested in the app's
+   dashboard under App Review. Facebook asks for a description of what the app does and a screen
+   recording of it answering; it may also ask to verify the business.
+3. **The app published** ("Live").
+
+Facebook's documentation is not of one mind on step 2. Its
 [overview](https://developers.facebook.com/documentation/business-messaging/messenger-platform/overview)
-says App Review is not required when the app only serves your own Page; this was not tried.)
+says the review is "not required if you only send and receive messages for your own Facebook Page";
+its pages on [webhooks](https://developers.facebook.com/documentation/business-messaging/messenger-platform/webhooks)
+and [error codes](https://developers.facebook.com/documentation/business-messaging/messenger-platform/error-codes)
+say that customers without a role are only served once `pages_messaging` is reviewed. The way to
+find out for this app: do steps 1 and 3, then have someone who has no role on the app write to the
+Page. If the assistant answers, nothing more is needed. If it stays silent, or the dashboard shows
+a message as "not sent" because the person has no role on the app, do step 2.
 
-So the assistant connects the other way: it signs in with the cookies of a browser session and
-talks to Messenger as the website does, through the open-source library
-[ws3-fca](https://www.npmjs.com/package/ws3-fca). Read [What to know](#what-to-know) before relying
-on it. The rest of the program does not depend on how it is connected (`src/transport/types.ts`),
-so the official interface can be added later without touching the rest.
+For the review, what the reviewers need to know is short:
 
-### Use the Page, not a personal profile
+> The app answers people who write to our own Facebook Page, [Page name]. Send "Hello" to the Page:
+> it replies that it is an automatic booking assistant and lists what can be booked. Send
+> "2 motorbikes for 3 days from tomorrow": it asks for the missing details, shows a summary and
+> records the booking on "yes". Send "staff": it hands the chat to a person and stops answering.
+> It never writes first, and only replies within 24 hours of a customer's message.
 
-Facebook encrypts chats between personal profiles end to end, and this connection cannot read
-them. Chats with a Page are not encrypted that way. Customers should write to the Page, and the
-session must be exported while the browser is switched into the Page.
+Two more things can be requested the same way, and neither is needed to start:
 
-### Export the session
+- **Human Agent**: lets people of the team write from the dashboard for 7 days after a customer's
+  last message instead of 24 hours. Once approved, set `FB_HUMAN_AGENT_TAG=true`.
+- **Business Asset User Profile Access**: lets the assistant read a customer's name from their
+  profile. Without it, it takes the name from the Page's own list of chats, and asks the customer
+  where that gives none.
 
-1. Open a **new private window** (or a separate browser profile) and sign in to Facebook with an
-   account that manages the Page.
-2. Switch into the Page: profile picture at the top right, then the Page's name.
-3. Export the cookies of `facebook.com` as JSON, with a cookie export extension such as
-   Cookie-Editor ("Export", "JSON").
-4. Save the result as `var/facebook-session.json`.
-5. Close the window **without signing out**. Signing out ends the session, and the file with it.
+## Facebook's 24-hour rule
 
-The file is a login to the company's account. Keep it on the machine that runs the assistant, and
-nowhere else. The assistant writes Facebook's renewed cookies back into it as it runs.
+Facebook lets a Page write to a customer through its interface for **24 hours after the customer's
+last message**. Every new message from the customer starts the time anew.
 
-### Check it
+The assistant answers within seconds, so its own answers are never affected. A person confirming a
+booking the next day may be: the dashboard says so on the booking and on the chat before you press
+anything. The step is still taken (the booking is confirmed), the message to the customer is kept
+as "not sent" with the reason, and you tell the customer yourself:
 
-`pnpm fb:check` signs in, tells you whether it is signed in as the Page, waits for a message (send
-one to the Page from another account), and shows it. With `--reply` it also answers that message
-with a test line, and tells you if `FB_SEND_VIA` should be changed.
+- from the Page's inbox in Meta Business Suite or Messenger, where a person has 7 days; or
+- by phone, WhatsApp or Zalo, with the number in the booking.
 
-When Facebook ends the session (after a password change, a security check, or with time), the
-dashboard shows "Not connected" with the reason. Export a fresh file over the old one; the
-assistant picks it up at its next attempt, without a restart.
+When the customer writes again, "Send again" on the kept message goes through.
+
+## Other apps on the Page
+
+- **The Page's own automatic replies** (instant reply, away message, frequently asked questions in
+  Meta Business Suite): switch them off, or customers get two answers.
+- **Meta Business AI**, where it is switched on for the Page, holds the chats itself. Facebook then
+  delivers customers' messages to other apps marked as not theirs to answer, and refuses what they
+  send. The assistant leaves such chats alone and says so on the status page. Switch Business AI
+  off for the Page, or leave the Page to it.
+- **Another app that answers** (a chat tool, a CRM): one of the two has to be the one that answers.
+  The status page names every other app connected to the Page.
 
 ## Day to day
 
@@ -150,41 +290,49 @@ cancelled the same way.
 
 **Chats.** Chats that need a person come first, with the reason. Writing a reply takes the chat
 over; the assistant stays out for 12 hours (`STAFF_PAUSE_HOURS`) or until you press "Hand back to
-the assistant". The same happens when someone answers in Messenger or Meta Business Suite directly.
+the assistant". The same happens when someone answers in the Page's inbox directly.
 
-**Being told.** With `STAFF_THREAD_IDS` set, team members get a Messenger message for each new
-booking and each chat that needs a person.
+**Being told.** With `STAFF_THREAD_IDS` set, team members get a Messenger message from the Page for
+each new booking and each chat that needs a person. The ids are the ones the dashboard shows for a
+chat ("Facebook id"): a team member writes to the Page once and finds theirs under Chats. The
+24-hour rule holds here too: Facebook passes these messages on only to someone who wrote to the
+Page within the last 24 hours, so whoever wants them sends the Page a word each morning.
 
-**While it was off.** Messages that arrive while the assistant is not running are not answered
-when it starts again. They stay unread in the Page's inbox for the team.
+**While it was off.** Facebook tries a few more times to deliver what got no answer, so a quick
+restart usually loses nothing. Messages that arrive during a longer stop are not answered when the
+assistant starts again; they stay in the Page's inbox for the team.
+
+### Privacy notice and deleting a customer's data
+
+The assistant serves a privacy notice in English and Vietnamese at `PUBLIC_URL` + `/privacy`
+(`src/public/privacy.ts`; in try-out mode at <http://127.0.0.1:3400/privacy>). It says what the
+assistant keeps (messages, the name Facebook shows, booking details), what for, and how to have it
+deleted. **Read it before you publish it**, and change it where the company does things otherwise.
+
+It tells customers to write "delete my data" to the Page. The assistant then calls a person. Answer
+the customer, then press **Delete this chat** on the chat's page: the messages, the name and what
+the assistant remembered are removed for good. Bookings stay, as the company's records; the chat in
+Messenger itself is not touched.
 
 ## What to know
 
-- **Not tried against Facebook.** No Facebook account was available while this was built. The
-  conversation logic, the dashboard and the handling of the client library are covered by tests,
-  and the library was run for real as far as a rejected session. Whether signing in, receiving
-  and sending work with your Page today is what `pnpm fb:check --reply` is for; run it before
-  anything else.
-- **Against Facebook's terms.** Automating an account this way is not permitted by Facebook.
-  Accounts doing it can be asked to verify themselves, be restricted or be closed, and that would
-  hit the profile that manages the Page. The assistant keeps a low profile (it only answers, at a
-  human pace, with a cap per chat), which lowers the risk and does not remove it.
-- **It can break without warning.** The library imitates the website; when Facebook changes the
-  website, it stops working until the library is updated.
-- **The client library.** It is a small community project, and it holds the login to the account.
-  An earlier release (2025) was reported to make accounts follow and share its author's pages. The
-  release used here, 3.5.2, was checked for this project: its code names no address but Facebook's
-  own, runs no downloaded code, and follows or shares nothing by itself. The version is pinned,
-  with its checksum in the lockfile, for that reason. Check a new release the same way before
-  moving to it.
-- **Known weaknesses.** `pnpm audit` reports two denial-of-service problems in the old WebSocket
-  package (`ws` 3) the library uses for the live connection. They can only be triggered by the
-  server it connects to, which is Facebook's. Other outdated packages the library asks for are
-  replaced by current ones (`pnpm-workspace.yaml`).
+- **Tried against Facebook as far as possible without the app's keys.** The conversation logic, the
+  dashboard and every call to Facebook are covered by tests, with a stand-in that answers as
+  Facebook's documentation describes. The program was run for real through a tunnel: a delivery
+  signed the way Facebook signs was taken in and answered, unsigned ones were turned away, and
+  Facebook's real servers refused made-up keys with the message the dashboard then showed. Run
+  `pnpm fb:check` and write to the Page once before relying on it.
+- **Facebook's interface changes by version.** The assistant speaks version `v27.0`
+  (`FB_GRAPH_VERSION`). Facebook retires a version about two years after it appears; raise the
+  number before then and run the tests.
 - **English and Vietnamese only.** A customer writing in another language gets the welcome message
   in English and, at the second message, a person.
-- **Vietnamese wording** was written with the English and has not been checked by a native speaker.
+- **Vietnamese wording**, in the chat and in the privacy notice, was written with the English and
+  has not been checked by a native speaker.
 - **The dashboard** is in English.
+- **An earlier version signed in with a browser session** instead of Facebook's interface, through
+  an unofficial library. That was against Facebook's terms and has been removed. It is in the
+  history of this repository (commit `e36ff92`) should it ever be wanted.
 
 ## Development
 
@@ -205,6 +353,10 @@ screenshot of each step.
 | `src/engine/` | What the assistant answers, and the wording in both languages |
 | `src/bookings/` | Prices, room left on each day, the steps a booking goes through |
 | `src/bot/` | Runs the assistant on a connection: one answer at a time per chat, takeover, telling the team |
-| `src/transport/` | The connection: Facebook, and a stand-in for try-out and tests |
+| `src/transport/` | The connection: Facebook's Messenger Platform (`messenger.ts`, `graph.ts`), and a stand-in for try-out and tests |
+| `src/public/` | What is open to the internet: the address Facebook calls, and the privacy notice |
 | `src/admin/` | The dashboard |
+| `src/cli/` | `pnpm fb:check` |
+| `src/tunnel.ts` | The try-out tunnel behind `--tunnel` |
 | `src/store/` | The database (SQLite) |
+| `test/fake-facebook.ts` | The stand-in for Facebook that the tests talk to |
