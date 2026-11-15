@@ -129,6 +129,10 @@ export class Graph {
     );
   }
 
+  delete<T>(path: string, token: string): Promise<T> {
+    return this.request<T>('DELETE', path, token, {});
+  }
+
   /** What Facebook knows of an access token: whose it is, what it may do, when it ends. */
   async lookUpToken(token: string): Promise<TokenInfo> {
     const answer = await this.get<{ data?: Record<string, unknown> }>(
@@ -184,7 +188,7 @@ export class Graph {
   }
 
   private async request<T>(
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'DELETE',
     path: string,
     token: string,
     query: GraphQuery,

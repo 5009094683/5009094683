@@ -157,8 +157,9 @@ internet.
 
 - **To try it out:** `pnpm start --tunnel` opens a free tunnel through Cloudflare (it needs the
   program `cloudflared`: `brew install cloudflared`) and registers the tunnel's address with
-  Facebook. The address is a new one at every start and lasts only while the program runs. Not for
-  real use.
+  Facebook. The address is a new one at every start and lasts only while the program runs; when it
+  is stopped with Ctrl+C, it tells Facebook to stop delivering until the next start. Not for real
+  use.
 - **For real:** set `PUBLIC_URL` in `.env`. See the next section.
 
 Only what Facebook needs is open at that address: the webhook, which acts on nothing but what

@@ -296,6 +296,31 @@ describe('connecting', () => {
     expect(detail(transport, 'Access token')).toBe('ends on 2026-11-20');
   });
 
+  it('tells Facebook to stop delivering when its address is about to go away', async () => {
+    const { facebook, transport, start } = await connected({}, (f) => {
+      f.subscribedApps = [{ id: '999', name: 'Some CRM', subscribed_fields: ['messages'] }];
+    });
+    expect(facebook.subscribedApps.map((app) => app.id)).toEqual(['999', facebook.appId]);
+    expect(await transport.leave()).toBe(true);
+    // Only this app is taken off the Page; the address stays on record for the next start.
+    expect(facebook.subscribedApps.map((app) => app.id)).toEqual(['999']);
+    expect(facebook.subscription?.callback_url).toBe(`${ADDRESS}/webhook`);
+    // It has stopped: nothing switches the Page back on behind its back.
+    expect(transport.status().state).toBe('stopped');
+    await transport.check();
+    expect(facebook.subscribedApps.map((app) => app.id)).toEqual(['999']);
+
+    // The next start switches the Page on again.
+    await start();
+    expect(facebook.subscribedApps.map((app) => app.id)).toEqual(['999', facebook.appId]);
+
+    // A Facebook that cannot be reached does not hold up the stop.
+    facebook.failing('DELETE', /subscribed_apps$/, null);
+    expect(await transport.leave()).toBe(false);
+    // And without a Page there is nothing to tell.
+    expect(await setUp({}, (f) => (f.token.valid = false)).transport.leave()).toBe(false);
+  });
+
   it('stops looking when it is stopped', async () => {
     const { facebook, transport } = await connected({ checkEveryMs: 5 });
     await transport.stop();

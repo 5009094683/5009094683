@@ -291,6 +291,10 @@ export class FakeFacebook {
     if (path === `${this.page.id}/subscribed_apps`) {
       asPage();
       if (method === 'GET') return { data: this.subscribedApps };
+      if (method === 'DELETE') {
+        this.subscribedApps = this.subscribedApps.filter((app) => app.id !== this.appId);
+        return { success: true };
+      }
       const fields = this.fieldsIn(String(body.subscribed_fields ?? ''));
       this.subscribedApps = [
         ...this.subscribedApps.filter((app) => app.id !== this.appId),

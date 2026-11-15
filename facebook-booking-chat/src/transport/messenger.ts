@@ -227,6 +227,33 @@ export class MessengerTransport implements Transport {
   }
 
   /**
+   * Stops, and tells Facebook to stop delivering the Page's messages to the
+   * app: for an address that is about to go away (a try-out tunnel that
+   * closes). Without it Facebook keeps calling the dead address, and sends
+   * the app's owner warnings about a failing webhook. The next start switches
+   * the Page on again. Returns whether Facebook was told.
+   */
+  async leave(): Promise<boolean> {
+    const page = this.page;
+    await this.stop();
+    if (!page) return false;
+    try {
+      await this.graph.delete(`${page.id}/subscribed_apps`, this.options.pageAccessToken);
+      this.options.log.info(
+        { page: page.name ?? page.id },
+        'Facebook no longer delivers the Page\u2019s messages to this app, until the next start',
+      );
+      return true;
+    } catch (error) {
+      this.options.log.warn(
+        { error: explainGraphError(error, 'page') },
+        'Facebook could not be told to stop delivering; it will give up on the address by itself',
+      );
+      return false;
+    }
+  }
+
+  /**
    * The public address has changed (a try-out tunnel gets a new one whenever
    * it is opened). Facebook is given the new one at once.
    */

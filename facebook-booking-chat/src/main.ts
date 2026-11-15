@@ -154,6 +154,8 @@ async function main(): Promise<void> {
     if (stopping) return;
     stopping = true;
     log.info(`Stopping (${signal})`);
+    // The tunnel's address ends here: Facebook is told not to call it any more.
+    if (tunnel) await messenger?.leave();
     tunnel?.stop();
     await bot.stop().catch(() => undefined);
     await publicServer?.close().catch(() => undefined);
