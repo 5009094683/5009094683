@@ -55,6 +55,14 @@ export async function pagesOf(
 }
 
 /**
+ * The Pages a person manages, each with a token of its own. Made from the
+ * long-lived token of the person, a Page's token does not expire.
+ */
+export async function lastingPagesOf(graph: Graph, personToken: string): Promise<PageAccount[]> {
+  return pagesOf(graph, await graph.extendToken(personToken), true);
+}
+
+/**
  * Makes the lasting token of the Page. `wantedPageId` says which Page, where
  * the person manages several; '' takes the only one. Calls to Facebook that
  * fail are thrown as they are.
@@ -64,9 +72,7 @@ export async function pageTokenOf(
   personToken: string,
   wantedPageId: string,
 ): Promise<PageTokenResult> {
-  // A token of the Page made from the long-lived token of the person does not expire.
-  const lasting = await graph.extendToken(personToken);
-  const pages = await pagesOf(graph, lasting, true);
+  const pages = await lastingPagesOf(graph, personToken);
   if (pages.length === 0) {
     return {
       ok: false,
@@ -92,6 +98,15 @@ export async function pageTokenOf(
           : 'Say which Page the assistant answers for: set FB_PAGE_ID in .env to its id.',
     };
   }
+  return checkPage(graph, page, pages);
+}
+
+/** Whether the assistant can run on this Page's token: the person may answer its chats, and Facebook granted what is needed. */
+export async function checkPage(
+  graph: Graph,
+  page: PageAccount,
+  pages: PageAccount[],
+): Promise<PageTokenResult> {
   if (!page.tasks.includes('MESSAGING') || !page.tasks.includes('MODERATE')) {
     return {
       ok: false,

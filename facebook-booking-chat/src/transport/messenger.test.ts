@@ -196,7 +196,7 @@ describe('connecting', () => {
       'a token without the permission to answer',
       {},
       (facebook) => (facebook.token.scopes = ['pages_show_list', 'pages_manage_metadata']),
-      /lacks the permission pages_messaging, without which the Page\u2019s chats can be neither read nor answered\. Run "pnpm fb:connect"/,
+      /lacks the permission pages_messaging, without which the Page\u2019s chats can be neither read nor answered\. Make a new one in the app\u2019s dashboard/,
     ],
     [
       'a token for another Page than the one named',
@@ -769,7 +769,7 @@ describe('with a token that may answer chats and no more', () => {
     );
     expect(transport.status().notes).toEqual([
       expect.stringMatching(
-        /^Nothing has arrived from Facebook since the start\..*press \u201cAdd Subscriptions\u201d next to the Page, tick messages, messaging_postbacks and message_echoes, and confirm\. Or run "pnpm fb:connect" once/,
+        /^Nothing has arrived from Facebook since the start\..*under \u201c2\. Generate access tokens\u201d press \u201cAdd Subscriptions\u201d next to the Page; tick messages, messaging_postbacks and message_echoes, and press Confirm\.$/,
       ),
     ]);
     // Said once in the log, however often the connection is looked over.
@@ -820,10 +820,32 @@ describe('with a token that may answer chats and no more', () => {
     expect(transport.status().notes).toEqual([]);
   });
 
-  it('takes its address off Facebook\u2019s record all the same', async () => {
-    const { facebook, transport } = await connected({}, fromTheDashboard);
-    expect(await transport.leave()).toBe(true);
-    expect(facebook.subscription).toBeNull();
+  it('knows the Page\u2019s name from the start where the Page has had a chat', async () => {
+    const { transport } = await connected({}, (facebook) => {
+      fromTheDashboard(facebook);
+      facebook.chats.set('42', 'Anna Müller');
+    });
+    expect(transport.status().account).toMatchObject({ name: 'Cao Bằng Travel Guide' });
+  });
+
+  it('removes nothing at Facebook that it could not put back itself', async () => {
+    // A person switched the Page on by hand. Taking the address off Facebook's record is
+    // left alone too: the next start gives Facebook the new address in place of the old.
+    const { facebook, transport, logged, start } = await connected({}, fromTheDashboard);
+    expect(await transport.leave()).toBe(false);
+    expect(transport.status().state).toBe('stopped');
+    expect(facebook.subscription).toMatchObject({ callback_url: `${ADDRESS}/webhook` });
+    expect(facebook.calls('DELETE', /./)).toHaveLength(0);
+    expect(logged.at(-1)).toMatchObject({
+      level: 'info',
+      message: expect.stringMatching(/^Facebook keeps this address on record until the next start/),
+    });
+
+    await transport.setPublicUrl('https://new-tunnel.trycloudflare.com');
+    await start();
+    expect(facebook.subscription).toMatchObject({
+      callback_url: 'https://new-tunnel.trycloudflare.com/webhook',
+    });
   });
 });
 

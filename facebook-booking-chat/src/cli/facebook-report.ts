@@ -6,6 +6,7 @@ import {
   MANAGE_PERMISSION,
   WEBHOOK_FIELDS,
   WEBHOOK_PATH,
+  pageNameFromChats,
 } from '../transport/messenger';
 import { pageTokenOf, pagesOf } from './page-token';
 
@@ -35,8 +36,8 @@ export interface ReportOptions {
 }
 
 const HOW_TO_CONNECT =
-  'Run "pnpm fb:connect": it signs in with Facebook in the browser and saves a token of the ' +
-  'Page with every permission the assistant needs.';
+  'Make a new one in the app\u2019s dashboard: under "Messenger API Settings", press "Generate" ' +
+  'next to the Page, and put it into .env as FB_PAGE_ACCESS_TOKEN.';
 
 const day = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
@@ -111,7 +112,8 @@ export async function reportOnFacebook(options: ReportOptions): Promise<boolean>
   }
 
   const pageId = info.ownerId ?? '';
-  // Facebook tells the Page's name only to a token with a permission the assistant can do without.
+  // Facebook tells the Page's name outright only to a token with a permission the assistant
+  // can do without. The Page's list of chats names it too, once it has had a chat.
   let pageName = '';
   try {
     const me = await graph.get<{ name?: unknown }>('me', token, { fields: 'name' });
@@ -121,6 +123,9 @@ export async function reportOnFacebook(options: ReportOptions): Promise<boolean>
       trouble(explainGraphError(error, 'page'));
       return false;
     }
+  }
+  if (pageName === '' && pageId !== '') {
+    pageName = (await pageNameFromChats(graph, token, pageId)) ?? '';
   }
   say(
     `  Page:         ${pageName || '(Facebook does not tell this token the name)'}, id ${pageId}`,
@@ -151,7 +156,8 @@ export async function reportOnFacebook(options: ReportOptions): Promise<boolean>
       '  by "Generate" in the app\u2019s dashboard is of this kind). That step is then yours, once:',
     );
     say(`  ${BY_HAND}.`);
-    say('  Or run "pnpm fb:connect": the assistant then does it itself, and keeps it in order.');
+    say('  (With a token that also has pages_manage_metadata, the assistant does it itself; see');
+    say('  "Connecting the Page" in the README.)');
   }
 
   // ------------------------------------------------------------- webhook

@@ -74,11 +74,10 @@ The sentences themselves are in `src/engine/wording/en.ts` and `vi.ts`.
 
 ### 2. Connect Facebook
 
-Put the app's id and secret into `.env` and connect the Page, as described under
-[Connecting Facebook](#connecting-facebook), then look everything over:
+Put the app's id, its secret and a token of the Page into `.env`, as described under
+[Connecting Facebook](#connecting-facebook), then look them over:
 
 ```bash
-pnpm fb:connect
 pnpm fb:check
 ```
 
@@ -96,8 +95,10 @@ To run it for real, give it a lasting address first ([A lasting address](#a-last
 pnpm start
 ```
 
-The dashboard is at <http://127.0.0.1:3400>. Write to the Page from a Facebook account that has a
-role on the app, and the assistant answers.
+The first time, press **Add Subscriptions** for the Page in the app's dashboard while the assistant
+runs ([Connecting the Page](#connecting-the-page), step 3). Then write to the Page from a Facebook
+account that has a role on the app, and the assistant answers. Its dashboard is at
+<http://127.0.0.1:3400>.
 
 - **Run one copy only.** A second start on the same machine stops with a message. A copy started
   elsewhere with the same values takes the Page's messages away from the first.
@@ -111,8 +112,8 @@ role on the app, and the assistant answers.
 
 ### 4. Open it to all customers
 
-A new Facebook app only passes on messages from people who have a role on it. See
-[Opening the assistant to all customers](#opening-the-assistant-to-all-customers).
+Until Facebook has reviewed the app, it only passes on messages from people who have a role on it.
+See [Opening the assistant to all customers](#opening-the-assistant-to-all-customers).
 
 ## Connecting Facebook
 
@@ -133,40 +134,59 @@ cp .env.example .env
 
 ### Connecting the Page
 
-The assistant answers with a token of the Page (`FB_PAGE_ACCESS_TOKEN`). There are two ways to get
-one, and they differ in what the assistant can then do by itself.
+The assistant answers with a token of the Page (`FB_PAGE_ACCESS_TOKEN`). These four steps are the
+way that has been run against Facebook itself. The names are those of Facebook's dashboard in
+November 2026.
 
-**By signing in with Facebook (`pnpm fb:connect`).** The command serves a page with one button at
-<http://localhost:3402>. Open it in a browser in which you are signed in to Facebook as someone
-with full access to the Page, press **Continue with Facebook**, and press Continue on each of
-Facebook's steps, leaving every permission switched on. The command then saves a token of the
-Page in `.env`; no token is copied by hand or shown. With this token **the assistant sets up
-everything else itself** each time it starts: it tells Facebook the address to deliver the Page's
-messages to (the "webhook"), answers Facebook's check of that address, and switches the Page on
-for the app. It looks all of this over again every ten minutes and repairs what it finds missing;
-Facebook takes a Page off an app whose address did not answer for an hour.
+1. **Get the token.** In the app's dashboard, open **Use cases > Customize > Messenger API
+   Settings**. Under **2. Generate access tokens**, connect the Page if it is not listed yet, press
+   **Generate** next to it, and put the token into `.env` as `FB_PAGE_ACCESS_TOKEN`.
+   `pnpm fb:check` says whether Facebook accepts it.
+2. **Start the assistant** (`pnpm start --tunnel`, or `pnpm start` with `PUBLIC_URL` set). It tells
+   Facebook the address to deliver the Page's messages to (the "webhook") and answers Facebook's
+   check of that address. Nothing has to be entered under "1. Configure webhooks".
+3. **Switch the Page on for the app**, in the same place as the token: press **Add Subscriptions**
+   next to the Page, tick `messages`, `messaging_postbacks` and `message_echoes`, and press
+   **Confirm**. Tick `messaging_handovers`, `standby` and `messaging_policy_enforcement` as well:
+   through them the assistant learns when another app or Meta's Business AI holds a chat, and when
+   Facebook restricts the Page.
+4. **Write "Hello" to the Page** from a Facebook account that has a role on the app.
 
-**By copying the token from the app's dashboard.** Under **Use cases > Messenger > Customize >
-Messenger API Settings > Generate access tokens**, connect the Page and press **Generate**; put the
-token into `.env` as `FB_PAGE_ACCESS_TOKEN`. A token made this way may answer chats and nothing
-else. The assistant still registers its address with Facebook by itself, but switching the Page on
-for the app is then yours to do, once, in the same place: press **Add Subscriptions** next to the
-Page, tick `messages`, `messaging_postbacks` and `message_echoes`, and confirm. The assistant
-cannot see whether this was done; its status page says so until the first message arrives, and
-tells you if `message_echoes` was left out (without it, the assistant does not notice when a person
-answers in the Page's inbox). Should Facebook ever take the Page off the app, the step has to be
-repeated by hand.
+Step 3 is yours because a token made by "Generate" may answer chats and nothing else: the assistant
+can neither switch the Page on nor see whether it is. Its status page says so until the first
+message arrives, and tells you if `message_echoes` was left out (without it, the assistant does not
+notice when a person answers in the Page's inbox).
 
-Either way, nothing has to be entered under "Configure webhooks" in Facebook's dashboard.
+Step 3 is done once. It has to be repeated if Facebook takes the Page off the app, which
+[by its rules](https://developers.facebook.com/docs/messenger-platform/webhooks) it does when a
+message could not be delivered to the app's address for an hour ("Webhooks Delivery Retry" on that
+page). The sign is that messages to the Page get no answer while the status page shows "Connected".
 
-`pnpm fb:check` shows what is in `.env` and what Facebook has on record for it, says which of the
-two kinds of token it is, and says what is wrong in plain words. It changes nothing. If the token
-in `.env` is that of a person (from Facebook's Graph API Explorer, for example),
-`pnpm fb:check --save-page-token` turns it into a token of the Page that does not expire.
+`pnpm fb:check` shows what is in `.env` and what Facebook has on record for it, and says what is
+wrong in plain words. It changes nothing.
 
-A token of the Page made in either way does not expire. It ends when the person who made
-it changes their Facebook password, loses access to the Page, or removes the app. The dashboard
-then shows "Not connected" with the reason; put a new token into `.env` and start again.
+The token from the dashboard does not expire (`pnpm fb:check` shows "Token ends: never"). By
+Facebook's rules it ends when the person who made it changes their Facebook password, loses access
+to the Page, or removes the app. The assistant's dashboard then shows "Not connected" with the
+reason; put a new token into `.env` and start again.
+
+#### Signing in instead (`pnpm fb:connect`): not carried through
+
+A token that also carries the permission `pages_manage_metadata` would let the assistant do step 3
+by itself at every start, and repair it when Facebook takes the Page off the app. Two commands are
+meant to get one, and **neither has been carried through against Facebook**; both are tested
+against a stand-in only.
+
+- `pnpm fb:connect` serves a page with one button at <http://localhost:3402>, sends the browser to
+  Facebook's sign-in page, and saves the token of the Page you choose in `.env`. Facebook only
+  sends a browser back to an address the app lists: `http://localhost:3402/facebook/connected` has
+  to be added under **Facebook Login for Business > Settings > Valid OAuth Redirect URIs** first.
+  With that list empty, Facebook showed "The domain of this URL isn't included in the app's
+  domains" in place of its sign-in page, and the attempt ended there. Whether it takes this address
+  once listed is not known; the app's "Enforce HTTPS" setting may refuse one without HTTPS.
+- `pnpm fb:check --save-page-token` turns the token of a person in `.env` (made with that
+  permission in Facebook's Graph API Explorer, for example) into a token of the Page that does not
+  expire.
 
 ### The address Facebook calls
 
@@ -176,9 +196,10 @@ internet.
 
 - **To try it out:** `pnpm start --tunnel` opens a free tunnel through Cloudflare (it needs the
   program `cloudflared`: `brew install cloudflared`) and registers the tunnel's address with
-  Facebook. The address is a new one at every start and lasts only while the program runs; when it
-  is stopped with Ctrl+C, it takes the address off Facebook's record again, so that Facebook does
-  not keep calling an address that is gone. Not for real use.
+  Facebook. The address is a new one at every start and lasts only while the program runs. Not for
+  real use: while the program is stopped, Facebook still has the last address on record, and a
+  message to the Page that it cannot deliver there for an hour makes it take the Page off the app
+  (step 3 of [Connecting the Page](#connecting-the-page) again).
 - **For real:** set `PUBLIC_URL` in `.env`. See the next section.
 
 Only what Facebook needs is open at that address: the webhook, which acts on nothing but what
@@ -235,9 +256,16 @@ that); set `DASHBOARD_URL` to its address so that messages to the team can link 
 
 ## Opening the assistant to all customers
 
-While the app is new ("in development"), Facebook passes on only the messages of people who have a
-role on the app: its administrators, developers and testers (**App roles** in the app's dashboard).
-That is enough to try everything. For every customer to be answered, Facebook wants three things:
+Until Facebook has reviewed the app, it passes on only the messages of people who have a role on
+the app: its administrators, developers and testers (**App roles** in the app's dashboard). That is
+enough to try everything. The app's dashboard says so itself, under Messenger API Settings, "3.
+Complete App Review" (November 2026):
+
+> ... all Messenger apps must be submitted for review before they can interact with everyone on
+> Messenger. During development you will be able to send messages to anyone that has been granted
+> either the administrator, developer or tester role for your app.
+
+For every customer to be answered, Facebook wants three things:
 
 1. **The app's details filled in** under App settings > Basic: an icon, a category, and
    - Privacy policy URL: `PUBLIC_URL` + `/privacy`
@@ -247,17 +275,21 @@ That is enough to try everything. For every customer to be answered, Facebook wa
 2. **`pages_messaging` approved for everyone** ("Advanced Access"): requested in the app's
    dashboard under App Review. Facebook asks for a description of what the app does and a screen
    recording of it answering; it may also ask to verify the business.
-3. **The app published** ("Live").
+3. **The app published.**
 
-Facebook's documentation is not of one mind on step 2. Its
-[overview](https://developers.facebook.com/documentation/business-messaging/messenger-platform/overview)
-says the review is "not required if you only send and receive messages for your own Facebook Page";
-its pages on [webhooks](https://developers.facebook.com/documentation/business-messaging/messenger-platform/webhooks)
-and [error codes](https://developers.facebook.com/documentation/business-messaging/messenger-platform/error-codes)
-say that customers without a role are only served once `pages_messaging` is reviewed. The way to
-find out for this app: do steps 1 and 3, then have someone who has no role on the app write to the
-Page. If the assistant answers, nothing more is needed. If it stays silent, or the dashboard shows
-a message as "not sent" because the person has no role on the app, do step 2.
+Publishing alone is not enough, by what the dashboard shows: the app this was tried with was
+published already, with `pages_messaging` still marked "Ready for testing", and carried the notice
+above.
+
+What has not been tried is someone without a role writing to the Page. One page of Facebook's
+documentation, the
+[overview](https://developers.facebook.com/documentation/business-messaging/messenger-platform/overview),
+says the review is "not required if you only send and receive messages for your own Facebook Page",
+against the dashboard and against its pages on
+[webhooks](https://developers.facebook.com/documentation/business-messaging/messenger-platform/webhooks)
+and [error codes](https://developers.facebook.com/documentation/business-messaging/messenger-platform/error-codes).
+Expect step 2 to be needed. Should someone without a role get an answer from the assistant before
+the review, it is not.
 
 For the review, what the reviewers need to know is short:
 
@@ -320,7 +352,9 @@ Page within the last 24 hours, so whoever wants them sends the Page a word each 
 
 **While it was off.** Facebook tries a few more times to deliver what got no answer, so a quick
 restart usually loses nothing. Messages that arrive during a longer stop are not answered when the
-assistant starts again; they stay in the Page's inbox for the team.
+assistant starts again; they stay in the Page's inbox for the team. A stop of more than an hour
+during which someone writes to the Page also makes Facebook take the Page off the app: see step 3
+of [Connecting the Page](#connecting-the-page).
 
 ### Privacy notice and deleting a customer's data
 
@@ -336,15 +370,32 @@ Messenger itself is not touched.
 
 ## What to know
 
-- **What has been tried against Facebook itself, and what has not.** Tried, with a real app and a
-  real Page: Facebook accepts the app's keys and a token copied from the dashboard
-  (`pnpm fb:check`), and the assistant registered its address through a tunnel, which Facebook's
-  servers called and accepted. Through the same kind of tunnel, a delivery signed the way Facebook
-  signs was taken in and answered, and unsigned ones were turned away. **Not tried there when this
-  was written:** a real customer's message arriving and the answer going out, and signing in with
-  `pnpm fb:connect`. The rest stands on tests against a stand-in that answers as Facebook's
+- **What has been tried against Facebook itself.** On 15 November 2026, with a real, published
+  app, a real Page, a token from the app's dashboard and a try-out tunnel, written to from one
+  Facebook account that has a role on the app:
+  - the four steps under [Connecting the Page](#connecting-the-page);
+  - questions in English and in Vietnamese, answered in Messenger a few seconds after they were
+    sent, each delivery carrying Facebook's signature;
+  - a booking, from the first message to the summary and the customer's "yes"; confirmed in the
+    dashboard with a price, with the confirmation arriving in Messenger; then cancelled, with its
+    message;
+  - a reply written in the dashboard, after which the assistant stayed out of the chat, and the
+    chat handed back to it;
+  - a reply typed in the Page's inbox in Meta Business Suite, which the assistant noticed;
+  - the customer's name, read from Facebook;
+  - a restart with a new tunnel address: Facebook went on reporting to the new address what the
+    Page sent, without **Add Subscriptions** being pressed again.
+- **What has not.** Someone without a role on the app writing to the Page
+  ([Opening the assistant to all customers](#opening-the-assistant-to-all-customers));
+  `pnpm fb:connect`, `pnpm fb:check --save-page-token` and the assistant switching the Page on by
+  itself, which all need a token with `pages_manage_metadata`; a lasting address (`PUBLIC_URL`);
+  a message refused because 24 hours had passed, and the Human Agent tag; photos, stickers and
+  buttons; Meta Business AI or another app holding a chat; Facebook's notices of restrictions on
+  the Page; Facebook taking the Page off the app after an hour of failed deliveries; a customer's
+  message arriving after a restart (only what the Page itself sent was seen to arrive); and
+  running for days on end. These stand on tests against a stand-in that answers as Facebook's
   documentation describes, corrected where the real one answered otherwise (what a token from the
-  dashboard may do was one such case). Write to the Page once before relying on it.
+  dashboard may do was one such case).
 - **Facebook's interface changes by version.** The assistant speaks version `v27.0`
   (`FB_GRAPH_VERSION`). Facebook retires a version about two years after it appears; raise the
   number before then and run the tests.

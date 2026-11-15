@@ -92,9 +92,8 @@ const WHERE_TO_FIND: Record<string, string> = {
     'the number of your app at developers.facebook.com (shown at the top of its dashboard)',
   FB_APP_SECRET: 'in the app\u2019s dashboard: App settings > Basic > App secret > Show',
   FB_PAGE_ACCESS_TOKEN:
-    'run "pnpm fb:connect", which signs in with Facebook and saves it; or copy it from the ' +
-    'app\u2019s dashboard: Use cases > Messenger > Customize > Messenger API Settings > Generate ' +
-    'access tokens',
+    'in the app\u2019s dashboard: Use cases > Customize > Messenger API Settings > 2. Generate ' +
+    'access tokens > "Generate" next to the Page',
 };
 
 function publicAddress(value: string): string {

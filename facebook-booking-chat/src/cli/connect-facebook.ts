@@ -6,7 +6,12 @@
                                  in whichever browser is signed in to Facebook
 
   It needs FB_APP_ID and FB_APP_SECRET in .env, and writes FB_PAGE_ACCESS_TOKEN
-  there. The person who signs in must manage the Page.
+  there. The person who signs in must manage the Page, and the app must list
+  http://localhost:3402/facebook/connected under "Facebook Login for Business >
+  Settings > Valid OAuth Redirect URIs".
+
+  Not carried through against Facebook itself; see facebook-connect.ts. The
+  way to connect the Page that has been run for real is in the README.
 */
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';

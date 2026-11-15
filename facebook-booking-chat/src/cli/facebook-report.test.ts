@@ -102,7 +102,7 @@ describe('pnpm fb:check', () => {
       'a token that may not answer chats',
       {},
       (facebook) => (facebook.token.scopes = ['pages_manage_metadata', 'pages_show_list']),
-      /The token lacks pages_messaging, without which the Page\u2019s chats can be neither read nor answered\. Run "pnpm fb:connect"/,
+      /The token lacks pages_messaging, without which the Page\u2019s chats can be neither read nor answered\. Make a new one in the app\u2019s dashboard: under "Messenger API Settings", press "Generate"/,
     ],
     [
       'a token that ends',
@@ -129,7 +129,8 @@ describe('pnpm fb:check', () => {
       f.token.scopes = FakeFacebook.DASHBOARD_TOKEN_SCOPES;
     });
     expect(ok).toBe(true);
-    // Facebook does not tell such a token the Page's name; the id is known from the token itself.
+    // Facebook does not tell such a token the Page's name outright, and this Page has had no
+    // chat that would name it; the id is known from the token itself.
     expect(text).toContain(
       'Page:         (Facebook does not tell this token the name), id 700000000000001',
     );
@@ -138,9 +139,9 @@ describe('pnpm fb:check', () => {
       'This token may answer chats, but may not switch the Page on for the app',
     );
     expect(text).toContain(
-      'press \u201cAdd Subscriptions\u201d next to the Page, tick messages, messaging_postbacks and message_echoes, and confirm.',
+      'press \u201cAdd Subscriptions\u201d next to the Page; tick messages, messaging_postbacks and message_echoes, and press Confirm.',
     );
-    expect(text).toContain('Or run "pnpm fb:connect"');
+    expect(text).not.toContain('fb:connect');
     // The address is the app's to register, and is looked at as before.
     expect(text).toContain('On record:    nothing yet');
     // What Facebook refuses such a token is not asked.
@@ -152,6 +153,17 @@ describe('pnpm fb:check', () => {
       'The assistant can run with these values. Left for you, once: "Add Subscriptions" in the',
     );
     expect(text).not.toContain('NOT IN ORDER');
+  });
+
+  it('names the Page from its list of chats where the token is not told the name', async () => {
+    const { ok, text } = await report({}, (f) => {
+      f.token.scopes = FakeFacebook.DASHBOARD_TOKEN_SCOPES;
+      f.chats.set('42', 'Anna Müller');
+    });
+    expect(ok).toBe(true);
+    expect(text).toContain('Page:         Cao Bằng Travel Guide, id 700000000000001');
+    // Who the Page talks to is nobody's business here.
+    expect(text).not.toContain('Anna');
   });
 
   it('says how the address gets registered where none is set yet', async () => {

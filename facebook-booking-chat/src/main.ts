@@ -154,7 +154,8 @@ async function main(): Promise<void> {
     if (stopping) return;
     stopping = true;
     log.info(`Stopping (${signal})`);
-    // The tunnel's address ends here: Facebook is told not to call it any more.
+    // The tunnel's address ends here: Facebook is told not to call it any more,
+    // where the next start can put everything back by itself.
     if (tunnel) await messenger?.leave();
     tunnel?.stop();
     await bot.stop().catch(() => undefined);

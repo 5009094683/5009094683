@@ -215,6 +215,20 @@ export class FakeFacebook {
           },
         };
       }
+      const other = this.otherPages.find((page) => query.input_token === `EAA-token-of-${page.id}`);
+      if (other) {
+        return {
+          data: {
+            app_id: this.appId,
+            type: 'PAGE',
+            is_valid: true,
+            expires_at: 0,
+            profile_id: other.id,
+            user_id: '100000000000042',
+            scopes: this.token.scopes,
+          },
+        };
+      }
       const known = query.input_token === this.pageToken;
       if (!known || !this.token.valid) {
         return {
@@ -389,16 +403,19 @@ export class FakeFacebook {
     }
 
     if (method === 'GET' && path === `${this.page.id}/conversations`) {
+      // Needs no more than the permission to answer chats, as the real one showed.
       asPage();
-      const name = this.chats.get(String(query.user_id));
-      if (name === undefined) return { data: [] };
+      // With a person named: the chat with that person. Without: the Page's chats, newest first.
+      const asked = query.user_id === undefined ? [...this.chats.keys()][0] : String(query.user_id);
+      const name = asked === undefined ? undefined : this.chats.get(asked);
+      if (asked === undefined || name === undefined) return { data: [] };
       return {
         data: [
           {
             id: 't_1',
             participants: {
               data: [
-                { name, email: `${query.user_id}@facebook.com`, id: query.user_id },
+                { name, email: `${asked}@facebook.com`, id: asked },
                 { name: this.page.name, email: `${this.page.id}@facebook.com`, id: this.page.id },
               ],
             },

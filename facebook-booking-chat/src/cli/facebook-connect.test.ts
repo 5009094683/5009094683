@@ -198,12 +198,6 @@ describe('pnpm fb:connect', () => {
       /manages no Page that the app was given access to/,
     ],
     [
-      'several Pages were shared and none is named',
-      {},
-      (facebook) => (facebook.otherPages = [{ id: '800000000000002', name: 'Another Page' }]),
-      /- Another Page, id 800000000000002[\s\S]*Say which Page the assistant answers for: set FB_PAGE_ID/,
-    ],
-    [
       'the Page named is not among them',
       { pageId: '123' },
       () => undefined,
@@ -245,6 +239,53 @@ describe('pnpm fb:connect', () => {
     expect(text).toMatch(expected);
     expect(visits[0]!.body).toContain('Not connected');
     expect(readFileSync(envFile, 'utf8')).toContain('FB_PAGE_ACCESS_TOKEN=old-token');
+  });
+
+  it('lets the person pick the Page, where several were shared', async () => {
+    const seen: Array<{ status: number; body: string }> = [];
+    const load = async (address: string) => {
+      const response = await fetch(address);
+      const page = { status: response.status, body: await response.text() };
+      seen.push(page);
+      return page;
+    };
+    const { ok, text, envFile, facebook, visits } = await connect(
+      async (signIn, facebook, visit) => {
+        const query = `code=${facebook.signInCode}&state=${signIn.searchParams.get('state')}`;
+        const choice = await visit(query);
+        expect(choice.body).toContain('<h1>Which Page should the assistant answer for?</h1>');
+        // One button for each Page, by name.
+        const buttons = [...choice.body.matchAll(/<a class="button" href="([^"]+)">([^<]+)<\/a>/g)];
+        expect(buttons.map((button) => button[2])).toEqual([
+          'Cao Bằng Travel Guide',
+          'Another Page',
+        ]);
+
+        // Loaded again, the page shows the same choice; Facebook's code is not handed in twice.
+        expect((await visit(query)).body).toContain('Which Page should the assistant answer for?');
+        // A Page that was not shared, or a visit without the word of the sign-in, is not taken.
+        const back = signIn.searchParams.get('redirect_uri')!.replace('/connected', '/page');
+        expect((await load(`${back}?page=999&state=${signIn.searchParams.get('state')}`)).status).toBe(400); // prettier-ignore
+        expect((await load(`${back}?page=800000000000002&state=guessed`)).status).toBe(400);
+
+        await load(unescape(buttons[1]![1]!));
+      },
+      {},
+      (f) => (f.otherPages = [{ id: '800000000000002', name: 'Another Page' }]),
+    );
+    expect(ok).toBe(true);
+    expect(seen.at(-1)).toMatchObject({
+      status: 200,
+      body: expect.stringContaining('<h1>Connected: Another Page</h1>'),
+    });
+    expect(text).toContain('Choose in the browser which of them the assistant answers for.');
+    expect(text).toContain('Connected "Another Page" (id 800000000000002).');
+    // The token of the Page that was picked, and of no other.
+    expect(readFileSync(envFile, 'utf8')).toContain(
+      'FB_PAGE_ACCESS_TOKEN=EAA-token-of-800000000000002\n',
+    );
+    expect(facebook.calls('GET', /^oauth\/access_token$/).filter((r) => r.query.code)).toHaveLength(1); // prettier-ignore
+    for (const page of [...visits, ...seen]) expect(page.body).not.toContain('EAA-token-of');
   });
 
   it('connects the Page that is named, where several were shared', async () => {

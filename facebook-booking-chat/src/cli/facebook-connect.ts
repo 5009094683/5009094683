@@ -2,7 +2,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
 import { Graph, explainGraphError } from '../transport/graph';
 import { saveEnvValue } from './facebook-report';
-import { PERMISSIONS, pageTokenOf } from './page-token';
+import { type PageAccount, PERMISSIONS, checkPage, lastingPagesOf } from './page-token';
 
 /*
   Connects the Page by signing in with Facebook: behind "pnpm fb:connect".
@@ -17,13 +17,24 @@ import { PERMISSIONS, pageTokenOf } from './page-token';
   The page is at a short address (http://localhost:3402), so that it can be
   opened in whichever browser is signed in to Facebook.
 
-  The address Facebook sends the browser back to is on this computer too.
-  Facebook allows that for an app in development; for a published app the
-  address has to be added under "Valid OAuth Redirect URIs" in the app's
-  Facebook Login settings.
+  The address Facebook sends the browser back to is on this computer too
+  (http://localhost:3402/facebook/connected), and Facebook only sends a
+  browser to an address the app's settings name: it has to be listed under
+  "Facebook Login for Business > Settings > Valid OAuth Redirect URIs". With
+  that list empty, as an app has it at first, Facebook answers "The domain of
+  this URL isn't included in the app's domains" in place of its sign-in page.
+
+  NOT CARRIED THROUGH AGAINST FACEBOOK. With the one real app this was tried
+  on, a published one with an empty list, Facebook refused as above, and the
+  list was left as it was. The steps after Facebook's page are tested against
+  a stand-in only. Whether Facebook takes an address without HTTPS for a
+  published app, where its "Enforce HTTPS" is on, is not known either. The
+  way that has been run for real is the token from the app's dashboard.
 */
 
 export const CALLBACK_PATH = '/facebook/connected';
+/** Where the person lands who picked one of several Pages. */
+export const CHOICE_PATH = '/facebook/page';
 
 export interface ConnectOptions {
   appId: string;
@@ -47,18 +58,22 @@ function escape(text: string): string {
   return text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
-function page(title: string, lines: string[], button?: { href: string; label: string }): string {
+function page(
+  title: string,
+  lines: string[],
+  buttons: Array<{ href: string; label: string }> = [],
+): string {
+  const links = buttons.map(
+    (button) =>
+      `<p><a class="button" href="${escape(button.href)}">${escape(button.label)}</a></p>`,
+  );
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escape(title)}</title>
 <style>body{font:17px/1.6 system-ui,sans-serif;max-width:34rem;margin:12vh auto;padding:0 1.25rem;color:#1c1e21}
 h1{font-size:1.4rem}a.button{display:inline-block;background:#0866ff;color:#fff;font-weight:600;
 text-decoration:none;padding:.65rem 1.1rem;border-radius:8px}</style></head>
-<body><h1>${escape(title)}</h1>${lines.map((line) => `<p>${escape(line)}</p>`).join('')}${
-    button
-      ? `<p><a class="button" href="${escape(button.href)}">${escape(button.label)}</a></p>`
-      : ''
-  }</body></html>`;
+<body><h1>${escape(title)}</h1>${lines.map((line) => `<p>${escape(line)}</p>`).join('')}${links.join('')}</body></html>`;
 }
 
 function sameText(given: string, expected: string): boolean {
@@ -94,37 +109,88 @@ export async function connectFacebook(options: ConnectOptions): Promise<boolean>
   let finish!: (ok: boolean) => void;
   const finished = new Promise<boolean>((resolve) => (finish = resolve));
 
-  /** Works the code into a saved token, and says how it went: [worked, title, lines]. */
-  const complete = async (code: string): Promise<[boolean, string, string[]]> => {
+  /** What the browser is shown next, and whether the command is done: true, false, or not yet. */
+  interface Step {
+    done: boolean | null;
+    title: string;
+    lines: string[];
+    buttons?: Array<{ href: string; label: string }>;
+  }
+  const failed = (why: string): Step => {
+    say(`NOT CONNECTED. ${why}`);
+    return { done: false, title: 'Not connected', lines: [why, 'You can close this tab.'] };
+  };
+
+  /** Several Pages were shared and none is named: the person picks one in the browser. */
+  let toChooseFrom: PageAccount[] = [];
+  let chooser: Step | null = null;
+
+  /** Saves the token of the Page, where the assistant can run on it. */
+  const connect = async (chosen: PageAccount, pages: PageAccount[]): Promise<Step> => {
+    const result = await checkPage(graph, chosen, pages);
+    if (!result.ok) return failed(result.problem);
+    saveEnvValue(options.envFile, 'FB_PAGE_ACCESS_TOKEN', result.page.token);
+    const lasts =
+      result.info.expiresAt === null
+        ? 'It does not expire.'
+        : `It ends on ${new Date(result.info.expiresAt).toISOString().slice(0, 10)}.`;
+    say(`Connected "${result.page.name}" (id ${result.page.id}).`);
+    say(`A token of the Page is saved in ${options.envFile}. ${lasts}`);
+    say(`It may: ${result.info.permissions.join(', ')}.`);
+    say('Start the assistant (again) for it to be used: pnpm start');
+    return {
+      done: true,
+      title: `Connected: ${result.page.name}`,
+      lines: ['The booking assistant can now answer for this Page.', 'You can close this tab.'],
+    };
+  };
+
+  /** Works the code Facebook handed back into the Pages the person shared, and on to a saved token. */
+  const complete = async (code: string): Promise<Step> => {
     try {
       const person = await graph.exchangeCode(code, redirectUri);
-      const result = await pageTokenOf(graph, person, options.pageId);
-      if (result.pages.length > 0) {
-        say('Pages this person manages and shared with the app:');
-        for (const candidate of result.pages) say(`  - ${candidate.name}, id ${candidate.id}`);
+      const pages = await lastingPagesOf(graph, person);
+      if (pages.length === 0) {
+        return failed(
+          'This person manages no Page that the app was given access to. Sign in again and ' +
+            'choose the Page when Facebook asks which ones to share.',
+        );
       }
-      if (!result.ok) {
-        say(`NOT CONNECTED. ${result.problem}`);
-        return [false, 'Not connected', [result.problem, 'You can close this tab.']];
+      say('Pages this person manages and shared with the app:');
+      for (const candidate of pages) say(`  - ${candidate.name}, id ${candidate.id}`);
+
+      if (options.pageId !== '') {
+        const named = pages.find((candidate) => candidate.id === options.pageId);
+        return named
+          ? await connect(named, pages)
+          : failed(`None of the Pages has the id in FB_PAGE_ID (${options.pageId}).`);
       }
-      saveEnvValue(options.envFile, 'FB_PAGE_ACCESS_TOKEN', result.page.token);
-      const lasts =
-        result.info.expiresAt === null
-          ? 'It does not expire.'
-          : `It ends on ${new Date(result.info.expiresAt).toISOString().slice(0, 10)}.`;
-      say(`Connected "${result.page.name}" (id ${result.page.id}).`);
-      say(`A token of the Page is saved in ${options.envFile}. ${lasts}`);
-      say(`It may: ${result.info.permissions.join(', ')}.`);
-      say('Start the assistant (again) for it to be used: pnpm start');
-      return [
-        true,
-        `Connected: ${result.page.name}`,
-        ['The booking assistant can now answer for this Page.', 'You can close this tab.'],
-      ];
+      if (pages.length === 1) return await connect(pages[0]!, pages);
+
+      toChooseFrom = pages;
+      say('Choose in the browser which of them the assistant answers for.');
+      chooser = {
+        done: null,
+        title: 'Which Page should the assistant answer for?',
+        lines: ['You shared several Pages. Choose the one whose chats the assistant answers.'],
+        buttons: pages.map((candidate) => ({
+          href: `${start}${CHOICE_PATH}?page=${encodeURIComponent(candidate.id)}&state=${state}`,
+          label: candidate.name || `Page ${candidate.id}`,
+        })),
+      };
+      return chooser;
     } catch (error) {
-      const why = explainGraphError(error, 'app');
-      say(`NOT CONNECTED. ${why}`);
-      return [false, 'Not connected', [why, 'You can close this tab.']];
+      return failed(explainGraphError(error, 'app'));
+    }
+  };
+
+  const choose = async (pageId: string): Promise<Step | null> => {
+    const chosen = toChooseFrom.find((candidate) => candidate.id === pageId);
+    if (!chosen) return null;
+    try {
+      return await connect(chosen, toChooseFrom);
+    } catch (error) {
+      return failed(explainGraphError(error, 'app'));
     }
   };
 
@@ -133,7 +199,7 @@ export async function connectFacebook(options: ConnectOptions): Promise<boolean>
       status: number,
       title: string,
       lines: string[],
-      button?: { href: string; label: string },
+      buttons: Array<{ href: string; label: string }> = [],
     ) => {
       response.writeHead(status, {
         'content-type': 'text/html; charset=utf-8',
@@ -142,7 +208,11 @@ export async function connectFacebook(options: ConnectOptions): Promise<boolean>
         'x-content-type-options': 'nosniff',
         'x-frame-options': 'DENY',
       });
-      response.end(page(title, lines, button));
+      response.end(page(title, lines, buttons));
+    };
+    const show = (step: Step) => {
+      send(200, step.title, step.lines, step.buttons);
+      if (step.done !== null) finish(step.done);
     };
     const url = new URL(request.url ?? '/', start);
     if (request.method !== 'GET' || !ownNames.includes(request.headers.host ?? '')) {
@@ -159,17 +229,25 @@ export async function connectFacebook(options: ConnectOptions): Promise<boolean>
             'Page when Facebook asks which ones to share.',
           'What Facebook hands back stays on this computer.',
         ],
-        { href: signIn.toString(), label: 'Continue with Facebook' },
+        [{ href: signIn.toString(), label: 'Continue with Facebook' }],
       );
     }
-    if (url.pathname !== CALLBACK_PATH) return send(404, 'Not found', []);
-
+    if (url.pathname !== CALLBACK_PATH && url.pathname !== CHOICE_PATH) {
+      return send(404, 'Not found', []);
+    }
     // Only the browser that went to Facebook from the button comes back with this word.
     if (!sameText(url.searchParams.get('state') ?? '', state)) {
       return send(400, 'Not connected', [
         'This page was not reached from the button of "pnpm fb:connect". Start the command again.',
       ]);
     }
+
+    if (url.pathname === CHOICE_PATH) {
+      const step = await choose(url.searchParams.get('page') ?? '');
+      if (step) return show(step);
+      return send(400, 'Not connected', ['That Page was not among the ones shared.']);
+    }
+
     const code = url.searchParams.get('code');
     if (code === null) {
       const reason = url.searchParams.get('error_description') ?? 'Facebook returned no code.';
@@ -185,9 +263,9 @@ export async function connectFacebook(options: ConnectOptions): Promise<boolean>
       ]);
       return finish(false);
     }
-    const [ok, title, lines] = await complete(code);
-    send(200, title, lines);
-    finish(ok);
+    // Facebook's code is good for one use: a page loaded twice is shown the choice again, not an error.
+    if (chooser) return show(chooser);
+    show(await complete(code));
   };
 
   const handle = (request: IncomingMessage, response: ServerResponse) => {
@@ -227,13 +305,24 @@ export async function connectFacebook(options: ConnectOptions): Promise<boolean>
   say('On Facebook, press "Continue" on each step. Leave every permission switched on, and');
   say('choose the Page when Facebook asks which ones to share.');
   say();
+  say('The app must allow the address Facebook sends the browser back to; the README says where');
+  say(`("Connecting the Page"). It is: ${redirectUri}`);
+  say();
   say(`Waiting for you to finish (${Math.round(options.timeoutMs / 60_000)} minutes at most)...`);
   options.open(start);
 
   const timer = setTimeout(() => {
     say('NOT CONNECTED. Nothing came back from the browser in time.');
-    say('If Facebook showed an error instead of its sign-in page, note what it said: it names');
-    say('what is missing in the app\u2019s settings.');
+    say(
+      'If Facebook showed "The domain of this URL isn\u2019t included in the app\u2019s domains" in',
+    );
+    say('place of its sign-in page, the app does not allow the address the browser is sent back');
+    say(`to. It is: ${redirectUri}`);
+    say('and belongs under "Facebook Login for Business > Settings > Valid OAuth Redirect URIs"');
+    say(
+      'in the app\u2019s dashboard. The README has the other way to connect the Page, which needs',
+    );
+    say('none of this.');
     finish(false);
   }, options.timeoutMs);
   const ok = await finished;

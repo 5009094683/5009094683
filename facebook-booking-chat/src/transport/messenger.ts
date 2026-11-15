@@ -27,10 +27,11 @@ import type {
   off when the address did not answer for an hour.
 
   How much of that it can do depends on what the token is allowed. A token
-  made by signing in ("pnpm fb:connect") may do all of it. A token made by
+  with the permission pages_manage_metadata may do all of it. A token made by
   "Generate" in the app's dashboard may answer chats and no more: the address
   is still registered by the program, but the Page is switched on for the app
   by a person, in the dashboard, and the program cannot see whether it is.
+  That second way is the one that has been run against Facebook itself.
 
   Everything the rest of the program knows of Facebook is in this file and in
   graph.ts.
@@ -65,11 +66,11 @@ export const ANSWER_PERMISSION = 'pages_messaging';
  */
 export const MANAGE_PERMISSION = 'pages_manage_metadata';
 
-/** Where a person switches the Page on for the app, when the token may not. */
+/** Where a person switches the Page on for the app, when the token may not. As the dashboard was in November 2026. */
 export const BY_HAND =
-  'in the app\u2019s dashboard at developers.facebook.com, open Use cases > Messenger > Customize ' +
-  '(Messenger API Settings), press \u201cAdd Subscriptions\u201d next to the Page, tick messages, ' +
-  'messaging_postbacks and message_echoes, and confirm';
+  'in the app\u2019s dashboard at developers.facebook.com, open Use cases > Customize > Messenger ' +
+  'API Settings, and under \u201c2. Generate access tokens\u201d press \u201cAdd Subscriptions\u201d next ' +
+  'to the Page; tick messages, messaging_postbacks and message_echoes, and press Confirm';
 
 /** How long after the assistant's first message its report back from Facebook is waited for. */
 const ECHO_WAIT_MS = 2 * 60_000;
@@ -257,16 +258,34 @@ export class MessengerTransport implements Transport {
   /**
    * Stops, and takes this program's address off Facebook's record: for an
    * address that is about to go away (a try-out tunnel that closes). Without
-   * it Facebook keeps calling the dead address, sends the app's owner
-   * warnings about a failing webhook, and after an hour takes the Page off
-   * the app. The Page itself stays switched on for the app, so the next start
-   * only has to register its new address. Returns whether Facebook was told.
+   * it Facebook keeps calling the dead address when someone writes to the
+   * Page, sends the app's owner warnings about a failing webhook, and after
+   * an hour of that takes the Page off the app.
+   *
+   * It only does so where the next start can put everything back by itself.
+   * With a token that may not switch the Page on for the app, a person did
+   * that by hand, and it has not been tried whether Facebook keeps the Page
+   * switched on once the app's address is gone; the program could not see it
+   * either way. So nothing is removed there, and the address stays on record
+   * until the next start replaces it. Returns whether the address was taken
+   * off.
    */
   async leave(): Promise<boolean> {
     const { graph, options } = this;
     const ours = this.publicUrl !== '' && this.webhook?.url === `${this.publicUrl}${WEBHOOK_PATH}`;
+    const canPutBack = this.canManagePage === true;
     await this.stop();
     if (!ours) return false;
+    if (!canPutBack) {
+      options.log.info(
+        {},
+        'Facebook keeps this address on record until the next start gives it a new one. A ' +
+          'message to the Page gets no answer meanwhile, and once Facebook has failed for an ' +
+          'hour to deliver one, it takes the Page off the app: "Add Subscriptions" then has ' +
+          'to be pressed again',
+      );
+      return false;
+    }
     try {
       // Only what the app is told about Pages; it may be told about other things at other addresses.
       await graph.delete(`${options.appId}/subscriptions`, graph.appToken, { object: 'page' });
@@ -339,8 +358,7 @@ export class MessengerTransport implements Transport {
         notes.push(
           'Nothing has arrived from Facebook since the start. The access token may answer chats ' +
             'but not switch the Page on for the app, or see whether it is on. If messages to ' +
-            `the Page get no answer: ${BY_HAND}. Or run "pnpm fb:connect" once, and the ` +
-            'assistant does this itself from then on.',
+            `the Page get no answer: ${BY_HAND}.`,
         );
       } else if (
         this.firstSentAt !== null &&
@@ -356,8 +374,9 @@ export class MessengerTransport implements Transport {
     }
     if (this.tokenExpiresAt !== null && this.tokenExpiresAt - now < 14 * DAY_MS) {
       notes.push(
-        `The access token stops working on ${day(this.tokenExpiresAt)}. Before then, run ` +
-          '"pnpm fb:connect": it saves one that does not expire.',
+        `The access token stops working on ${day(this.tokenExpiresAt)}. Before then, put a new ` +
+          'one into .env: "Generate" under "Messenger API Settings" in the app\u2019s dashboard ' +
+          'makes one that does not expire.',
       );
     }
     if (this.enforcement) {
@@ -516,8 +535,9 @@ export class MessengerTransport implements Transport {
     if (!info.permissions.includes(ANSWER_PERMISSION)) {
       throw new Problem(
         `The access token lacks the permission ${ANSWER_PERMISSION}, without which the ` +
-          'Page\u2019s chats can be neither read nor answered. Run "pnpm fb:connect": it signs in ' +
-          'with Facebook and saves a token that has every permission the assistant needs.',
+          'Page\u2019s chats can be neither read nor answered. Make a new one in the app\u2019s ' +
+          'dashboard: under "Messenger API Settings", press "Generate" next to the Page, and ' +
+          'put it into .env as FB_PAGE_ACCESS_TOKEN.',
       );
     }
     const canManage = info.permissions.includes(MANAGE_PERMISSION);
@@ -525,8 +545,7 @@ export class MessengerTransport implements Transport {
       options.log.warn(
         {},
         'The access token may answer chats but not switch the Page on for the app. If messages ' +
-          `to the Page get no answer: ${BY_HAND}. Or run "pnpm fb:connect" once, and the ` +
-          'assistant does this itself from then on.',
+          `to the Page get no answer: ${BY_HAND}.`,
       );
     }
     this.canManagePage = canManage;
@@ -534,19 +553,23 @@ export class MessengerTransport implements Transport {
   }
 
   /**
-   * The Page's name, for the dashboard. Facebook tells it only to a token
-   * with a permission the assistant can do without; where it does not, the
-   * name is picked up from the first chat that is looked at.
+   * The Page's name, for the dashboard. Facebook tells it outright only to a
+   * token with a permission the assistant can do without; any token that may
+   * answer chats can read the Page's list of chats, where the Page is named
+   * as one of the two in each. Null where the Page has had no chat yet.
    */
   private async pageName(): Promise<string | null> {
+    const { graph, options } = this;
     try {
-      const me = await this.graph.get<{ name?: unknown }>('me', this.options.pageAccessToken, {
+      const me = await graph.get<{ name?: unknown }>('me', options.pageAccessToken, {
         fields: 'name',
       });
-      return typeof me.name === 'string' && me.name !== '' ? me.name : null;
+      if (typeof me.name === 'string' && me.name !== '') return me.name;
     } catch {
-      return null;
+      // Not allowed to this token: the list of chats, then.
     }
+    const pageId = this.page?.id;
+    return pageId ? pageNameFromChats(graph, options.pageAccessToken, pageId) : null;
   }
 
   private async checkWebhook(): Promise<void> {
@@ -998,6 +1021,36 @@ export class MessengerTransport implements Transport {
     }
     return null;
   }
+}
+
+/**
+ * The Page's name as its own list of chats has it: the Page is one of the two
+ * in each chat. Open to a token that may do no more than answer chats, which
+ * Facebook does not tell the Page's name outright. Null where the Page has
+ * had no chat yet, or where Facebook does not say.
+ */
+export async function pageNameFromChats(
+  graph: Graph,
+  pageAccessToken: string,
+  pageId: string,
+): Promise<string | null> {
+  try {
+    const chats = await graph.get<{ data?: unknown[] }>(
+      `${pageId}/conversations`,
+      pageAccessToken,
+      { platform: 'messenger', fields: 'participants', limit: 1 },
+    );
+    const people = record(record(chats.data?.[0])?.participants)?.data;
+    for (const person of Array.isArray(people) ? people : []) {
+      const name = record(person)?.name;
+      if (idIn(person) === pageId && typeof name === 'string' && name.trim() !== '') {
+        return name.trim();
+      }
+    }
+  } catch {
+    // No name, then; the Page is shown by its id.
+  }
+  return null;
 }
 
 /** Compares without giving away, by the time it takes, how much of a guess was right. */
