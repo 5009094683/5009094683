@@ -92,7 +92,17 @@ export function loadSession(file: string): Session {
   if (!existsSync(path)) {
     throw new SessionError(`There is no session file at ${path}. ${HOW_TO}`);
   }
+  ownerOnly(path);
   return parseSession(readFileSync(path, 'utf8'));
+}
+
+/** Other users of the machine have no business reading the login. */
+function ownerOnly(path: string): void {
+  try {
+    chmodSync(path, 0o600);
+  } catch {
+    // File systems without permissions (some Windows drives) keep what they have.
+  }
 }
 
 /**
@@ -106,11 +116,7 @@ export function saveSession(file: string, cookies: SessionCookie[]): void {
   const temporary = `${path}.tmp`;
   writeFileSync(temporary, `${JSON.stringify(cookies, null, 2)}\n`, { mode: 0o600 });
   renameSync(temporary, path);
-  try {
-    chmodSync(path, 0o600);
-  } catch {
-    // File systems without permissions (some Windows drives) keep what they have.
-  }
+  ownerOnly(path);
 }
 
 /** Who the session signs in as, for the log and the status page. Never the cookie values. */

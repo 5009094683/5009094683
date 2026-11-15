@@ -80,7 +80,8 @@ const MIGRATIONS: string[] = [
 ];
 
 export function openDb(file: string): Db {
-  if (file !== ':memory:') mkdirSync(dirname(file), { recursive: true });
+  // The folder holds customers' names, numbers and chats: for its owner only.
+  if (file !== ':memory:') mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
   const db = new Database(file);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');

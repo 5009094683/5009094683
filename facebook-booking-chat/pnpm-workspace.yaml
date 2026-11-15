@@ -3,3 +3,14 @@ packages:
 
 onlyBuiltDependencies:
   - esbuild
+
+# The Facebook client library (ws3-fca) asks for old releases of these, which
+# have known security problems. None of them is on the path the assistant
+# uses (signing in, the live Messenger connection, sending), so newer releases
+# are put in their place. Its WebSocket client (ws 3, through
+# websocket-stream) is on that path and is left as the library expects it;
+# see "Known weaknesses" in the README.
+overrides:
+  ws3-fca>undici: ^6.29.1
+  ws3-fca>cheerio: ^1.2.0
+  node-cron>uuid: ^11.1.1
