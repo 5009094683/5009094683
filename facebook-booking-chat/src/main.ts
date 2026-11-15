@@ -165,6 +165,8 @@ async function main(): Promise<void> {
   };
   process.on('SIGINT', () => void stop('SIGINT'));
   process.on('SIGTERM', () => void stop('SIGTERM'));
+  // The terminal it was started in has been closed.
+  process.on('SIGHUP', () => void stop('SIGHUP'));
 }
 
 main().catch((error: unknown) => {
