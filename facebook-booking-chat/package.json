@@ -1,0 +1,48 @@
+{
+  "name": "facebook-booking-chat",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Automatic booking assistant for the Facebook Page chat of Cao Bằng Travel Guide",
+  "type": "module",
+  "packageManager": "pnpm@10.33.4",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "dev": "tsx watch --clear-screen=false src/main.ts",
+    "demo": "tsx src/main.ts --demo",
+    "fb:connect": "tsx src/cli/connect-facebook.ts",
+    "fb:check": "tsx src/cli/check-facebook.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "talk": "tsx scripts/talk.ts",
+    "walkthrough": "tsx scripts/walkthrough.ts"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.1.5",
+    "@fastify/formbody": "^9.0.2",
+    "better-sqlite3": "^13.2.0",
+    "fastify": "^5.12.8",
+    "pino": "^10.4.0",
+    "pino-pretty": "^13.2.0",
+    "tsx": "^4.23.15",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^22.20.5",
+    "eslint": "^10.14.0",
+    "globals": "^17.14.0",
+    "playwright-core": "^1.65.1",
+    "prettier": "^3.10.1",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.2",
+    "vitest": "^5.1.0"
+  }
+}

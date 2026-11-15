@@ -1,0 +1,19 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+*.log
+.DS_Store
+
+# Local settings and secrets. .env holds the keys to the Page's chat: it must
+# never be committed or shared.
+.env
+.env.*
+!.env.example
+
+# The database: customers' names, numbers and chats.
+/var/
+
+# Logins of the earlier, browser-session way of connecting, should one be left over.
+appstate*.json
+facebook-session*.json
