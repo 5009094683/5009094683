@@ -1,6 +1,7 @@
 import type { Availability } from '../bookings/desk';
 import { depositOf, formatMoney } from '../bookings/pricing';
 import type { Business } from '../business/schema';
+import { bookingTitle } from '../engine/view';
 import { formatDate } from '../nlu/dates';
 import {
   type Booking,
@@ -83,12 +84,6 @@ function period(booking: Booking): string {
   return booking.days === 1
     ? `${start} (1 day)`
     : `${start} to ${formatDate(booking.endDate, 'en')} (${booking.days} days)`;
-}
-
-function serviceLine(booking: Booking): string {
-  return booking.optionName === booking.serviceName
-    ? booking.serviceName
-    : `${booking.serviceName}, ${booking.optionName}`;
 }
 
 function displayName(conversation: { customerName: string | null; threadId: string }): string {
@@ -225,7 +220,9 @@ export function bookingsPage(
         </td>
         <td><span class="pill ${booking.status}">${STATUS_WORDS[booking.status]}</span></td>
         <td class="wide">
-          ${serviceLine(booking)}<br /><span class="muted small">${quantityWord(booking)}</span>
+          ${bookingTitle(booking, chrome.business)}<br /><span class="muted small"
+            >${quantityWord(booking)}</span
+          >
         </td>
         <td>${period(booking)}</td>
         <td class="nowrap">
@@ -385,7 +382,7 @@ export function bookingPage(
         <div class="card">
           <dl class="facts">
             <dt>Service</dt>
-            <dd>${serviceLine(booking)}</dd>
+            <dd>${bookingTitle(booking, chrome.business)}</dd>
             <dt>Dates</dt>
             <dd>${period(booking)}</dd>
             <dt>How many</dt>
@@ -616,7 +613,9 @@ export function conversationPage(
                       <a href="/bookings/${booking.code}"><strong>${booking.code}</strong></a>
                       <span class="pill ${booking.status}">${STATUS_WORDS[booking.status]}</span
                       ><br />
-                      <span class="small muted">${serviceLine(booking)} · ${period(booking)}</span>
+                      <span class="small muted"
+                        >${bookingTitle(booking, chrome.business)} · ${period(booking)}</span
+                      >
                     </p>`,
                 )
           }

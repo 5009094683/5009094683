@@ -369,6 +369,28 @@ export function parseBareDay(text: string, today: IsoDate): IsoDate | undefined 
   return match ? resolveBareDay(Number(match[1]), today) : undefined;
 }
 
+/**
+ * The one number in a short answer: "ok 3", "3 then", "make it 2 please".
+ * Undefined when the answer is longer or names more than one number.
+ */
+export function loneNumber(text: string): number | undefined {
+  const folded = fold(text);
+  if (folded.split(' ').length > 5) return undefined;
+  const numbers = folded.match(/(?<![\d/.:,-])\d{1,2}(?![\d/.:,-]|(?:st|nd|rd|th)?[a-z])/g) ?? [];
+  const ordinals = folded.match(/(?<![\d/.:,-])\d{1,2}(?=(?:st|nd|rd|th)(?![a-z]))/g) ?? [];
+  const all = [...numbers, ...ordinals];
+  return all.length === 1 ? Number(all[0]) : undefined;
+}
+
+/**
+ * A day of the month named loosely in answer to "which date?": "ok then the
+ * 25th", "25 nhé". Tried only after the stricter readings have found nothing.
+ */
+export function parseLooseDay(text: string, today: IsoDate): IsoDate | undefined {
+  const day = loneNumber(text);
+  return day === undefined ? undefined : resolveBareDay(day, today);
+}
+
 const WEEKDAY_NAMES: Record<Lang, string[]> = {
   en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
   vi: ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy'],

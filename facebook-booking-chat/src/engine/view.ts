@@ -45,6 +45,18 @@ export function viewOfDraft(
   };
 }
 
+/**
+ * "Motorbike rental, Honda Wave 110", or just "Easy Rider" where the service
+ * has a single option and naming it adds nothing. For the team's eyes.
+ */
+export function bookingTitle(booking: Booking, business: Business): string {
+  const service = findService(business, booking.serviceId);
+  const single = service !== undefined && service.options.length === 1;
+  return single || booking.optionName === booking.serviceName
+    ? booking.serviceName
+    : `${booking.serviceName}, ${booking.optionName}`;
+}
+
 /** A recorded booking as the messages show it. */
 export function viewOfBooking(booking: Booking, business: Business): BookingView {
   const service = findService(business, booking.serviceId);

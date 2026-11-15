@@ -278,8 +278,8 @@ describe('passing chats on and telling the team', () => {
 
     const code = await bookTour();
     expect(facebook.sentTo('hien')).toEqual([
-      `New booking to confirm: ${code}, Tour package (Ban Gioc waterfall & Nguom Ngao cave (1 day)), ` +
-        `from Sat 21 Nov 2026, 1 day, quantity 2, for Anna Müller\nhttps://desk.example/bookings/${code}`,
+      `New booking to confirm: ${code} for Anna Müller. Tour package, Ban Gioc waterfall & Nguom Ngao cave (1 day). ` +
+        `From Sat 21 Nov 2026, 1 day, 2 people.\nhttps://desk.example/bookings/${code}`,
     ]);
 
     facebook.names.set('ben', 'Ben Carter');
@@ -287,7 +287,9 @@ describe('passing chats on and telling the team', () => {
     await customer('ben', 'skip');
     await customer('ben', 'skip');
     await customer('ben', 'yes');
-    expect(facebook.sentTo('hien').at(-1)).toContain('New booking, confirmed automatically: CB-');
+    expect(facebook.sentTo('hien').at(-1)).toMatch(
+      /^New booking, confirmed automatically: CB-\w{5} for Ben Carter\. Motorbike rental, Honda XR 150 \(manual\)\. From Fri 20 Nov 2026, 1 day, 1 motorbike\./,
+    );
 
     await customer('carl', 'staff please');
     expect(facebook.sentTo('hien').at(-1)).toBe(

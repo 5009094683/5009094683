@@ -348,6 +348,38 @@ describe('dates and limits', () => {
     expect(chat.last.state.draft.startDate).toBe('2026-11-20');
   });
 
+  it('reads a number in a short answer as the answer to what was asked', () => {
+    chat.say('I want to rent a wave');
+    expect(chat.say('ok then the 25th')).toBe('For how many days?');
+    expect(chat.last.state.draft.startDate).toBe('2026-11-25');
+    expect(chat.say('3 then')).toBe('How many motorbikes do you need?');
+    expect(chat.last.state.draft.days).toBe(3);
+    expect(chat.say('make it 2 please')).toContain('Which phone number');
+    expect(chat.last.state.draft.quantity).toBe(2);
+  });
+
+  it('does not take a number meant for something else as the answer', () => {
+    chat.say('I want to rent a wave');
+    // Asked for the date; the customer gives the length and the count instead.
+    expect(chat.say('3 days')).toContain('From which date');
+    expect(chat.say('2 bikes')).toContain('From which date');
+    expect(chat.last.state.draft).toMatchObject({ days: 3, quantity: 2 });
+    expect(chat.last.state.draft.startDate).toBeUndefined();
+
+    setUp();
+    chat.say('I want to rent a wave from 20/11');
+    // Asked for the days; the customer gives the count instead.
+    expect(chat.say('2 bikes')).toBe('For how many days?');
+    expect(chat.last.state.draft.days).toBeUndefined();
+    chat.say('3');
+    setUp();
+    chat.say('I want to rent a wave from 20/11 for 2 days');
+    // Asked how many motorbikes; "3 days" changes the length, not the count.
+    expect(chat.say('3 days')).toBe('How many motorbikes do you need?');
+    expect(chat.last.state.draft).toMatchObject({ days: 3 });
+    expect(chat.last.state.draft.quantity).toBeUndefined();
+  });
+
   it('passes a very large or very long request to a person', () => {
     chat.say('hello');
     const reply = chat.say('easy rider for 25 people on 20/11 for 2 days');

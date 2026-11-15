@@ -8,7 +8,15 @@ import {
   findService,
 } from '../business/schema';
 import { countOfOption, matchOption, matchService } from '../nlu/catalog';
-import { type IsoDate, diffDays, parseBareDay, parseDates, todayIn } from '../nlu/dates';
+import {
+  type IsoDate,
+  diffDays,
+  loneNumber,
+  parseBareDay,
+  parseDates,
+  parseLooseDay,
+  todayIn,
+} from '../nlu/dates';
 import { type Intent, detectIntents, isAbort, isNo, isSkip, isYes } from '../nlu/intents';
 import { findBikes, findPeople, findPhone, parseCount, parseName } from '../nlu/numbers';
 import { detectLanguage, fold, hasAnyPhrase } from '../nlu/text';
@@ -388,21 +396,29 @@ class Turn {
         break;
       }
       case 'startDate': {
-        if (parseDates(text, this.today).start === undefined) {
-          const day = parseBareDay(text, this.today);
+        const found = parseDates(text, this.today);
+        // Only when the message names no date, and no other detail a number could belong to.
+        if (found.start === undefined && found.days === undefined && !this.namesACount()) {
+          const day = parseBareDay(text, this.today) ?? parseLooseDay(text, this.today);
           if (day !== undefined) this.setStart(day);
         }
         break;
       }
       case 'days': {
-        if (parseDates(text, this.today).days === undefined) {
-          const n = /^(?:just |only )?(?:a|the|one) day$/.test(folded) ? 1 : parseCount(text);
+        const found = parseDates(text, this.today);
+        if (found.days === undefined && found.start === undefined && !this.namesACount()) {
+          const n = /^(?:just |only )?(?:a|the|one) day$/.test(folded)
+            ? 1
+            : (parseCount(text) ?? loneNumber(text));
           if (n !== undefined) this.setDays(n);
         }
         break;
       }
       case 'quantity': {
-        const n = parseCount(text);
+        const found = parseDates(text, this.today);
+        // "3 days" or "20/11" in answer to "how many?" is about something else.
+        const aboutSomethingElse = found.start !== undefined || found.days !== undefined;
+        const n = aboutSomethingElse ? undefined : (parseCount(text) ?? loneNumber(text));
         if (n !== undefined) {
           draft.quantity = n;
           if (service?.kind === 'rental') draft.bikes = n;
@@ -483,6 +499,11 @@ class Turn {
     if (this.text.includes('?')) return true;
     const questions: Intent[] = ['price', 'included', 'payment', 'cancel_policy', 'services', 'status']; // prettier-ignore
     return questions.some((intent) => this.intents.has(intent));
+  }
+
+  /** The message speaks of people or motorbikes: "2 people", "3 bikes". */
+  private namesACount(): boolean {
+    return findPeople(this.folded) !== undefined || findBikes(this.folded) !== undefined;
   }
 
   private pleasantry(): string | null {

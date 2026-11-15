@@ -1,6 +1,6 @@
 import type { Business } from '../business/schema';
 import type { Engine, HandoffReason } from '../engine/engine';
-import { bookingMessage } from '../engine/view';
+import { bookingMessage, bookingTitle } from '../engine/view';
 import { formatDate } from '../nlu/dates';
 import type { Booking, Conversation, Store } from '../store';
 import type { IncomingMessage, Transport } from '../transport/types';
@@ -147,6 +147,8 @@ export class Bot {
   }
 
   private onCustomerMessage(message: IncomingMessage): void {
+    // Nothing written and nothing sent along: nothing to record or answer.
+    if (message.text.trim() === '' && message.attachments === 0) return;
     const now = this.now();
     this.store.conversations.open(message.threadId, this.business.defaultLanguage, now);
     const recorded = this.store.messages.addReceived({
@@ -332,11 +334,16 @@ export class Bot {
   }
 
   private describeBooking(booking: Booking): string {
-    const option = booking.optionName !== booking.serviceName ? ` (${booking.optionName})` : '';
-    const days = booking.days === 1 ? '1 day' : `${booking.days} days`;
+    const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+    const howMany =
+      booking.serviceKind === 'rental'
+        ? count(booking.quantity, 'motorbike', 'motorbikes')
+        : booking.serviceKind === 'tour'
+          ? count(booking.quantity, 'person', 'people')
+          : count(booking.quantity, 'passenger', 'passengers');
     return (
-      `${booking.code}, ${booking.serviceName}${option}, from ${formatDate(booking.startDate, 'en')}, ` +
-      `${days}, quantity ${booking.quantity}, for ${booking.customerName}`
+      `${booking.code} for ${booking.customerName}. ${bookingTitle(booking, this.business)}. ` +
+      `From ${formatDate(booking.startDate, 'en')}, ${count(booking.days, 'day', 'days')}, ${howMany}.`
     );
   }
 
