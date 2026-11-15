@@ -185,10 +185,7 @@ export const en: Wording = {
     const note = service.note.en ? `\n${service.note.en}` : '';
     const priced = service.options.filter((option) => option.price !== null);
     if (priced.length === 0) {
-      return (
-        `${service.name.en}: our team will confirm the price for your dates. ` +
-        `Tell me when and how many, and I will pass your request on.${note}`
-      );
+      return `${service.name.en}: our team will confirm the price for your dates.${note}`;
     }
     if (service.options.length === 1) {
       return `${service.name.en}: ${money(priced[0]!.price!)} ${per}.${note}`;

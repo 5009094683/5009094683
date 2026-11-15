@@ -20,7 +20,12 @@ const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH ?? '/usr/local/bin/google-chrome',
   headless: true,
 });
-const context = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+const viewport = { width: 1280, height: 860 };
+const context = await browser.newContext({
+  viewport,
+  // Set VIDEO_DIR to keep a recording of the whole walk as well.
+  recordVideo: process.env.VIDEO_DIR ? { dir: process.env.VIDEO_DIR, size: viewport } : undefined,
+});
 const page = await context.newPage();
 const problems: string[] = [];
 page.on('console', (message) => {
@@ -169,12 +174,15 @@ await page.click('.convo >> nth=1');
 await shot('phone-chat');
 
 // ---- signed out, nothing is reachable
-await page.setViewportSize({ width: 1280, height: 860 });
+await page.setViewportSize(viewport);
 await page.click('.signout button');
 await page.waitForURL('**/login');
 await page.goto(`${base}/bookings`);
 expectText(page.url(), '/login', 'after signing out');
 
+const video = page.video();
+await context.close();
+if (video) console.log(`recorded ${await video.path()}`);
 await browser.close();
 if (problems.length > 0) {
   console.error(`\n${problems.length} problem(s):\n- ${problems.join('\n- ')}`);

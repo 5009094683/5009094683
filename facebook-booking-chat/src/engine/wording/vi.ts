@@ -184,10 +184,7 @@ export const vi: Wording = {
     const note = service.note.vi ? `\n${service.note.vi}` : '';
     const priced = service.options.filter((option) => option.price !== null);
     if (priced.length === 0) {
-      return (
-        `${service.name.vi}: nhân viên bên em sẽ báo giá theo ngày anh/chị đi. ` +
-        `Anh/chị cho em biết ngày và số lượng, em chuyển yêu cầu ngay ạ.${note}`
-      );
+      return `${service.name.vi}: nhân viên bên em sẽ báo giá theo ngày anh/chị đi.${note}`;
     }
     if (service.options.length === 1) {
       return `${service.name.vi}: ${money(priced[0]!.price!)}${unit.per}.${note}`;

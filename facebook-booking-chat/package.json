@@ -19,7 +19,8 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "talk": "tsx scripts/talk.ts"
+    "talk": "tsx scripts/talk.ts",
+    "walkthrough": "tsx scripts/walkthrough.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.5",
