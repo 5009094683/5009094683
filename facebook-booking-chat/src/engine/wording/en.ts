@@ -309,6 +309,9 @@ export const en: Wording = {
       ? `I have passed your request to change booking ${booking.code} to our team. A person will reply here.`
       : 'I have passed your request to our team. A person will reply here.',
 
+  deleteRequest: () =>
+    'I have passed your request to our team. A person will delete your chat with me and tell you here when it is done.',
+
   notUnderstood: (business) =>
     'Sorry, I did not understand that. I can help you book:\n' +
     `${menu(business)}\n` +

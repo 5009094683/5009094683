@@ -311,6 +311,9 @@ export const vi: Wording = {
       ? `Em đã chuyển yêu cầu đổi đặt chỗ ${booking.code} cho nhân viên. Nhân viên sẽ trả lời anh/chị tại đây.`
       : 'Em đã chuyển yêu cầu của anh/chị cho nhân viên. Nhân viên sẽ trả lời tại đây.',
 
+  deleteRequest: () =>
+    'Em đã chuyển yêu cầu của anh/chị cho nhân viên. Nhân viên sẽ xóa cuộc trò chuyện của anh/chị với em và báo lại tại đây khi xong ạ.',
+
   notUnderstood: (business) =>
     'Xin lỗi anh/chị, em chưa hiểu ý ạ. Em có thể hỗ trợ đặt:\n' +
     `${menu(business)}\n` +

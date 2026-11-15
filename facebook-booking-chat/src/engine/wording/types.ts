@@ -72,6 +72,8 @@ export interface Wording {
   discount(): string;
   cancelRequest(booking: Booking | null, terms: string): string;
   changeRequest(booking: Booking | null): string;
+  /** The customer asked for what is kept about them to be deleted. */
+  deleteRequest(): string;
 
   notUnderstood(business: Business): string;
   sorry(): string;

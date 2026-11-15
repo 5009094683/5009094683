@@ -3,6 +3,7 @@ import { hasAnyPhrase } from './text';
 export type Intent =
   | 'greeting'
   | 'human'
+  | 'delete_data'
   | 'discount'
   | 'book'
   | 'services'
@@ -31,6 +32,13 @@ const PHRASES: Record<Exclude<Intent, 'greeting'>, string[]> = {
     'speak with', 'talk with', 'call me', 'customer service',
     'nhan vien', 'nguoi that', 'gap nguoi', 'tu van vien', 'noi chuyen voi', 'goi cho toi',
     'goi lai', 'goi cho minh', 'goi cho em', 'chu shop', 'gap chu',
+  ],
+  // What the privacy notice tells customers to write.
+  delete_data: [
+    'delete my data', 'delete my information', 'delete my details', 'delete my chat',
+    'delete my messages', 'delete my personal data', 'remove my data', 'erase my data',
+    'delete all my data', 'forget me',
+    'xoa du lieu', 'xoa thong tin', 'xoa tin nhan', 'xoa cuoc tro chuyen',
   ],
   discount: [
     'discount', 'discounts', 'cheaper', 'better price', 'best price', 'special price', 'negotiate',

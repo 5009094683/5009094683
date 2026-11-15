@@ -5,14 +5,15 @@ coverage/
 *.log
 .DS_Store
 
-# Local settings and secrets
+# Local settings and secrets. .env holds the keys to the Page's chat: it must
+# never be committed or shared.
 .env
-.env.local
-.env.*.local
+.env.*
 !.env.example
 
-# Database and the Facebook session. The session file is a login to the
-# company's Facebook account: it must never be committed or shared.
+# The database: customers' names, numbers and chats.
 /var/
+
+# Logins of the earlier, browser-session way of connecting, should one be left over.
 appstate*.json
 facebook-session*.json

@@ -289,11 +289,28 @@ export function bookingsPage(
 
 export function bookingPage(
   chrome: Chrome,
-  view: { booking: Booking; availability: Availability | null; capacity: number | null },
+  view: {
+    booking: Booking;
+    availability: Availability | null;
+    capacity: number | null;
+    /** The customer's last message is too long ago for a message from here to reach them. */
+    replyTimeOver: boolean;
+  },
 ): string {
   const { booking } = view;
   const timezone = chrome.business.timezone;
   const deposit = depositOf(booking.totalPrice, booking.depositPercent);
+
+  const tellYourself =
+    view.replyTimeOver &&
+    html`<div class="banner warn">
+      <span>
+        <strong>The customer will not get a message from here.</strong> Their last message is too
+        long ago, and Facebook no longer lets the Page write to them from the dashboard. You can
+        still take the step; then tell the customer yourself, from the Page’s inbox in Meta Business
+        Suite${booking.phone ? ` or by phone (${booking.phone})` : ''}.
+      </span>
+    </div>`;
 
   let room: Html;
   if (view.availability === null) {
@@ -349,7 +366,7 @@ export function bookingPage(
   let actions: Html;
   if (booking.status === 'pending') {
     actions = html`<h2>This booking waits for you</h2>
-      ${confirmForm}
+      ${tellYourself} ${confirmForm}
       <hr />
       ${refuseForm('decline', 'Decline and tell the customer', `Decline ${booking.code} and tell the customer?`)}`;
   } else if (booking.status === 'confirmed') {
@@ -357,6 +374,7 @@ export function bookingPage(
         Confirmed ${booking.confirmedBy === 'auto' ? 'by the assistant' : 'by the team'}
       </h2>
       <p class="muted">The customer has been told. If the booking falls through, cancel it here.</p>
+      ${tellYourself}
       ${refuseForm('cancel', 'Cancel and tell the customer', `Cancel ${booking.code} and tell the customer?`)}`;
   } else {
     actions = html`<h2>${STATUS_WORDS[booking.status]}</h2>
@@ -525,6 +543,8 @@ export function conversationPage(
     messages: StoredMessage[];
     bookings: Booking[];
     pauseHours: number;
+    /** The customer's last message is too long ago for a message from here to reach them. */
+    replyTimeOver: boolean;
   },
 ): string {
   const { conversation, messages, bookings } = view;
@@ -596,10 +616,19 @@ export function conversationPage(
               ></textarea>
               <button type="submit">Send</button>
             </div>
-            <p class="hint">
-              Your reply goes out through the Page. The assistant then stays out of this chat for
-              ${view.pauseHours} hours, or until you hand it back.
-            </p>
+            ${
+              view.replyTimeOver
+                ? html`<p class="hint warn-text">
+                    The customer’s last message is too long ago: Facebook no longer lets the Page
+                    write to them from here, and a reply will come back as not sent. Answer from the
+                    Page’s inbox in Meta Business Suite, or by phone. Once the customer writes
+                    again, replies from here go through again.
+                  </p>`
+                : html`<p class="hint">
+                    Your reply goes out through the Page. The assistant then stays out of this chat
+                    for ${view.pauseHours} hours, or until you hand it back.
+                  </p>`
+            }
           </form>
         </div>
         <div class="card">
@@ -619,6 +648,19 @@ export function conversationPage(
                     </p>`,
                 )
           }
+          <hr />
+          <form
+            method="post"
+            action="/conversations/${id}/delete"
+            data-confirm="Delete this chat? Its messages and what the assistant remembers of it are removed for good."
+          >
+            <p class="hint">
+              For a customer who asks for their data to be deleted: removes the messages, the name
+              and what the assistant remembers. Bookings stay in your records. The chat in Messenger
+              itself is not touched.
+            </p>
+            <button type="submit" class="danger">Delete this chat</button>
+          </form>
         </div>
       </div>`,
   );
@@ -626,15 +668,11 @@ export function conversationPage(
 
 // ----------------------------------------------------------------- status
 
-export function statusPage(
-  chrome: Chrome,
-  view: { sessionFile: string; sendVia: string; staffThreads: number },
-): string {
+export function statusPage(chrome: Chrome, view: { staffThreads: number }): string {
   const { connection, business } = chrome;
   const timezone = business.timezone;
   const kind = {
     page: 'Facebook Page',
-    profile: 'Personal profile',
     simulator: 'Simulated (no Facebook)',
   };
 
@@ -707,22 +745,29 @@ export function statusPage(
                 : formatTime(connection.lastMessageAt, timezone)
             }
           </dd>
-          ${
-            !chrome.simulator &&
-            html`<dt>Session file</dt>
-              <dd>${view.sessionFile}</dd>
-              <dt>Sends by</dt>
-              <dd>${view.sendVia === 'mqtt' ? 'the live Messenger connection' : 'web request'}</dd>`
-          }
+          ${(connection.details ?? []).map(
+            (detail) =>
+              html`<dt>${detail.label}</dt>
+                <dd>${detail.value}</dd>`,
+          )}
           <dt>Team is told on</dt>
           <dd>
             ${
               view.staffThreads === 0
                 ? html`<span class="muted">this dashboard only (no STAFF_THREAD_IDS set)</span>`
-                : `${plural(view.staffThreads, 'Messenger chat', 'Messenger chats')} and this dashboard`
+                : html`${plural(view.staffThreads, 'Messenger chat', 'Messenger chats')} and this
+                  dashboard
+                  ${
+                    !chrome.simulator &&
+                    html`<br /><span class="muted small"
+                        >Facebook passes these on only to team members who wrote to the Page within
+                        the last 24 hours.</span
+                      >`
+                  }`
             }
           </dd>
         </dl>
+        ${(connection.notes ?? []).map((note) => html`<div class="banner warn">${note}</div>`)}
         ${
           chrome.simulator &&
           html`<hr />
@@ -730,15 +775,6 @@ export function statusPage(
               Nothing is sent to Facebook in try-out mode. Write as a customer under
               <a href="/try">Try the assistant</a>.
             </p>`
-        }
-        ${
-          connection.account?.kind === 'profile' &&
-          html`<hr />
-            <div class="banner warn">
-              The assistant is signed in as a personal profile. Facebook encrypts chats between
-              personal profiles end to end, and the assistant cannot read those. Switch into the
-              Page in the browser before exporting the session.
-            </div>`
         }
       </div>
       <div class="card flush">

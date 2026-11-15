@@ -50,6 +50,8 @@ const HANDOFF_NOTES: Record<HandoffReason, string> = {
   cancel_request: 'The customer asks to cancel a booking.',
   change_request: 'The customer asks to change a booking.',
   large_request: 'The request is larger than the assistant may take.',
+  delete_request:
+    'The customer asks for their data to be deleted. Answer them, then use "Delete this chat" on this page.',
 };
 
 /** A sent message is recognised in what Facebook reports back for this long. */
@@ -355,12 +357,17 @@ export class Bot {
    * Sends one message and records how it went. A message that cannot be sent
    * is marked as failed and the chat flagged; nothing is retried by itself,
    * so that no customer gets the same message twice.
+   *
+   * `byPerson` says that a person of the team wrote the message or let it go
+   * out from the dashboard, which Facebook allows for longer than it allows
+   * the assistant's own answers.
    */
   private async deliver(
     threadId: string,
     text: string,
     sender: 'bot' | 'staff',
     paced: boolean,
+    byPerson = false,
   ): Promise<boolean> {
     const { messages, conversations } = this.store;
     const message = messages.addOutgoing({ threadId, sender, text, at: this.now() });
@@ -373,7 +380,7 @@ export class Bot {
           await this.sleep(pause);
         }
       }
-      const sent = await this.transport.sendText(threadId, text);
+      const sent = await this.transport.sendText(threadId, text, { byPerson });
       messages.markSent(message.id, sent.messageId);
       return true;
     } catch (error) {
@@ -413,7 +420,7 @@ export class Bot {
     conversations.pause(threadId, this.now() + this.options.staffPauseMs);
     conversations.clearFlag(threadId);
     this.dropWaiting(threadId);
-    return this.deliver(threadId, text, 'staff', false);
+    return this.deliver(threadId, text, 'staff', false, true);
   }
 
   /** A person takes the chat over until they hand it back. */
@@ -428,16 +435,29 @@ export class Bot {
     this.store.conversations.clearFlag(threadId);
   }
 
-  /** Sends again a message that could not be sent. */
+  /** A person sends again a message that could not be sent. */
   async resend(messageId: number): Promise<boolean> {
     const message = this.store.messages.get(messageId);
     if (!message || message.status !== 'failed' || message.sender === 'customer') return false;
-    return this.deliver(message.threadId, message.text, message.sender, false);
+    return this.deliver(message.threadId, message.text, message.sender, false, true);
   }
 
-  /** Tells the customer where their booking stands now: confirmed, declined or cancelled. */
+  /**
+   * Tells the customer where their booking stands now, after a person has
+   * confirmed, declined or cancelled it in the dashboard.
+   */
   async announce(booking: Booking): Promise<boolean> {
-    return this.deliver(booking.threadId, bookingMessage(booking, this.business), 'bot', false);
+    const text = bookingMessage(booking, this.business);
+    return this.deliver(booking.threadId, text, 'bot', false, true);
+  }
+
+  /**
+   * Deletes a chat at the customer's request: its messages and what the
+   * assistant remembers of it. Bookings stay, as the company's records.
+   */
+  forget(threadId: string): void {
+    this.dropWaiting(threadId);
+    this.store.conversations.forget(threadId);
   }
 }
 

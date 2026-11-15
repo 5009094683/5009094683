@@ -7,19 +7,26 @@
     pnpm tsx scripts/walkthrough.ts   in another
 
   Screenshots go to the folder given as the first argument (default: ./var/walkthrough).
+
+  It drives Chrome (CHROME_PATH says where it is). With BROWSER=webkit it
+  drives the WebKit that Playwright installs for itself
+  (`pnpm exec playwright-core install webkit`), for machines without Chrome.
 */
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { type Page, chromium } from 'playwright-core';
+import { type Page, chromium, webkit } from 'playwright-core';
 
 const base = process.env.DASHBOARD_ADDRESS ?? 'http://127.0.0.1:3400';
 const out = resolve(process.argv[2] ?? './var/walkthrough');
 mkdirSync(out, { recursive: true });
 
-const browser = await chromium.launch({
-  executablePath: process.env.CHROME_PATH ?? '/usr/local/bin/google-chrome',
-  headless: true,
-});
+const browser =
+  process.env.BROWSER === 'webkit'
+    ? await webkit.launch({ headless: true })
+    : await chromium.launch({
+        executablePath: process.env.CHROME_PATH ?? '/usr/local/bin/google-chrome',
+        headless: true,
+      });
 const viewport = { width: 1280, height: 860 };
 const context = await browser.newContext({
   viewport,
@@ -28,8 +35,12 @@ const context = await browser.newContext({
 });
 const page = await context.newPage();
 const problems: string[] = [];
+let shooting = false;
 page.on('console', (message) => {
-  if (message.type() === 'error') problems.push(`console: ${message.text()}`);
+  // For a screenshot, the driver of WebKit adds a style sheet to the page. The
+  // dashboard's rules for content refuse it and say so in the console: that
+  // is the driver's doing, not the page's.
+  if (message.type() === 'error' && !shooting) problems.push(`console: ${message.text()}`);
 });
 page.on('pageerror', (error) => problems.push(`page error: ${error.message}`));
 
@@ -37,7 +48,13 @@ let step = 0;
 async function shot(name: string, fullPage = false): Promise<void> {
   step += 1;
   const file = join(out, `${String(step).padStart(2, '0')}-${name}.png`);
-  await page.screenshot({ path: file, fullPage });
+  shooting = true;
+  try {
+    await page.screenshot({ path: file, fullPage });
+    await page.waitForTimeout(150);
+  } finally {
+    shooting = false;
+  }
   console.log(`saved ${file}`);
 }
 
@@ -164,6 +181,38 @@ await page.goto(`${base}/bookings?status=all`);
 await shot('bookings-all');
 await page.goto(`${base}/status`);
 await shot('status', true);
+
+// ---- a customer asks for their data to be deleted; a person deletes the chat
+await page.goto(`${base}/try`);
+await page.fill('input[name=name]', 'Sophie Martin');
+await page.click('form[action="/try/new"] button');
+await page.waitForURL('**/try');
+await customerSays(page, 'Hello, how much is a scooter?');
+expectText(
+  await customerSays(page, 'Please delete my data'),
+  'A person will delete your chat with me',
+  'request to delete',
+);
+await page.goto(`${base}/conversations`);
+expectText(await page.innerText('.convo >> nth=0'), 'Sophie Martin', 'chat list order');
+expectText(await page.innerText('.convo >> nth=0'), 'asks for their data to be deleted', 'flag');
+await page.click('.convo >> nth=0');
+await page.waitForURL('**/conversations/**');
+await shot('chat-asks-for-deletion', true);
+page.once('dialog', (dialog) => void dialog.accept());
+await page.click('form[action$="/delete"] button');
+await page.waitForURL('**n=deleted');
+expectText(await page.innerText('main'), 'The chat has been deleted', 'deleting a chat');
+if ((await page.innerText('main')).includes('Sophie Martin')) {
+  problems.push('deleting a chat: the deleted chat is still listed');
+}
+await shot('chat-deleted');
+
+// ---- the privacy notice customers are pointed to
+await page.goto(`${base}/privacy`);
+expectText(await page.innerText('body'), 'What we keep', 'privacy notice');
+expectText(await page.innerText('body'), 'Chúng tôi lưu những gì', 'privacy notice');
+await shot('privacy-notice', true);
 
 // ---- narrow screen
 await page.setViewportSize({ width: 390, height: 800 });

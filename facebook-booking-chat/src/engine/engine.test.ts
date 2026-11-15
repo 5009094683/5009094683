@@ -621,6 +621,24 @@ describe('passing the chat to a person', () => {
     expect(other.last.handoff).toBe('asked');
   });
 
+  it('does so when a customer wants their data deleted, as the privacy notice tells them to ask', () => {
+    expect(chat.say('Please delete my data')).toBe(
+      'I have passed your request to our team. A person will delete your chat with me and tell you here when it is done.',
+    );
+    expect(chat.last.handoff).toBe('delete_request');
+
+    const other = new Chat(engine, store, clock, 't2');
+    expect(other.say('xóa dữ liệu của tôi')).toContain('Nhân viên sẽ xóa cuộc trò chuyện');
+    expect(other.last.handoff).toBe('delete_request');
+    expect(other.last.lang).toBe('vi');
+
+    // In the middle of a booking too, and it is not taken for cancelling a booking.
+    const busy = new Chat(engine, store, clock, 't3');
+    busy.say('I want to rent 2 Honda Wave from 20/11 for 3 days');
+    busy.say('forget me and delete my information please');
+    expect(busy.last.handoff).toBe('delete_request');
+  });
+
   it('does so after two messages in a row it cannot use', () => {
     chat.say('hello');
     expect(chat.say('asdf qwer')).toContain('Sorry, I did not understand that.');

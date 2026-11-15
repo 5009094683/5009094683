@@ -41,8 +41,6 @@ async function setUp(options: { tryOut?: boolean } = {}): Promise<void> {
     transport: facebook,
     simulator: options.tryOut ? facebook : null,
     password: PASSWORD,
-    sessionFile: '/data/facebook-session.json',
-    sendVia: 'mqtt',
     staffThreads: 0,
     pauseHours: 12,
     now: clock.now,
@@ -352,6 +350,49 @@ describe('chats', () => {
     expect(facebook.sentTo('anna')).toHaveLength(1);
   });
 
+  it('deletes a chat for a customer who asks, and keeps the bookings', async () => {
+    // A chat without a booking goes altogether.
+    await customer('anna', 'how much is a scooter?');
+    expect((await get('/conversations/anna')).body).toContain('Delete this chat');
+    const gone = await post('/conversations/anna/delete');
+    expect(gone.headers.location).toBe('/conversations?n=deleted');
+    expect(store.conversations.get('anna')).toBeUndefined();
+    expect(store.messages.list('anna')).toEqual([]);
+    expect((await get('/conversations?n=deleted')).body).toContain('The chat has been deleted');
+
+    // With a booking: the messages and the name go, the booking stays in the records.
+    const code = await waitingBooking('lan', 'Trần Thị Lan');
+    await post('/conversations/lan/delete');
+    expect(store.messages.list('lan')).toEqual([]);
+    expect(store.conversations.get('lan')).toMatchObject({
+      customerName: null,
+      state: {},
+      mode: 'bot',
+      needsStaff: false,
+      lastCustomerAt: null,
+    });
+    expect(store.bookings.get(code)).toMatchObject({
+      status: 'pending',
+      customerName: 'Trần Thị Lan',
+    });
+    expect((await get(`/bookings/${code}`)).statusCode).toBe(200);
+
+    // The customer may write again and is answered as someone new.
+    await customer('lan', 'hello');
+    expect(facebook.sentTo('lan').at(-1)).toContain('automatic booking assistant');
+    expect((await post('/conversations/nobody/delete')).headers.location).toBe('/conversations');
+  });
+
+  it('says nothing of a time limit where the connection has none', async () => {
+    const code = await waitingBooking();
+    clock.advance(3 * 24 * 60 * 60 * 1000);
+    cookie = await signIn();
+    expect((await get(`/bookings/${code}`)).body).not.toContain('will not get a message from here');
+    expect((await get('/conversations/lan')).body).toContain(
+      'Your reply goes out through the Page',
+    );
+  });
+
   it('counts a chat as read once a person has opened it', async () => {
     await customer('anna', 'hello');
     expect(store.conversations.get('anna')!.unread).toBe(1);
@@ -394,7 +435,8 @@ describe('status and try-out', () => {
     expect(body).toContain('Honda XR 150 (manual)');
     expect(body).toContain('400,000 VND');
     expect(body).toContain('You confirm');
-    expect(body).toContain('/data/facebook-session.json');
+    expect(body).toContain('Simulated page');
+    expect(body).toContain('this dashboard only (no STAFF_THREAD_IDS set)');
   });
 
   it('has no try-out page when connected to Facebook', async () => {

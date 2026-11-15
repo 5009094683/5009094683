@@ -12,8 +12,9 @@ export interface IncomingMessage {
   likeOnly: boolean;
   timestamp: number;
   /**
-   * Sent from the company's own account: by the assistant, or by a person of
-   * the team writing in Messenger itself.
+   * Sent from the company's own account: by a person of the team writing in
+   * Messenger or Meta Business Suite, or by the assistant itself where the
+   * service reports its own messages back.
    */
   fromSelf: boolean;
   isGroup: boolean;
@@ -26,9 +27,22 @@ export interface TransportStatus {
   /** When it entered this state. */
   since: number;
   /** The account the assistant answers as, once known. */
-  account: { id: string; name: string | null; kind: 'page' | 'profile' | 'simulator' } | null;
+  account: { id: string; name: string | null; kind: 'page' | 'simulator' } | null;
   lastError: string | null;
   lastMessageAt: number | null;
+  /** More about the connection, for the status page. */
+  details?: Array<{ label: string; value: string }>;
+  /** Things the team should know that do not stop the assistant. */
+  notes?: string[];
+}
+
+export interface SendOptions {
+  /**
+   * A person of the team wrote or released this message, as opposed to the
+   * assistant answering by itself. Facebook gives people more time to answer
+   * than it gives programs.
+   */
+  byPerson?: boolean;
 }
 
 /**
@@ -37,12 +51,23 @@ export interface TransportStatus {
  */
 export interface Transport {
   readonly name: string;
+  /**
+   * How long after a customer's last message the service lets the assistant
+   * write to them. Undefined: as long as it likes.
+   */
+  readonly replyWindowMs?: number;
+  /** The same for what a person of the team sends, where the service gives people longer. */
+  readonly staffReplyWindowMs?: number;
   /** Connects and keeps connected. Trouble shows in `status()`, not as a thrown error. */
   start(onMessage: (message: IncomingMessage) => void): Promise<void>;
   stop(): Promise<void>;
   status(): TransportStatus;
-  /** Throws when the message could not be handed to the service. */
-  sendText(threadId: string, text: string): Promise<{ messageId: string | null }>;
+  /** Throws, in words the team can act on, when the message could not be handed to the service. */
+  sendText(
+    threadId: string,
+    text: string,
+    options?: SendOptions,
+  ): Promise<{ messageId: string | null }>;
   markRead(threadId: string): Promise<void>;
   setTyping(threadId: string, typing: boolean): Promise<void>;
   /** The name of a person as the service shows it, or null when it cannot be had. */

@@ -28,7 +28,7 @@ import { type Wording, WORDING } from './wording';
 
 /** Why a chat is passed to a person. */
 export type HandoffReason =
-  'asked' | 'confused' | 'cancel_request' | 'change_request' | 'large_request';
+  'asked' | 'confused' | 'cancel_request' | 'change_request' | 'large_request' | 'delete_request';
 
 export interface EngineInput {
   text: string;
@@ -176,6 +176,10 @@ class Turn {
   private route(): void {
     const { intents, state, w } = this;
 
+    // Deleting what is kept about a customer is for a person to do and to confirm.
+    if (intents.has('delete_data')) {
+      return this.passOn('delete_request', w.deleteRequest());
+    }
     if (intents.has('human')) {
       return this.passOn('asked', w.handoff(this.business));
     }

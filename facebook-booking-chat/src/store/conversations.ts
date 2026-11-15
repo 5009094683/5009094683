@@ -130,6 +130,34 @@ export class Conversations {
     this.db.prepare('UPDATE conversations SET unread = 0 WHERE thread_id = ?').run(threadId);
   }
 
+  /**
+   * Deletes a chat, as a customer may ask: every message, the customer's
+   * name, and what the assistant remembered. Bookings made in the chat are
+   * the company's records and stay; an empty chat is kept for them to belong
+   * to. Without bookings nothing stays.
+   */
+  forget(threadId: string): void {
+    this.db.transaction(() => {
+      this.db.prepare('DELETE FROM messages WHERE thread_id = ?').run(threadId);
+      const bookings = this.db
+        .prepare('SELECT COUNT(*) AS n FROM bookings WHERE thread_id = ?')
+        .get(threadId) as { n: number };
+      if (bookings.n === 0) {
+        this.db.prepare('DELETE FROM conversations WHERE thread_id = ?').run(threadId);
+        return;
+      }
+      this.db
+        .prepare(
+          `UPDATE conversations
+              SET customer_name = NULL, state = '{}', mode = 'bot', paused_until = NULL,
+                  needs_staff = 0, needs_staff_reason = NULL, unread = 0,
+                  last_customer_at = NULL, last_message_at = NULL
+            WHERE thread_id = ?`,
+        )
+        .run(threadId);
+    })();
+  }
+
   list(limit = 200): ConversationSummary[] {
     const rows = this.db
       .prepare(

@@ -2,10 +2,16 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import cookie from '@fastify/cookie';
 import formbody from '@fastify/formbody';
-import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
+import Fastify, {
+  type FastifyInstance,
+  type FastifyPluginAsync,
+  type FastifyReply,
+  type FastifyRequest,
+} from 'fastify';
 import type { Bot } from '../bot/bot';
 import { type Availability, type Desk, BookingError } from '../bookings/desk';
 import { type Business, findOption, findService } from '../business/schema';
+import { PUBLIC_PATHS } from '../public/server';
 import { type Booking, type BookingStatus, type Store, BOOKING_STATUSES } from '../store';
 import type { SimulatorTransport } from '../transport/simulator';
 import type { Transport } from '../transport/types';
@@ -33,10 +39,14 @@ export interface DashboardDeps {
   simulator: SimulatorTransport | null;
   password: string;
   /** Shown on the status page. */
-  sessionFile: string;
-  sendVia: string;
   staffThreads: number;
   pauseHours: number;
+  /**
+   * The part that is open to the internet (Facebook's calls, the privacy
+   * notice), when it shares this port instead of having its own. Its paths
+   * need no sign-in.
+   */
+  publicRoutes?: FastifyPluginAsync;
   now?: () => number;
   logger?: boolean | object;
 }
@@ -69,6 +79,10 @@ const NOTICES: Record<string, Notice> = {
   'wrong-state': {
     kind: 'bad',
     text: 'That is no longer possible: the booking has changed in the meantime. Nothing was changed.',
+  },
+  deleted: {
+    kind: 'ok',
+    text: 'The chat has been deleted: its messages and what the assistant remembered of it.',
   },
   sent: { kind: 'ok', text: 'Sent. The assistant stays out of this chat for now.' },
   unsent: {
@@ -137,6 +151,11 @@ export async function buildDashboard(deps: DashboardDeps): Promise<FastifyInstan
   }
 
   app.addHook('onRequest', async (request, reply) => {
+    const path = request.url.split('?')[0]!;
+    // Facebook's calls and the privacy notice answer for themselves: they are
+    // not part of the dashboard, and what Facebook sends is checked by its signature.
+    if (deps.publicRoutes && PUBLIC_PATHS.includes(path)) return;
+
     void reply.headers({
       'x-content-type-options': 'nosniff',
       'x-frame-options': 'DENY',
@@ -148,7 +167,6 @@ export async function buildDashboard(deps: DashboardDeps): Promise<FastifyInstan
     if (request.method !== 'GET' && request.method !== 'HEAD' && !fromOwnPage(request)) {
       return reply.code(403).send('This form was not sent from the dashboard.');
     }
-    const path = request.url.split('?')[0]!;
     if (path === '/login' || path === '/healthz' || path.startsWith('/assets/')) return;
     if (signedIn(request)) return;
     if (path.startsWith('/api/') || request.method !== 'GET') {
@@ -156,6 +174,18 @@ export async function buildDashboard(deps: DashboardDeps): Promise<FastifyInstan
     }
     return reply.redirect('/login');
   });
+
+  if (deps.publicRoutes) await app.register(deps.publicRoutes);
+
+  /**
+   * True when the service no longer lets a person of the team write to this
+   * customer from here, because the customer's last message is too long ago.
+   */
+  function replyTimeIsOver(threadId: string): boolean {
+    const window = transport.staffReplyWindowMs ?? transport.replyWindowMs;
+    const lastCustomerAt = store.conversations.get(threadId)?.lastCustomerAt ?? null;
+    return window !== undefined && lastCustomerAt !== null && now() - lastCustomerAt > window;
+  }
 
   // ---------------------------------------------------------------- pages
 
@@ -284,6 +314,7 @@ export async function buildDashboard(deps: DashboardDeps): Promise<FastifyInstan
         booking,
         availability,
         capacity: option?.capacity ?? null,
+        replyTimeOver: replyTimeIsOver(booking.threadId),
       }),
     );
   });
@@ -353,6 +384,7 @@ export async function buildDashboard(deps: DashboardDeps): Promise<FastifyInstan
         messages: store.messages.list(threadId),
         bookings: store.bookings.ofThread(threadId),
         pauseHours: deps.pauseHours,
+        replyTimeOver: replyTimeIsOver(threadId),
       }),
     );
   });
@@ -378,6 +410,14 @@ export async function buildDashboard(deps: DashboardDeps): Promise<FastifyInstan
     '/conversations/:threadId/handled',
     chatStep('handled', (id) => store.conversations.clearFlag(id)),
   );
+
+  // A customer may ask for their data to be deleted (see the privacy notice).
+  app.post('/conversations/:threadId/delete', async (request, reply) => {
+    const { threadId } = request.params as { threadId: string };
+    if (!store.conversations.get(threadId)) return notFound(request, reply);
+    bot.forget(threadId);
+    return back(reply, '/conversations', 'deleted');
+  });
 
   app.post('/conversations/:threadId/reply', async (request, reply) => {
     const { threadId } = request.params as { threadId: string };
@@ -415,14 +455,7 @@ export async function buildDashboard(deps: DashboardDeps): Promise<FastifyInstan
   // ---------------------------------------------------------------- status
 
   app.get('/status', async (request, reply) =>
-    page(
-      reply,
-      statusPage(chrome('status', request), {
-        sessionFile: deps.sessionFile,
-        sendVia: deps.sendVia,
-        staffThreads: deps.staffThreads,
-      }),
-    ),
+    page(reply, statusPage(chrome('status', request), { staffThreads: deps.staffThreads })),
   );
 
   // ---------------------------------------------------------------- try it
