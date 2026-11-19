@@ -1,0 +1,555 @@
+import { randomBytes } from 'node:crypto';
+import { hostname } from 'node:os';
+import { inArray, sql } from 'drizzle-orm';
+import {
+  analysePendingReviews,
+  createProvider,
+  detectUnusualCancellations,
+  expireActions,
+  readBookingEmail,
+  type LlmProvider,
+} from '@pms/ai';
+import type { Env } from '@pms/config';
+import {
+  channelConnections,
+  listen,
+  type Database,
+  type DbHandle,
+  type NotificationListener,
+} from '@pms/db';
+import {
+  adapterFor,
+  checkSyncLag,
+  checkWorkerLiveness,
+  connectionsDueForDriftCheck,
+  dispatchDue,
+  nextDispatchAt,
+  recordHeartbeat,
+  registerMessageTransports,
+  removeHeartbeat,
+  setEmailFallbackReader,
+  requestDueFullSyncs,
+  retryPendingRevisions,
+  routeOutbox,
+  type RouteOptions,
+} from '@pms/channels';
+import {
+  claimJobs,
+  completeJob,
+  createGateway,
+  createMailer,
+  deliverDueWebhooks,
+  emailNewAlerts,
+  enqueueJob,
+  enqueueRecurring,
+  expireHolds,
+  releaseDueGroupRooms,
+  failJob,
+  httpWebhookSender,
+  isDomainError,
+  LocalFileStore,
+  paymentOrdersToCheck,
+  queueWebhookDeliveries,
+  runAutomations,
+  runDueNightAudits,
+  runDueReportSchedules,
+  syncPaymentOrder,
+  systemActor,
+  type FileStore,
+  type JobRow,
+  type Mailer,
+  type PaymentGateway,
+  type WebhookSender,
+} from '@pms/domain';
+import { jobHandler, jobKinds, JOBS, type JobContext } from './jobs';
+import { Loop } from './loop';
+import type { Logger } from './logger';
+
+export interface WorkerOptions {
+  handle: DbHandle;
+  env: Env;
+  log: Logger;
+  id?: string;
+  /** Extra work done in the transaction that takes events off the outbox, besides queueing webhooks. */
+  route?: RouteOptions;
+  /** How outbound webhooks are sent. Replaced in tests. */
+  webhookSender?: WebhookSender;
+  /** Stand-ins for the mail server, the file store and the payment gateway, for tests. */
+  mailer?: Mailer;
+  files?: FileStore;
+  gateway?: PaymentGateway;
+  /** Pass null to run without a language model whatever the environment says. */
+  ai?: LlmProvider | null;
+  /** Timings, shortened by tests. */
+  timings?: Partial<Timings>;
+}
+
+interface Timings {
+  /** Fallback wake-up of the sync loop when no notification arrives. */
+  syncIdleMs: number;
+  /** A burst of changes within this window travels as one push. */
+  syncDebounceMs: number;
+  /** How often delayed and retried jobs are looked for. */
+  jobIdleMs: number;
+  /** How often recurring work is scheduled and health is checked. */
+  scheduleMs: number;
+  /** How often outbound webhooks waiting to be retried are looked for. */
+  webhookIdleMs: number;
+  heartbeatMs: number;
+}
+
+const DEFAULT_TIMINGS: Timings = {
+  syncIdleMs: 5_000,
+  syncDebounceMs: 50,
+  jobIdleMs: 2_000,
+  scheduleMs: 20_000,
+  webhookIdleMs: 5_000,
+  heartbeatMs: 10_000,
+};
+
+const DEFAULT_POLL_INTERVAL_MS = 15 * 60_000;
+const POLL_RETRY_MS = 60_000;
+const DAY_MS = 24 * 3600_000;
+
+/**
+ * The background process that keeps the channels in step with the PMS.
+ *
+ * Three loops share one process:
+ * - sync: moves committed changes from the outbox to each connection's work
+ *   list and pushes current values to the channels. Woken the moment a change
+ *   commits (LISTEN/NOTIFY) and by a short timer as a safety net.
+ * - jobs: runs queued background work (fetching bookings, drift checks).
+ * - schedule: queues the recurring work and watches for trouble.
+ * - webhooks: tells other systems what changed. On its own loop, so a slow
+ *   receiver never holds up the channels.
+ *
+ * Any number of workers may run side by side: every piece of work is taken
+ * under a lock or a unique key, so they share it rather than repeat it.
+ */
+export class Worker {
+  readonly id: string;
+  private readonly db: Database;
+  private readonly env: Env;
+  private readonly log: Logger;
+  private readonly timings: Timings;
+  private readonly context: JobContext;
+  private readonly mailer: Mailer;
+  private readonly syncLoop: Loop;
+  private readonly jobLoop: Loop;
+  private readonly scheduleLoop: Loop;
+  private readonly webhookLoop: Loop;
+  private readonly webhookSender: WebhookSender;
+  private readonly route: RouteOptions;
+  private readonly active = new Set<Promise<void>>();
+  private listener: NotificationListener | null = null;
+  private heartbeatTimer: NodeJS.Timeout | null = null;
+  private readonly startedAt = new Date();
+
+  constructor(private readonly options: WorkerOptions) {
+    this.id = options.id ?? `${hostname()}-${process.pid}-${randomBytes(3).toString('hex')}`;
+    this.db = options.handle.db;
+    this.env = options.env;
+    this.log = options.log;
+    this.timings = { ...DEFAULT_TIMINGS, ...options.timings };
+    const ai = options.ai === undefined ? createProvider(this.env) : options.ai;
+    this.context = {
+      db: this.db,
+      env: this.env,
+      log: this.log,
+      files: options.files ?? new LocalFileStore(this.env.STORAGE_DIR),
+      ai,
+    };
+    this.mailer = options.mailer ?? createMailer(this.env);
+    registerMessageTransports(this.db, this.env, this.mailer);
+    setEmailFallbackReader(
+      ai
+        ? (message, context) =>
+            readBookingEmail(this.db, ai, context.orgId, {
+              subject: message.subject,
+              text: message.text,
+              channelName: context.channelName,
+              defaultCurrency: context.defaultCurrency,
+            })
+        : null,
+    );
+    const onError = (name: string) => (err: unknown) =>
+      this.log.error({ err, loop: name }, 'worker loop failed; it will run again');
+    this.syncLoop = new Loop(() => this.syncTick(), {
+      name: 'sync',
+      idleMs: this.timings.syncIdleMs,
+      debounceMs: this.timings.syncDebounceMs,
+      onError: onError('sync'),
+    });
+    this.jobLoop = new Loop(() => this.jobTick(), {
+      name: 'jobs',
+      idleMs: this.timings.jobIdleMs,
+      onError: onError('jobs'),
+    });
+    this.scheduleLoop = new Loop(() => this.scheduleTick(), {
+      name: 'schedule',
+      idleMs: this.timings.scheduleMs,
+      onError: onError('schedule'),
+    });
+    this.webhookLoop = new Loop(() => this.webhookTick(), {
+      name: 'webhooks',
+      idleMs: this.timings.webhookIdleMs,
+      onError: onError('webhooks'),
+    });
+    this.webhookSender =
+      options.webhookSender ??
+      httpWebhookSender({ allowPrivate: this.env.WEBHOOKS_ALLOW_PRIVATE_HOSTS });
+    this.route = {
+      // Deliveries are written in the transaction that takes the changes off the outbox.
+      onEntityEvents: async (tx, events) => {
+        const queued = await queueWebhookDeliveries(tx, events);
+        await options.route?.onEntityEvents?.(tx, events);
+        if (queued > 0) this.webhookLoop.wake();
+      },
+    };
+  }
+
+  async start(): Promise<void> {
+    await this.heartbeat();
+    this.listener = listen({
+      url: this.options.handle.url,
+      channels: ['pms_outbox', 'pms_jobs'],
+      applicationName: 'pms-worker-listen',
+      onNotification: (channel) => {
+        if (channel === 'pms_outbox') this.syncLoop.wake();
+        else this.jobLoop.wake();
+      },
+      // Whatever was announced while the connection was down is found by looking.
+      onReconnect: () => {
+        this.syncLoop.wake();
+        this.jobLoop.wake();
+      },
+      onError: (err) => this.log.warn({ err }, 'notification listener error; reconnecting'),
+    });
+    await this.listener.ready;
+    this.heartbeatTimer = setInterval(() => {
+      void this.heartbeat().catch((err: unknown) => this.log.warn({ err }, 'heartbeat failed'));
+    }, this.timings.heartbeatMs);
+    this.syncLoop.start();
+    this.jobLoop.start();
+    this.scheduleLoop.start();
+    this.webhookLoop.start();
+    this.log.info({ workerId: this.id }, 'worker started');
+  }
+
+  /** Stops taking work, lets work in progress finish, and signs off. */
+  async stop(): Promise<void> {
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    this.heartbeatTimer = null;
+    await this.listener?.stop();
+    this.listener = null;
+    await Promise.all([
+      this.scheduleLoop.stop(),
+      this.jobLoop.stop(),
+      this.syncLoop.stop(),
+      this.webhookLoop.stop(),
+    ]);
+    await Promise.allSettled([...this.active]);
+    await removeHeartbeat(this.db, this.id).catch(() => {});
+    this.log.info({ workerId: this.id }, 'worker stopped');
+  }
+
+  /**
+   * One full pass, in order: schedule recurring work, run every waiting job,
+   * route and push. For tests and one-off runs; a started worker does this on
+   * its own.
+   */
+  async runOnce(): Promise<void> {
+    await this.scheduleTick();
+    for (let round = 0; round < 20; round++) {
+      const jobs = await claimJobs(this.db, this.id, 50, jobKinds());
+      if (jobs.length === 0) break;
+      await Promise.all(jobs.map((job) => this.runJob(job)));
+    }
+    await this.syncTick();
+    await this.webhookTick();
+  }
+
+  private async heartbeat(): Promise<void> {
+    await recordHeartbeat(this.db, {
+      id: this.id,
+      hostname: hostname(),
+      info: {
+        pid: process.pid,
+        startedAt: this.startedAt.toISOString(),
+        activeJobs: this.active.size,
+      },
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Sync: outbox -> work lists -> channels
+
+  private async syncTick(): Promise<number> {
+    const routed = await routeOutbox(this.db, this.route);
+    if (routed.queued > 0)
+      this.log.debug({ routed: routed.routed, queued: routed.queued }, 'routed changes');
+    const results = await dispatchDue(this.db, new Date(), this.env.WORKER_CONCURRENCY);
+    for (const result of results) {
+      if (result.outcome === 'pushed') {
+        this.log.info(
+          { connectionId: result.connectionId, items: result.items, full: result.full },
+          'pushed to channel',
+        );
+      } else if (result.outcome === 'failed') {
+        this.log.warn(
+          { connectionId: result.connectionId, error: result.error },
+          'push to channel failed',
+        );
+      }
+    }
+    const next = await nextDispatchAt(this.db);
+    if (!next) return this.timings.syncIdleMs;
+    // A connection held by another worker shows as overdue; do not spin on it.
+    return Math.max(100, next.getTime() - Date.now());
+  }
+
+  // -------------------------------------------------------------------------
+  // Outbound webhooks
+
+  private async webhookTick(): Promise<number> {
+    const batch = 50;
+    const run = await deliverDueWebhooks(this.db, this.webhookSender, { limit: batch });
+    const handled = run.delivered + run.retrying + run.failed;
+    if (run.retrying + run.failed > 0) this.log.warn({ ...run }, 'outbound webhooks failed');
+    else if (handled > 0) this.log.debug({ ...run }, 'outbound webhooks delivered');
+    // A full batch may mean more are waiting.
+    return handled >= batch ? 0 : this.timings.webhookIdleMs;
+  }
+
+  // -------------------------------------------------------------------------
+  // Jobs
+
+  private async jobTick(): Promise<number> {
+    const free = this.env.WORKER_CONCURRENCY - this.active.size;
+    if (free <= 0) return this.timings.jobIdleMs;
+    const jobs = await claimJobs(this.db, this.id, free, jobKinds());
+    for (const job of jobs) {
+      const run: Promise<void> = this.runJob(job).finally(() => {
+        this.active.delete(run);
+        this.jobLoop.wake();
+      });
+      this.active.add(run);
+    }
+    // A full hand may mean more are waiting; look again as soon as a slot frees (see finally above).
+    return this.timings.jobIdleMs;
+  }
+
+  private async runJob(job: JobRow): Promise<void> {
+    const handler = jobHandler(job.kind);
+    const started = Date.now();
+    try {
+      if (!handler) throw new Error(`No handler for job kind "${job.kind}"`);
+      const result = await handler(job.payload, this.context, job);
+      await completeJob(this.db, job.id, result ?? undefined);
+      this.log.debug(
+        { jobId: job.id, kind: job.kind, ms: Date.now() - started, result },
+        'job done',
+      );
+    } catch (err) {
+      try {
+        const { willRetry } = await failJob(this.db, job, err);
+        this.log.warn(
+          { jobId: job.id, kind: job.kind, attempt: job.attempts, willRetry, err },
+          willRetry ? 'job failed; it will be retried' : 'job failed for good',
+        );
+      } catch (recordErr) {
+        // The database is unreachable; the job stays "running" and is reclaimed when its lock goes stale.
+        this.log.error({ jobId: job.id, err: recordErr }, 'could not record a job failure');
+      }
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Schedule: recurring work and health
+
+  private async scheduleTick(): Promise<number> {
+    const now = new Date();
+    const step = async (name: string, work: () => Promise<unknown>): Promise<void> => {
+      try {
+        await work();
+      } catch (err) {
+        // One failing step must not stop the ones after it.
+        this.log.error({ err, step: name }, 'scheduled step failed');
+      }
+    };
+
+    await step('heartbeat', () => this.heartbeat());
+    await step('worker liveness', () => checkWorkerLiveness(this.db, now));
+    await step('booking polls', () => this.queueBookingPolls(now));
+    await step('pending revisions', async () => {
+      const retried = await retryPendingRevisions(this.db, now);
+      if (retried.applied + retried.failed + retried.acknowledged > 0) {
+        this.log.info({ ...retried }, 'retried pending booking revisions');
+      }
+    });
+    await step('nightly full sync', async () => {
+      if (!this.env.SYNC_NIGHTLY_FULL) return;
+      const requested = await requestDueFullSyncs(this.db, now);
+      if (requested.length > 0) {
+        this.log.info({ connections: requested }, 'nightly full sync requested');
+        this.syncLoop.wake();
+      }
+    });
+    await step('drift checks', async () => {
+      for (const connectionId of await connectionsDueForDriftCheck(this.db, undefined, now)) {
+        await enqueueJob(
+          this.db,
+          JOBS.driftCheck,
+          { connectionId },
+          { uniqueKey: `${JOBS.driftCheck}:${connectionId}`, maxAttempts: 2 },
+        );
+      }
+    });
+    await step('sync lag', () => checkSyncLag(this.db, now));
+    await step('expired holds', () => this.expireHolds(now));
+    await step('group cut-offs', async () => {
+      const released = await releaseDueGroupRooms(this.db, now);
+      if (released.length > 0) this.log.info({ groups: released }, 'released unbooked group rooms');
+    });
+    await step('night audit', async () => {
+      const closed = await runDueNightAudits(
+        this.db,
+        (orgId) => systemActor(orgId, 'night-audit'),
+        now,
+      );
+      for (const audit of closed) {
+        if (audit.ok) this.log.info({ ...audit }, 'night audit completed');
+        else this.log.error({ ...audit }, 'night audit failed');
+      }
+    });
+    await step('automatic messages', async () => {
+      const run = await runAutomations(this.db, now);
+      if (run.sent + run.skipped > 0) this.log.info({ ...run }, 'automatic messages');
+    });
+    await step('online payments', () => this.checkPaymentOrders(now));
+    await step('rate suggestions', () =>
+      enqueueRecurring(this.db, JOBS.pricing, 6 * 3600_000, {}, { now }),
+    );
+    await step('reviews', async () => {
+      await this.queueReviewPulls(now);
+      const read = await analysePendingReviews(this.db, this.context.ai);
+      if (read > 0) this.log.info({ read }, 'read new guest reviews');
+    });
+    await step('unusual cancellations', async () => {
+      const raised = await detectUnusualCancellations(this.db, now);
+      if (raised > 0) this.log.warn({ raised }, 'unusual cancellations');
+    });
+    await step('assistant proposals', () => expireActions(this.db, now));
+    await step('alert emails', async () => {
+      const sent = await emailNewAlerts(this.db, this.mailer, { webUrl: this.env.WEB_URL, now });
+      if (sent > 0) this.log.info({ sent }, 'alerts emailed');
+    });
+    await step('retention', () => enqueueRecurring(this.db, JOBS.retention, DAY_MS, {}, { now }));
+    await step('scheduled reports', async () => {
+      const run = await runDueReportSchedules(this.db, this.mailer, now);
+      if (run.sent + run.failed > 0) this.log.info({ ...run }, 'scheduled reports');
+    });
+    await step('owner statements', () =>
+      enqueueRecurring(this.db, JOBS.ownerStatements, DAY_MS, {}, { now }),
+    );
+    await step('pruning', () => enqueueRecurring(this.db, JOBS.prune, DAY_MS, {}, { now }));
+    return this.timings.scheduleMs;
+  }
+
+  /** Queues a fetch for every connection whose bookings have not been fetched within its interval. */
+  private async queueBookingPolls(now: Date): Promise<void> {
+    const connections = await this.db
+      .select()
+      .from(channelConnections)
+      .where(inArray(channelConnections.status, ['active', 'error']));
+    for (const connection of connections) {
+      let interval: number;
+      try {
+        const adapter = adapterFor(connection);
+        if (!adapter.pullBookings || adapter.capabilities.bookings === 'none') continue;
+        interval = adapter.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+      } catch (err) {
+        this.log.warn({ err, connectionId: connection.id }, 'connection cannot be used');
+        continue;
+      }
+      const last = connection.lastPullAt?.getTime() ?? 0;
+      if (now.getTime() - last < interval) continue;
+      // At most one a minute, so an outage is retried steadily rather than hammered.
+      await enqueueRecurring(
+        this.db,
+        JOBS.channelPull,
+        Math.min(interval, POLL_RETRY_MS),
+        { connectionId: connection.id, via: 'poll' },
+        { key: `${JOBS.channelPull}:poll:${connection.id}`, now },
+      );
+    }
+  }
+
+  /** Asks each connection that carries reviews for new ones, a few times a day. */
+  private async queueReviewPulls(now: Date): Promise<void> {
+    const connections = await this.db
+      .select()
+      .from(channelConnections)
+      .where(inArray(channelConnections.status, ['active', 'error']));
+    for (const connection of connections) {
+      try {
+        if (!adapterFor(connection).listReviews) continue;
+      } catch {
+        continue;
+      }
+      await enqueueRecurring(
+        this.db,
+        JOBS.pullReviews,
+        6 * 3600_000,
+        { connectionId: connection.id },
+        { key: `${JOBS.pullReviews}:${connection.id}`, now },
+      );
+    }
+  }
+
+  private gateway: PaymentGateway | null | undefined;
+
+  /**
+   * Asks the gateway about online payments nobody came back from: a guest who
+   * paid and closed the tab is confirmed, and an order past its time is closed.
+   */
+  private async checkPaymentOrders(now: Date): Promise<void> {
+    if (this.gateway === undefined) {
+      try {
+        this.gateway = this.options.gateway ?? createGateway(this.env, this.db);
+      } catch (err) {
+        if (!isDomainError(err, 'not_configured')) throw err;
+        this.gateway = null;
+      }
+    }
+    if (!this.gateway) return;
+    for (const orderId of await paymentOrdersToCheck(this.db, this.gateway.name, now)) {
+      try {
+        const outcome = await syncPaymentOrder(this.db, this.gateway, orderId, now);
+        if (outcome.settled) {
+          this.log.info(
+            { orderId, refunded: outcome.refunded },
+            outcome.refunded
+              ? 'online payment arrived too late and was refunded'
+              : 'online payment recorded',
+          );
+        }
+      } catch (err) {
+        // One order the gateway cannot answer for must not hold up the others.
+        this.log.warn({ err, orderId }, 'could not check an online payment');
+      }
+    }
+  }
+
+  /** Releases inventory held by website bookings that were never completed. */
+  private async expireHolds(now: Date): Promise<void> {
+    const { rows } = await this.db.execute<{ org_id: string }>(sql`
+      SELECT DISTINCT org_id FROM reservations
+      WHERE status = 'tentative' AND hold_expires_at <= ${now.toISOString()}::timestamptz
+    `);
+    for (const { org_id } of rows) {
+      const expired = await expireHolds(this.db, systemActor(org_id, 'worker'), now);
+      if (expired > 0) this.log.info({ orgId: org_id, expired }, 'released expired holds');
+    }
+  }
+}

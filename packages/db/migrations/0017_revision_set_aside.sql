@@ -1,0 +1,2 @@
+ALTER TABLE "booking_revisions" DROP CONSTRAINT "booking_revisions_status_check";--> statement-breakpoint
+ALTER TABLE "booking_revisions" ADD CONSTRAINT "booking_revisions_status_check" CHECK (status IN ('received','applied','superseded','unmapped','failed','set_aside'));

@@ -1,0 +1,39 @@
+{
+  "name": "pms",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.4",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "concurrently -n api,worker,web,booking,sim -c blue,magenta,green,cyan,yellow \"pnpm --filter @pms/api dev\" \"pnpm --filter @pms/worker dev\" \"pnpm --filter @pms/web dev\" \"pnpm --filter @pms/booking dev\" \"pnpm --filter @pms/ota-sim dev\"",
+    "build": "pnpm -r --if-present build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "pnpm --filter @pms/e2e test",
+    "test:load": "pnpm --filter @pms/load-tests start",
+    "db:generate": "pnpm --filter @pms/db generate",
+    "db:migrate": "pnpm --filter @pms/db migrate",
+    "db:seed": "pnpm --filter @pms/worker seed",
+    "db:reset": "bash scripts/db-reset.sh"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@pms/db": "workspace:*",
+    "@types/node": "^22.20.5",
+    "concurrently": "^10.0.7",
+    "eslint": "^10.14.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
+    "prettier": "^3.10.1",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.2",
+    "vitest": "^5.1.0"
+  }
+}

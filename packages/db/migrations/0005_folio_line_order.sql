@@ -1,0 +1,1 @@
+ALTER TABLE "folio_lines" ADD COLUMN "seq" bigserial NOT NULL;

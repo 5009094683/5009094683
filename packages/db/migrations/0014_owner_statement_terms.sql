@@ -1,0 +1,1 @@
+ALTER TABLE "owner_statements" ADD COLUMN "terms" jsonb;

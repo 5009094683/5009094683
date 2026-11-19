@@ -1,0 +1,1 @@
+CREATE INDEX "reservations_promo_idx" ON "reservations" USING btree ("promo_code_id") WHERE promo_code_id IS NOT NULL;

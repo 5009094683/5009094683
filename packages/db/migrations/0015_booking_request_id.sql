@@ -1,0 +1,2 @@
+ALTER TABLE "reservations" ADD COLUMN "client_request_id" text;--> statement-breakpoint
+CREATE UNIQUE INDEX "reservations_client_request_key" ON "reservations" USING btree ("org_id","client_request_id") WHERE client_request_id IS NOT NULL;
