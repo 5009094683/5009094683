@@ -28,7 +28,7 @@ const OFFERS: Record<Kind, Offer> = {
   ical: {
     title: 'Calendar connection',
     about:
-      "For a villa or a single room listed on a site that the channel manager does not connect. The site and this system read each other's calendar, so only dates pass between them, and the site looks only every few hours. Never for a room type with more than one room.",
+      "For villas, and for hotel rooms that are each listed on their own on the sites. The site and this system read each other's calendar, so only dates pass between them, and the site looks only every few hours. One calendar per room and site.",
     action: 'Add a calendar connection',
   },
   email: {
@@ -40,8 +40,8 @@ const OFFERS: Record<Kind, Offer> = {
 };
 
 /**
- * Whether a calendar could be used for any unit of a property: only a room type with a single
- * room can have one. Undefined until the units of the property are known.
+ * Whether a calendar could be used for any unit of a property: a room type with a single room,
+ * or one that ties each booking to a room as it is made. Undefined until the units are known.
  */
 function useFitsCalendars(propertyId: string): boolean | undefined {
   const { data } = usePropertyDetail(propertyId);
@@ -119,8 +119,9 @@ export function AddConnectionDialog({
                     <p className="text-[13px] text-ink-soft">{offer.about}</p>
                     {unfit ? (
                       <p className="mt-1 text-[13px] font-medium text-warning-700">
-                        Not for {property.name} as it is: none of its room types has exactly one
-                        room.
+                        Not for {property.name} as it is: its rooms are sold by count. Under
+                        Settings, change its room types so that every booking is tied to a unit
+                        straight away, then add the calendars.
                       </p>
                     ) : (
                       <Button

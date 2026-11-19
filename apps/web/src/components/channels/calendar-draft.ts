@@ -198,10 +198,11 @@ export function unitGroups(roomTypes: RoomType[], calendars: { unitId: string }[
 
 /**
  * A calendar says that dates are taken or free and nothing else. It cannot count rooms, so it
- * fits a room type with one room and no other.
+ * fits a room type with one room, or one whose bookings are each tied to a room as they are
+ * made: then each room is its own listing on the sites, with a calendar of its own.
  */
 export function fitsCalendars(group: UnitGroup): boolean {
-  return group.rooms === 1;
+  return group.rooms === 1 || (group.rooms > 1 && group.type.assignment === 'at_booking');
 }
 
 /**

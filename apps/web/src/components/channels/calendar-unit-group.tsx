@@ -32,25 +32,28 @@ function Unfit({ group, calendars }: { group: UnitGroup; calendars: number }) {
   if (calendars === 0) {
     return (
       <p className="px-3 py-3 text-[13px] text-ink-soft">
-        Calendars are not offered for {type.name}. It has {plural(rooms, 'room')}, and a calendar
-        cannot count rooms: it can only say that dates are taken or free, which leads to double
-        bookings. Use the channel manager for this room type.
+        Calendars are not offered for {type.name} yet. It has {plural(rooms, 'room')} sold by count,
+        so a booking may have no room until check-in, and a calendar for one room would show it free
+        while it is booked. To give each room its own calendar, list each room separately on the
+        sites, and under Settings change this room type so that every booking is tied to a unit
+        straight away.
       </p>
     );
   }
   return (
     <Notice tone="danger" className="m-3 mb-0" title={`${type.name} has ${plural(rooms, 'room')}`}>
-      A calendar cannot count rooms. It can only say that dates are taken or free, so with{' '}
-      {calendars === 1 ? 'this calendar' : 'these calendars'} a site can go on selling rooms that
-      are gone here. Remove {calendars === 1 ? 'it' : 'them'} and use the channel manager for this
-      room type.
+      Its rooms are sold by count, so a booking may have no room until check-in, and{' '}
+      {calendars === 1 ? 'this calendar shows its room' : 'these calendars show their rooms'} free
+      while booked. Under Settings, change this room type so that every booking is tied to a unit
+      straight away, or remove {calendars === 1 ? 'the calendar' : 'the calendars'}.
     </Notice>
   );
 }
 
 /**
- * The units of one room type with their calendars. A calendar can be added only where the room
- * type has a single room; calendars that exist elsewhere are shown so that they can be removed.
+ * The units of one room type with their calendars. A calendar can be added where the room type
+ * has a single room, or ties each booking to a room as it is made; calendars that exist elsewhere
+ * are shown so that they can be removed.
  */
 export function CalendarUnitGroup({
   group,

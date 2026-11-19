@@ -8,12 +8,13 @@ export function CalendarLimits() {
     <Notice tone="warning" title="What calendars can and cannot do">
       <ul className="mt-1 flex list-disc flex-col gap-1.5 pl-4">
         <li>
-          <strong className="font-semibold">
-            Never use a calendar for a room type with more than one room.
-          </strong>{' '}
-          A calendar can only say that dates are taken or free. It cannot say how many rooms are
-          left, so the site would go on selling rooms that are gone here: double bookings. Use the
-          channel manager for those rooms.
+          <strong className="font-semibold">One calendar is one room.</strong> A calendar can only
+          say that dates are taken or free; it cannot say how many rooms are left. A hotel room type
+          with several rooms works only when each room is its own listing on the site and every
+          booking here is tied to a room straight away (a setting of the room type).
+        </li>
+        <li>
+          A calendar carries no prices. Rates are kept up to date in each site&apos;s extranet.
         </li>
         <li>
           A calendar carries dates and nothing else. Each booking arrives without the guest and the

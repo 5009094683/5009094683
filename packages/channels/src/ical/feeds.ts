@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { Env } from '@pms/config';
-import { channelConnections, properties, units, type Database } from '@pms/db';
+import { channelConnections, properties, roomTypes, units, type Database } from '@pms/db';
 import {
   atomicUnitsOf,
   decryptJson,
@@ -153,6 +153,28 @@ export async function saveIcalFeeds(
               ),
             )
         : [];
+    // A calendar says only "taken" or "free" for one room. Where a room type has several
+    // rooms, that is true only if every booking is given its room as it is made.
+    const typeIds = [...new Set(unitRows.map((u) => u.roomTypeId))];
+    if (typeIds.length > 0) {
+      const types = await tx
+        .select({
+          id: roomTypes.id,
+          name: roomTypes.name,
+          assignment: roomTypes.assignment,
+          rooms: sql<number>`count(${units.id})::int`,
+        })
+        .from(roomTypes)
+        .leftJoin(units, and(eq(units.roomTypeId, roomTypes.id), eq(units.active, true)))
+        .where(inArray(roomTypes.id, typeIds))
+        .groupBy(roomTypes.id);
+      const unfit = types.find((t) => t.rooms > 1 && t.assignment !== 'at_booking');
+      if (unfit) {
+        throw validationError(
+          `${unfit.name} has ${unfit.rooms} rooms sold by count, so a calendar for one of them would show it free while it is booked. Change the room type so that every booking is tied to a room straight away, then add the calendars.`,
+        );
+      }
+    }
     const known = new Set(feedsOf(connection.config).map((f) => f.id));
     const feeds: IcalFeedConfig[] = inputs.map((input) => {
       const unit = unitRows.find((u) => u.id === input.unitId);

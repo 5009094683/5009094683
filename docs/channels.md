@@ -50,7 +50,8 @@ site with no other way in and accept those limits; it is not included.
 - **Calendar feeds are not real time** and cannot be made so: the site decides
   how often it reads your calendar (Airbnb about every 3 hours, Booking.com
   about every 2). For those hours a night sold in the PMS can still be sold on
-  that site. This is why calendars are for single listings on minor sites only.
+  that site. Keeping one room back on the busiest dates, or giving the busiest
+  site rooms of its own, is the protection.
 
 ## Going live with the channel manager
 
@@ -226,7 +227,36 @@ stay 3"): do it in the grid and save.
 
 ## Calendar connections (iCal)
 
-For a single villa or room on a site that the channel manager does not reach.
+For villas, and for hotel rooms listed one by one, on sites that offer calendar
+import and export. Free, and needs nothing from the sites but those settings;
+the price is the delay described under "What real time means here".
+
+One calendar connects **one room (or villa) on one site**. Each listing on a
+site gets its own pair of addresses: the site's calendar, which the PMS reads,
+and the PMS's calendar for that room, which the site reads.
+
+- **A villa** sold whole: one calendar per site it is listed on. A villa also
+  sold by the bedroom gets a calendar for the whole villa and one for each
+  bedroom listing; selling any of them closes the others, here and in the
+  calendars the sites read.
+- **A hotel**: each room must be its own listing on the site (on Booking.com,
+  a room type with one room; on Airbnb, one listing per room), because a
+  calendar cannot say "two left". In the PMS, set each room type to tie every
+  booking to a unit straight away (Settings, the property, the room type).
+  Then every booking, from any site, the website or the front desk, takes one
+  particular room, and only that room's calendars show it taken. A booking that
+  comes in for a room already taken is moved to another free room of the same
+  type, or, when none is free, recorded as overbooked with an alert. The PMS
+  refuses calendars for a room type that sells by count.
+- **Rates are not carried.** Prices and minimum stays are kept in each site's
+  extranet.
+- **Check each site first.** Calendar import and export is offered for homes
+  and villas almost everywhere (Airbnb, Booking.com, Vrbo, Agoda Homes and
+  others), but often not for hotel-type listings. A site that does not offer
+  it for a listing cannot be connected this way; the reservations mailbox
+  still brings its bookings in, and the room has to be closed there by hand.
+
+Steps:
 
 1. In Channels, add a calendar connection for the property.
 2. For the unit, add a calendar for each site: paste the address of the
@@ -246,8 +276,8 @@ What to expect:
 - If a calendar cannot be read, an alert says so and clears when it can.
 - The PMS's own calendar lists every night the unit is taken, without guest
   details, and leaves out what that same site sold (it knows those already).
-- Never use this for a room type with more than one room: a calendar can only
-  say "taken" or "free".
+- A calendar can only say "taken" or "free" for one room, which is why a room
+  type that sells by count is refused.
 
 ## The reservations mailbox
 

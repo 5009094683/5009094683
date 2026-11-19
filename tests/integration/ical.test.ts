@@ -5,7 +5,13 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { and, eq, sql } from 'drizzle-orm';
 import { parseCalendar, saveIcalFeeds, type IcalFeedView } from '@pms/channels';
 import { inventoryBlocks, reservations } from '@pms/db';
-import { createTestUser, createTestVilla, type TestVilla } from '@pms/domain/testing';
+import {
+  createTestHotel,
+  createTestUser,
+  createTestVilla,
+  type TestHotel,
+  type TestVilla,
+} from '@pms/domain/testing';
 import { day, openAlerts, sleep, startStack, waitFor, type Stack } from './harness';
 
 let stack: Stack;
@@ -149,6 +155,8 @@ const blocksOf = async (listed: Listed) =>
     .select()
     .from(inventoryBlocks)
     .where(and(eq(inventoryBlocks.connectionId, listed.connectionId)));
+
+type TestUnit = TestHotel['standard']['units'][number];
 
 const fetchExport = async (feed: IcalFeedView, headers: Record<string, string> = {}) =>
   fetch(feed.exportUrl, { headers });
@@ -612,5 +620,109 @@ describe('saving calendars', () => {
     expect(feeds.find((f) => f.id === listed.airbnb.id)!.exportUrl).toBe(listed.airbnb.exportUrl);
     expect(feeds.find((f) => f.id === listed.airbnb.id)!.channelCode).toBe('ABB');
     await sleep(0);
+  });
+});
+
+describe('a hotel whose rooms are each listed on the sites', () => {
+  it('gives each room its own calendar once every booking takes a room as it is made', async () => {
+    const hotel = await createTestHotel(stack.api.t.db, stack.api.org, { standardRooms: 2 });
+    const [room1, room2] = hotel.standard.units as [TestUnit, TestUnit];
+    const created = await stack.admin.post('/channels/connections', {
+      propertyId: hotel.property.id,
+      adapter: 'ical',
+    });
+    const connectionId = (created.json() as { id: string }).id;
+    const paths = [`/hotel-room1-${++seq}.ics`, `/hotel-room2-${seq}.ics`];
+    for (const path of paths) serve(path, ics());
+    const put = () =>
+      stack.admin.put(`/channels/connections/${connectionId}/ical/feeds`, {
+        feeds: [
+          { unitId: room1.id, label: 'Airbnb', importUrl: `${hostUrl}${paths[0]}` },
+          { unitId: room2.id, label: 'Airbnb', importUrl: `${hostUrl}${paths[1]}` },
+        ],
+      });
+
+    // Sold by count, a booking may have no room until check-in: a room's calendar would lie.
+    const refused = await put();
+    expect(refused.statusCode).toBe(400);
+    expect(refused.json()).toMatchObject({
+      error: { message: expect.stringMatching(/2 rooms sold by count/) },
+    });
+
+    const changed = await stack.admin.patch(
+      `/properties/${hotel.property.id}/room-types/${hotel.standard.roomType.id}`,
+      { assignment: 'at_booking' },
+    );
+    expect(changed.statusCode).toBe(200);
+    const saved = await put();
+    expect(saved.statusCode).toBe(200);
+    const [feed1, feed2] = (saved.json() as { feeds: IcalFeedView[] }).feeds as [
+      IcalFeedView,
+      IcalFeedView,
+    ];
+    const listed: Listed = {
+      villa: undefined as unknown as TestVilla,
+      connectionId,
+      unitId: room1.id,
+      path: paths[0]!,
+      airbnb: feed1,
+      vrbo: feed2,
+    };
+    await read(listed);
+
+    // A booking made at the front desk takes one room, and only that room's calendar shows it.
+    const booked = await stack.admin.post('/reservations', {
+      propertyId: hotel.property.id,
+      source: 'phone',
+      guest: { firstName: 'Front', lastName: 'Desk' },
+      rooms: [
+        {
+          roomTypeId: hotel.standard.roomType.id,
+          ratePlanId: hotel.standard.ratePlan.id,
+          checkIn: day(30),
+          checkOut: day(32),
+          adults: 2,
+        },
+      ],
+    });
+    expect(booked.statusCode).toBe(201);
+    const takenUnit = (booked.json() as { rooms: { unitId: string }[] }).rooms[0]!.unitId;
+    const [takenFeed, freeFeed] = takenUnit === room1.id ? [feed1, feed2] : [feed2, feed1];
+    const takenPath = takenUnit === room1.id ? paths[0]! : paths[1]!;
+    const freePath = takenUnit === room1.id ? paths[1]! : paths[0]!;
+    const shown = async (feed: IcalFeedView) =>
+      parseCalendar(await (await fetchExport(feed)).text(), 'Asia/Kolkata').events.map(
+        (e) => e.start,
+      );
+    expect(await shown(takenFeed)).toEqual([day(30)]);
+    expect(await shown(freeFeed)).toEqual([]);
+
+    // Before Airbnb has read our calendar, it sells the same room for the same nights: the
+    // guest is put in the other room, which is free.
+    serve(
+      takenPath,
+      ics({ uid: 'abb-h1@airbnb.com', from: day(30), to: day(32), summary: 'Reserved' }),
+    );
+    await read(listed);
+    const fromAirbnb = async () =>
+      stack.api.t.db.select().from(reservations).where(eq(reservations.connectionId, connectionId));
+    const [moved] = await fromAirbnb();
+    expect(moved).toMatchObject({ overbooked: false, checkIn: day(30) });
+    const movedDetail = (await stack.admin.get(`/reservations/${moved!.id}`)).json() as {
+      rooms: { unitId: string }[];
+    };
+    expect(movedDetail.rooms[0]!.unitId).not.toBe(takenUnit);
+    // The other room's calendar now shows it taken, for the other listing on Airbnb.
+    expect(await shown(freeFeed)).toEqual([day(30)]);
+
+    // With both rooms gone, a third sale is recorded as overbooked and someone is told.
+    serve(
+      freePath,
+      ics({ uid: 'abb-h2@airbnb.com', from: day(30), to: day(31), summary: 'Reserved' }),
+    );
+    await read(listed);
+    const all = await fromAirbnb();
+    expect(all).toHaveLength(2);
+    expect(all.find((r) => r.id !== moved!.id)).toMatchObject({ overbooked: true });
   });
 });
